@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "30234733492",
+    "project_id": "app-pbem",
+    "storage_bucket": "app-pbem.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:30234733492:android:364157a56edb3bf61c20e1",
+        "android_client_info": {
+          "package_name": "com.example.myapplication"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "30234733492-fccokln1g1o8ukkn8lp1sfcgto2qga16.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.myapplication",
+            "certificate_hash": "c8d7b8e1c490302aceca3c4638e2a8425ce32044"
+          }
+        },
+        {
+          "client_id": "30234733492-s2nv82lj7cb4ifs74jdnd8p3ckdl3gfi.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5K4i9t6kGKfLgMyUED7W9uUwUjcfkg6U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "30234733492-s2nv82lj7cb4ifs74jdnd8p3ckdl3gfi.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
