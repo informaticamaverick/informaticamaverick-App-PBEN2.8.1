@@ -43,6 +43,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
 import androidx.compose.animation.core.*
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.annotation.DrawableRes
@@ -516,10 +520,18 @@ fun ClientDashboardScreen(
     
     // Estado para la búsqueda
     var searchText by remember { mutableStateOf("") }
+    var isSearchExpanded by remember { mutableStateOf(false) }
+    var isSearchFocused by remember { mutableStateOf(false) }
     
     // Estado para navegación a resultados
     var showSearchResults by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
+    
+    // Determinar si el buscador debe estar expandido
+    val shouldExpand = isSearchExpanded || isSearchFocused || searchText.isNotEmpty()
+
+    // Estado para el FAB (botones flotantes)
+    var isFabOpen by remember { mutableStateOf(false) }
     
     // Solicitar permisos de ubicación
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -563,6 +575,16 @@ fun ClientDashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        if (shouldExpand) {
+                            isSearchExpanded = false
+                            isSearchFocused = false
+                        }
+                    }
+                )
+            }
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -578,6 +600,8 @@ fun ClientDashboardScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
+                Spacer(modifier = Modifier.height(20.dp))
+                
                 // Fila: Ubicación y botón Salir
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -650,24 +674,11 @@ fun ClientDashboardScreen(
 
                     }
                     
-                    // Notificaciones, mensajes y menú de perfil
+                    // Notificaciones y menú de perfil
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Botón de mensajes
-                        IconButton(
-                            onClick = onNavigateToChat,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Email,
-                                contentDescription = "Mensajes",
-                                tint = textSecondaryColor,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        
                         // Botón de notificaciones con badge
                         Box {
                             IconButton(
@@ -847,87 +858,175 @@ fun ClientDashboardScreen(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(40.dp))
                 
-                // Saludo
-                Text(
-                    text = GreetingUtils.getGreetingMessage(
-                        userName = userName,
-                        location = locationName,
-                        greetingType = greetingType
+                // Buscador estilo Google con animación
+                val searchBarWidth by animateFloatAsState(
+                    targetValue = if (shouldExpand) 1f else 0.5f,
+                    animationSpec = tween(
+                        durationMillis = 300,
+                        easing = FastOutSlowInEasing
                     ),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimaryColor
+                    label = "searchBarWidth"
                 )
                 
-                Spacer(modifier = Modifier.height(12.dp))
+                val searchBarHeight by animateDpAsState(
+                    targetValue = if (shouldExpand) 56.dp else 40.dp,
+                    animationSpec = tween(
+                        durationMillis = 300,
+                        easing = FastOutSlowInEasing
+                    ),
+                    label = "searchBarHeight"
+                )
                 
-                // Buscador estilo Google
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(28.dp),
-                            color = surfaceColor,
-                            shadowElevation = 4.dp,
-                            tonalElevation = 0.dp
+                val searchBarRadius by animateDpAsState(
+                    targetValue = if (shouldExpand) 28.dp else 22.dp,
+                    animationSpec = tween(
+                        durationMillis = 300,
+                        easing = FastOutSlowInEasing
+                    ),
+                    label = "searchBarRadius"
+                )
+                
+                val searchBarElevation by animateDpAsState(
+                    targetValue = if (shouldExpand) 8.dp else 2.dp,
+                    animationSpec = tween(
+                        durationMillis = 300,
+                        easing = FastOutSlowInEasing
+                    ),
+                    label = "searchBarElevation"
+                )
+                
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = if (shouldExpand) Alignment.TopStart else Alignment.CenterStart
+                ) {
+                    // Buscador
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectTapGestures(onTap = { /* Consume el tap para evitar que se propague */ })
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
+                            Surface(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .fillMaxWidth(searchBarWidth)
+                                    .height(searchBarHeight),
+                                shape = RoundedCornerShape(searchBarRadius),
+                                color = if (shouldExpand) {
+                                    if (isDarkTheme) Color(0xFF1E293B) else Color.White
+                                } else {
+                                    surfaceColor
+                                },
+                                shadowElevation = searchBarElevation,
+                                tonalElevation = 0.dp
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = "Buscar",
-                                    tint = textSecondaryColor,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                
-                                Spacer(modifier = Modifier.width(12.dp))
-                                
-                                androidx.compose.foundation.text.BasicTextField(
-                                    value = searchText,
-                                    onValueChange = { searchText = it },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    textStyle = androidx.compose.ui.text.TextStyle(
-                                        fontSize = 16.sp,
-                                        color = textPrimaryColor,
-                                        fontWeight = FontWeight.Normal
-                                    ),
-                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                    decorationBox = { innerTextField ->
-                                        if (searchText.isEmpty()) {
-                                            Text(
-                                                text = "Buscar servicios",
-                                                fontSize = 16.sp,
-                                                color = textSecondaryColor
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onTap = {
+                                                    if (!shouldExpand) {
+                                                        isSearchFocused = true
+                                                        isSearchExpanded = true
+                                                    }
+                                                }
                                             )
                                         }
-                                        innerTextField()
-                                    }
-                                )
-                                
-                                if (searchText.isNotEmpty()) {
-                                    IconButton(onClick = { searchText = "" }) {
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = if (shouldExpand) 16.dp else 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Limpiar búsqueda",
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = "Buscar",
                                             tint = textSecondaryColor,
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.size(if (shouldExpand) 20.dp else 18.dp)
                                         )
+                                        
+                                        Spacer(modifier = Modifier.width(if (shouldExpand) 12.dp else 8.dp))
+                                        
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            androidx.compose.foundation.text.BasicTextField(
+                                                value = searchText,
+                                                onValueChange = { searchText = it },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                singleLine = true,
+                                                textStyle = androidx.compose.ui.text.TextStyle(
+                                                    fontSize = if (shouldExpand) 14.sp else 13.sp,
+                                                    color = textPrimaryColor,
+                                                    fontWeight = FontWeight.Medium
+                                                ),
+                                                cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF3B82F6)),
+                                                decorationBox = { innerTextField ->
+                                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                                        if (searchText.isEmpty()) {
+                                                            Text(
+                                                                text = if (shouldExpand) "Buscar servicios..." else "Buscar...",
+                                                                fontSize = if (shouldExpand) 14.sp else 13.sp,
+                                                                color = textSecondaryColor.copy(alpha = 0.6f),
+                                                                fontWeight = FontWeight.Medium
+                                                            )
+                                                        }
+                                                        innerTextField()
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    
+                                    if (searchText.isNotEmpty()) {
+                                        IconButton(onClick = { 
+                                            searchText = ""
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Limpiar búsqueda",
+                                                tint = textSecondaryColor,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    } else if (shouldExpand) {
+                                        IconButton(onClick = { 
+                                            isSearchExpanded = false
+                                            isSearchFocused = false
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Contraer búsqueda",
+                                                tint = textSecondaryColor,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
+                        }
                         
-                        // Dropdown de resultados
-                        if (searchText.isNotEmpty()) {
+                        // Dropdown de resultados con animación
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = searchText.isNotEmpty(),
+                            enter = androidx.compose.animation.fadeIn(
+                                animationSpec = tween(200, easing = FastOutSlowInEasing)
+                            ) + androidx.compose.animation.expandVertically(
+                                animationSpec = tween(200, easing = FastOutSlowInEasing)
+                            ),
+                            exit = androidx.compose.animation.fadeOut(
+                                animationSpec = tween(150)
+                            ) + androidx.compose.animation.shrinkVertically(
+                                animationSpec = tween(150)
+                            )
+                        ) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
                             // Preparar categorías para búsqueda
                             val searchCategories = listOf(
                                 Triple(R.drawable.ic_electricista, "Electricista", Color(0xFFF59E0B)),
@@ -963,9 +1062,9 @@ fun ClientDashboardScreen(
                                     .fillMaxWidth()
                                     .heightIn(max = 300.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                color = surfaceColor,
-                                shadowElevation = 8.dp,
-                                tonalElevation = 2.dp
+                                color = Color.White,
+                                shadowElevation = 12.dp,
+                                tonalElevation = 0.dp
                             ) {
                                 LazyColumn(
                                     modifier = Modifier
@@ -1116,6 +1215,161 @@ fun ClientDashboardScreen(
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                    
+                    // Botones FAB en el lado derecho (solo visible cuando el buscador NO está expandido)
+                    // Animación de rotación del botón principal a 45°
+                    val fabRotation by animateFloatAsState(
+                        targetValue = if (isFabOpen) 45f else 0f,
+                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                        label = "fab_rotation_header"
+                    )
+                    
+                    // Animaciones para botones secundarios
+                    // Opacidad: 0 (invisible) -> 1 (visible)
+                    val fabOptionsAlpha by animateFloatAsState(
+                        targetValue = if (isFabOpen) 1f else 0f,
+                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                        label = "fab_alpha"
+                    )
+                    
+                    // Translación vertical: 10dp hacia abajo cuando está cerrado
+                    val fabOptionsOffset by animateDpAsState(
+                        targetValue = if (isFabOpen) 0.dp else 10.dp,
+                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                        label = "fab_offset"
+                    )
+                    
+                    // Para el efecto cascada: Licitaciones con delay (75ms)
+                    val fabLicitacionesAlpha by animateFloatAsState(
+                        targetValue = if (isFabOpen) 1f else 0f,
+                        animationSpec = tween(300, delayMillis = 75, easing = FastOutSlowInEasing),
+                        label = "fab_licitaciones_alpha"
+                    )
+                    
+                    val fabLicitacionesOffset by animateDpAsState(
+                        targetValue = if (isFabOpen) 0.dp else 10.dp,
+                        animationSpec = tween(300, delayMillis = 75, easing = FastOutSlowInEasing),
+                        label = "fab_licitaciones_offset"
+                    )
+                    
+                    if (!shouldExpand) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 0.dp, top = 35.dp)
+                        ) {
+                            // Column para los botones secundarios (aparecen arriba)
+                            // SIEMPRE renderizados pero invisibles cuando está cerrado
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(bottom = 46.dp), // Espacio para el botón principal
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom)
+                            ) {
+                                // Opción 2: Licitaciones (más cerca del botón +)
+                                // Con animación de opacidad, traslación y DELAY (efecto cascada)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier
+                                        .graphicsLayer {
+                                            alpha = fabLicitacionesAlpha
+                                            translationY = fabLicitacionesOffset.toPx()
+                                        }
+                                ) {
+                                    // Etiqueta
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color.White,
+                                        shadowElevation = 2.dp
+                                    ) {
+                                        Text(
+                                            text = "Licitaciones",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF475569),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                    
+                                    // Botón
+                                    FloatingActionButton(
+                                        onClick = { /* TODO: Navegar a Licitaciones */ },
+                                        containerColor = Color(0xFF6366F1),
+                                        contentColor = Color.White,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.List,
+                                            contentDescription = "Licitaciones",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                
+                                // Opción 1: Servicio Fast (más arriba)
+                                // Con animación de opacidad y traslación SIN delay
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier
+                                        .graphicsLayer {
+                                            alpha = fabOptionsAlpha
+                                            translationY = fabOptionsOffset.toPx()
+                                        }
+                                ) {
+                                    // Etiqueta
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color.White,
+                                        shadowElevation = 2.dp
+                                    ) {
+                                        Text(
+                                            text = "Servicio Fast",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF475569),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                    
+                                    // Botón
+                                    FloatingActionButton(
+                                        onClick = { /* TODO: Navegar a Servicio Fast */ },
+                                        containerColor = Color(0xFFFACC15),
+                                        contentColor = Color(0xFF713F12),
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = "Servicio Fast",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Botón Principal Toggle (+) - POSICIÓN ABSOLUTA FIJA
+                            FloatingActionButton(
+                                onClick = { isFabOpen = !isFabOpen },
+                                containerColor = if (isFabOpen) Color(0xFFEF4444) else Color(0xFF3B82F6),
+                                contentColor = Color.White,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .graphicsLayer {
+                                        rotationZ = fabRotation
+                                    }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = if (isFabOpen) "Cerrar" else "Abrir menú",
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
@@ -1320,6 +1574,31 @@ fun ClientDashboardScreen(
         }
         }
         
+        // --- BOTONES FLOTANTES (FAB) ---
+        // Overlay para cerrar FAB al hacer clic fuera
+        androidx.compose.animation.AnimatedVisibility(
+            visible = isFabOpen,
+            enter = androidx.compose.animation.fadeIn(
+                animationSpec = tween(200)
+            ),
+            exit = androidx.compose.animation.fadeOut(
+                animationSpec = tween(200)
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.2f))
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                isFabOpen = false
+                            }
+                        )
+                    }
+            )
+        }
+        
         // Bottom Navigation Bar
         Surface(
             modifier = Modifier
@@ -1370,7 +1649,7 @@ fun ClientDashboardScreen(
         }
     }
     
-    // Mostrar pantalla de resultados
+    // Mostrar pantalla de resultados (fuera del Box principal)
     if (showSearchResults) {
         SearchResultsScreen(
             category = selectedCategory,
