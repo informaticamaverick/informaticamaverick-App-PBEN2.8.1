@@ -20,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.myapplication.Admin.AdminInitScreen
+import com.example.myapplication.Client.CalendarScreen
 import com.example.myapplication.Client.ChatScreen
 import com.example.myapplication.Client.ClientDashboardScreen
 import com.example.myapplication.Client.ClientProfileScreen
@@ -29,6 +30,7 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
+import com.example.myapplication.Client.CalendarScreen
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -150,6 +152,17 @@ fun AppNavigation() {
                 },
                 onNavigateToChat = {
                     navController.navigate("chat")
+                },
+                onNavigateToCalendar = {
+                    navController.navigate("calendar")
+                }
+            )
+        }
+        
+        composable("calendar") {
+            CalendarScreen(
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }

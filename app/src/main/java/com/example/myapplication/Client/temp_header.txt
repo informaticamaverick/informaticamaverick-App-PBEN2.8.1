@@ -1,0 +1,575 @@
+package com.example.myapplication.Client
+
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.zIndex
+import androidx.compose.animation.core.*
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.annotation.DrawableRes
+import com.example.myapplication.R
+import com.example.myapplication.Utils.GreetingUtils
+import com.example.myapplication.ViewModel.WeatherViewModel
+import com.example.myapplication.Utils.GreetingType
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.myapplication.ViewModel.LocationViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
+import com.example.myapplication.Client.SearchResultsScreen
+import coil.compose.rememberAsyncImagePainter
+import androidx.compose.ui.layout.ContentScale
+
+// Data class para almacenar información de profesionales
+data class Quadruple<A, B, C, D, E, F>(
+    val first: A,
+    val second: B,
+    val color: C,
+    val third: D,
+    val fourth: E,
+    val fifth: F
+)
+
+@Composable
+fun CategoryItem(
+    @DrawableRes iconRes: Int,
+    label: String,
+    color: Color,
+    onClick: () -> Unit = {}
+) {
+    val isDarkTheme = isSystemInDarkTheme()
+    val backgroundColor = if (isDarkTheme) {
+        Color(0xFF1E293B)
+    } else {
+        Color.White
+    }
+    val textColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
+    // Color del icono adaptado al tema
+    val iconTint = if (isDarkTheme) color.copy(alpha = 0.9f) else color
+    
+    // Estado para la animación de presión
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.75f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "scale"
+    )
+    
+    val elevation by animateDpAsState(
+        targetValue = if (isPressed) 0.dp else 4.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "elevation"
+    )
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(80.dp)
+            .padding(4.dp)
+            .scale(scale)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        tryAwaitRelease()
+                        isPressed = false
+                    },
+                    onTap = {
+                        onClick()
+                    }
+                )
+            }
+    ) {
+        Surface(
+            modifier = Modifier
+                .size(60.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = backgroundColor,
+            shadowElevation = elevation,
+            tonalElevation = 1.dp
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        color = if (isDarkTheme) {
+                            color.copy(alpha = 0.15f)
+                        } else {
+                            color.copy(alpha = 0.1f)
+                        }
+                    )
+                    .padding(8.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = iconRes),
+                    contentDescription = label,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(6.dp))
+        
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = textColor,
+            maxLines = 2,
+            lineHeight = 12.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun ProCard(
+    name: String,
+    job: String,
+    rating: String,
+    reviews: String,
+    avatarColor: Color,
+    timesUsed: Int = 0,
+    onClick: () -> Unit = {},
+    surfaceColor: Color = Color.White,
+    textPrimaryColor: Color = Color(0xFF1E293B),
+    textSecondaryColor: Color = Color(0xFF64748B)
+) {
+    // Determinar el ícono según la categoría
+    val categoryIcon = when {
+        job.contains("Electricista", ignoreCase = true) -> R.drawable.ic_electricista
+        job.contains("Plomero", ignoreCase = true) -> R.drawable.ic_plomero
+        job.contains("Pintura", ignoreCase = true) || job.contains("Pintor", ignoreCase = true) -> R.drawable.ic_pintura
+        job.contains("Limpieza", ignoreCase = true) -> R.drawable.ic_limpieza
+        job.contains("Albañil", ignoreCase = true) -> R.drawable.ic_albanil
+        job.contains("Mecánico", ignoreCase = true) -> R.drawable.ic_mecanico
+        job.contains("Jardín", ignoreCase = true) -> R.drawable.ic_jardin
+        job.contains("Mudanza", ignoreCase = true) -> R.drawable.ic_mudanza
+        else -> R.drawable.ic_otros
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp) // Espacio entre cada item de la lista
+    ) {
+        // --- 1. CAPA INFERIOR: La Tarjeta Grande (Perfil) ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp) // Bajamos esta tarjeta para que la de arriba "monte" el borde
+                .zIndex(0f),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = surfaceColor),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            // Contenido de la tarjeta grande
+            Row(
+                modifier = Modifier
+                    .padding(
+                        start = 16.dp, 
+                        end = 16.dp, 
+                        bottom = 16.dp, 
+                        top = 24.dp // Damos espacio interno extra arriba para que el texto no choque con la etiqueta
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Avatar (Círculo)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(avatarColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = name.first().toString(), 
+                        fontSize = 20.sp, 
+                        color = Color.White, 
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                // Textos (Nombre y Rating)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = name, 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 16.sp, 
+                        color = textPrimaryColor
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    // Row de estrellas/rating
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Rating",
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "$rating ($reviews reviews)", 
+                            fontSize = 12.sp, 
+                            color = textSecondaryColor
+                        )
+                    }
+                }
+            }
+        }
+    
+        // --- 2. CAPA SUPERIOR: La Tarjeta Pequeña (Categoría) ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth() // Mismo ancho que la tarjeta del perfil
+                .align(Alignment.TopStart) // Pegamos al techo de la Box
+                .zIndex(1f)
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
+                    clip = false
+                ), // Sombra solo en las puntas de arriba
+            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
+            colors = CardDefaults.cardColors(containerColor = surfaceColor.copy(alpha = 0.9f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icono pequeño
+                Icon(
+                    painter = painterResource(id = categoryIcon),
+                    contentDescription = null,
+                    tint = avatarColor, // Usamos el color del tema
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = job,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimaryColor
+                )
+            }
+        }
+    }
+}
+
+
+
+@Composable
+fun BottomNavItem(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean = false,
+    badge: Boolean = false,
+    onClick: () -> Unit = {}
+) {
+    // Animación de escala al hacer clic
+    var clicked by remember { mutableStateOf(false) }
+    
+    val scale by animateFloatAsState(
+        targetValue = if (clicked) 1.2f else if (isSelected) 1.1f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "scale"
+    )
+    
+    // Animación de color
+    val iconColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFF3B82F6) else Color(0xFF94A3B8),
+        animationSpec = tween(300),
+        label = "iconColor"
+    )
+    
+    val textColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFF3B82F6) else Color(0xFF94A3B8),
+        animationSpec = tween(300),
+        label = "textColor"
+    )
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .padding(vertical = 8.dp)
+            .clickable {
+                clicked = true
+                onClick()
+            }
+    ) {
+        Box {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = iconColor,
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+            )
+            
+            // Badge de notificaciones
+            if (badge) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .offset(x = 12.dp, y = (-2).dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFEF4444))
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(4.dp))
+        
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = textColor
+        )
+    }
+    
+    // Reset del estado clicked después de la animación
+    LaunchedEffect(clicked) {
+        if (clicked) {
+            kotlinx.coroutines.delay(150)
+            clicked = false
+        }
+    }
+}
+
+@Composable
+fun BottomNavItemCustom(
+    painter: androidx.compose.ui.graphics.painter.Painter,
+    label: String,
+    isSelected: Boolean = false,
+    onClick: () -> Unit = {}
+) {
+    // Animación de escala al hacer clic
+    var clicked by remember { mutableStateOf(false) }
+    
+    val scale by animateFloatAsState(
+        targetValue = if (clicked) 1.2f else if (isSelected) 1.1f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "scale"
+    )
+    
+    // Animación de color
+    val iconColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFF3B82F6) else Color(0xFF94A3B8),
+        animationSpec = tween(300),
+        label = "iconColor"
+    )
+    
+    val textColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFF3B82F6) else Color(0xFF94A3B8),
+        animationSpec = tween(300),
+        label = "textColor"
+    )
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .padding(vertical = 8.dp)
+            .clickable {
+                clicked = true
+                onClick()
+            }
+    ) {
+        Icon(
+            painter = painter,
+            contentDescription = label,
+            tint = iconColor,
+            modifier = Modifier
+                .size(24.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+        )
+        
+        Spacer(modifier = Modifier.height(4.dp))
+        
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = textColor
+        )
+    }
+    
+    // Reset del estado clicked después de la animación
+    LaunchedEffect(clicked) {
+        if (clicked) {
+            kotlinx.coroutines.delay(150)
+            clicked = false
+        }
+    }
+}
+
+
+
+
+
+
+
+@Composable
+fun ClientDashboardScreen(
+    userName: String = "Invitado",
+    location: String = "Buenos Aires, AR",
+    greetingType: GreetingType = GreetingType.FRIENDLY,
+    onLogout: () -> Unit = {},
+    onNavigateToAdmin: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {},
+    onNavigateToChat: () -> Unit = {},
+    onNavigateToCalendar: () -> Unit = {},
+    onNavigateToBidding: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    val isDarkTheme = isSystemInDarkTheme()
+    
+    // Estado para mostrar BiddingScreen
+    var showBiddingScreen by remember { mutableStateOf(false) }
+    
+    // Colores adaptados al tema
+    val backgroundColor = if (isDarkTheme) Color(0xFF0F172A) else Color(0xFFF8FAFC)
+    val surfaceColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White
+    val textPrimaryColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
+    val textSecondaryColor = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B)
+    
+    val locationViewModel = remember { 
+        LocationViewModel(context)
+    }
+    val locationName by locationViewModel.locationName.collectAsState()
+    val latitude by locationViewModel.latitude.collectAsState()
+    val longitude by locationViewModel.longitude.collectAsState()
+
+    //ViewModel del clima
+    val weatherViewModel: WeatherViewModel = viewModel()
+    val temperature by weatherViewModel.temperature.collectAsState()
+    val weatherEmoji by weatherViewModel.weatherEmoji.collectAsState()
+    
+    // ViewModel de categorías para Firebase
+    val categoryViewModel: com.example.myapplication.ViewModel.CategoryViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    
+    // ViewModel de subcategorías para Firebase
+    val subCategoryViewModel: com.example.myapplication.ViewModel.SubCategoryViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    
+    // ViewModel de perfil para obtener la foto del usuario
+    val profileViewModel: com.example.myapplication.Profile.ProfileViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val profileUiState by profileViewModel.uiState.collectAsState()
+    
+    // Scope para coroutines
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Estado para la búsqueda
+    var searchText by remember { mutableStateOf("") }
+    var isSearchExpanded by remember { mutableStateOf(false) }
+    var isSearchFocused by remember { mutableStateOf(false) }
+    
+    // Estado para navegación a resultados
+    var showSearchResults by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf("") }
+    
+    // Determinar si el buscador debe estar expandido
+    val shouldExpand = isSearchExpanded || isSearchFocused || searchText.isNotEmpty()
+    
+    // Solicitar permisos de ubicación
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.values.any { it }
+        if (granted) {
+            locationViewModel.fetchLocation()
+        }
+    }
+
+    // Actualizar clima cuando cambien las coordenadas
+    LaunchedEffect(latitude, longitude) {
+        if (latitude != null && longitude != null) {
+            weatherViewModel.fetchWeather(lat = latitude!!, lon = longitude!!)
+        } else {
+            // Coordenadas de Bogotá por defecto
+            weatherViewModel.fetchWeather(lat = 4.7110, lon = -74.0721)
+        }
+    }
+
+
+    // Manejar el botón "Atrás" del sistema - En el dashboard no permite volver atrás
+    // El usuario debe usar el botón de cerrar sesión
+    BackHandler {
+        // No hacer nada - prevenir que vuelva al login
+    }
+
+    LaunchedEffect(Unit) {
+        profileViewModel.loadUserProfile()
+        locationPermissionLauncher.launch(
+            arrayOf(
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
+
+    }
+    

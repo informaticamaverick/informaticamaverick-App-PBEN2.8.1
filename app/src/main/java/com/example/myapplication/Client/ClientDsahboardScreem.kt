@@ -482,7 +482,8 @@ fun ClientDashboardScreen(
     onLogout: () -> Unit = {},
     onNavigateToAdmin: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
-    onNavigateToChat: () -> Unit = {}
+    onNavigateToChat: () -> Unit = {},
+    onNavigateToCalendar: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isDarkTheme = isSystemInDarkTheme()
@@ -526,6 +527,7 @@ fun ClientDashboardScreen(
     // Estado para navegación a resultados
     var showSearchResults by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
+    var showBiddingScreen by remember { mutableStateOf(false) }
     
     // Determinar si el buscador debe estar expandido
     val shouldExpand = isSearchExpanded || isSearchFocused || searchText.isNotEmpty()
@@ -589,341 +591,348 @@ fun ClientDashboardScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-        // --- HEADER FIJO ---
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = surfaceColor,
-            shadowElevation = 2.dp
-        ) {
-            Column(
+            // Espaciado superior
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // HEADER: UBICACIÓN Y PERFIL
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .zIndex(1f),
+                color = surfaceColor,
+                shadowElevation = 2.dp
             ) {
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                // Fila: Ubicación y botón Salir
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
                 ) {
-                    // Ubicación
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Ubicación",
-                                tint = textSecondaryColor,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Ubicación actual",
-                                fontSize = 11.sp,
-                                color = textSecondaryColor,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(2.dp))
-                        
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = locationName,
-                                fontSize = 13.sp,
-                                color = textPrimaryColor,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "▼",
-                                fontSize = 10.sp,
-                                color = textSecondaryColor
-                            )
-                            
-                            Spacer(modifier = Modifier.width(12.dp))
-                            
-                            // Indicador del clima
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .background(
-                                        surfaceColor,
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = weatherEmoji,
-                                    fontSize = 50.sp
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = "Ubicación",
+                                    tint = textSecondaryColor,
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = temperature,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = textPrimaryColor
+                                    text = "Ubicación actual",
+                                    fontSize = 11.sp,
+                                    color = textSecondaryColor,
+                                    fontWeight = FontWeight.Medium
                                 )
                             }
-                        }
-
-
-
-
-                    }
-                    
-                    // Notificaciones y menú de perfil
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Botón de notificaciones con badge
-                        Box {
-                            IconButton(
-                                onClick = { /* TODO: Abrir notificaciones */ },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Notifications,
-                                    contentDescription = "Notificaciones",
-                                    tint = textSecondaryColor,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            
-                            // Badge rojo
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .offset(x = 26.dp, y = 6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFEF4444))
-                            )
-                        }
-                        
-                        // Menú de perfil desplegable
-                        var showMenu by remember { mutableStateOf(false) }
-                        
-                        // Obtener el nombre para mostrar
-                        val displayName = when {
-                            userName.isNotEmpty() -> userName
-                            profileUiState.displayName.isNotEmpty() -> profileUiState.displayName
-                            else -> "U"
-                        }
-                        
-                        Box {
-                            // Avatar con foto de perfil o inicial
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF3B82F6))
-                                    .clickable { showMenu = !showMenu },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                // Texto siempre presente (inicial)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = displayName.firstOrNull()?.uppercase()?.toString() ?: "U",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    text = locationName,
+                                    fontSize = 13.sp,
+                                    color = textPrimaryColor,
+                                    fontWeight = FontWeight.Bold
                                 )
-                                
-                                // Foto encima si existe
-                                if (profileUiState.photoUrl.isNotEmpty()) {
-                                    androidx.compose.foundation.Image(
-                                        painter = rememberAsyncImagePainter(profileUiState.photoUrl),
-                                        contentDescription = "Foto de perfil",
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(CircleShape),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "▼", fontSize = 10.sp, color = textSecondaryColor)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .background(
+                                            if (isDarkTheme) Color(0xFF0F172A) else Color(0xFFF1F5F9),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(text = weatherEmoji, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = temperature,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = textPrimaryColor
                                     )
                                 }
                             }
+                        }
 
-                        // Menú desplegable
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            modifier = Modifier
-                                .width(200.dp)
-                                .background(surfaceColor, RoundedCornerShape(12.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Encabezado del menú con nombre
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            ) {
-                                Text(
-                                    text = userName,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = textPrimaryColor
-                                )
-                                Text(
-                                    text = "Cliente",
-                                    fontSize = 12.sp,
-                                    color = textSecondaryColor
+                            Box {
+                                IconButton(
+                                    onClick = { },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Notifications,
+                                        contentDescription = "Notificaciones",
+                                        tint = textSecondaryColor,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = (-6).dp, y = 6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFEF4444))
                                 )
                             }
-                            
-                            Divider(color = textSecondaryColor.copy(alpha = 0.2f))
-                            
-                            // Opción: Mis Datos
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = "Mis Datos",
-                                            tint = textSecondaryColor,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "Mis Datos",
-                                            fontSize = 14.sp,
-                                            color = textPrimaryColor
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onNavigateToProfile()
-                                }
-                            )
-                            
-                            // Opción: Configuración
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = "Configuración",
-                                            tint = textSecondaryColor,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "Configuración",
-                                            fontSize = 14.sp,
-                                            color = textPrimaryColor
+
+                            var showMenu by remember { mutableStateOf(false) }
+                            val displayName = when {
+                                userName.isNotEmpty() -> userName
+                                profileUiState.displayName.isNotEmpty() -> profileUiState.displayName
+                                else -> "U"
+                            }
+
+                            Box {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF3B82F6))
+                                        .clickable { showMenu = !showMenu },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = displayName.firstOrNull()?.uppercase()?.toString() ?: "U",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    if (profileUiState.photoUrl.isNotEmpty()) {
+                                        androidx.compose.foundation.Image(
+                                            painter = rememberAsyncImagePainter(profileUiState.photoUrl),
+                                            contentDescription = "Foto",
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape),
+                                            contentScale = ContentScale.Crop
                                         )
                                     }
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    // TODO: Navegar a Configuración
                                 }
-                            )
-                            
-                            Divider(color = textSecondaryColor.copy(alpha = 0.2f))
-                            
-                            // Opción: Cerrar Sesión
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.ExitToApp,
-                                            contentDescription = "Cerrar Sesión",
-                                            tint = Color(0xFFEF4444),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "Cerrar Sesión",
-                                            fontSize = 14.sp,
-                                            color = Color(0xFFEF4444),
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onLogout()
+
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false },
+                                    modifier = Modifier.background(surfaceColor)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Person,
+                                                    contentDescription = null,
+                                                    tint = textPrimaryColor,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    text = "Ver Perfil",
+                                                    fontSize = 14.sp,
+                                                    color = textPrimaryColor,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            onNavigateToProfile()
+                                        }
+                                    )
+                                    
+                                    HorizontalDivider(color = textSecondaryColor.copy(alpha = 0.2f))
+                                    
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Settings,
+                                                    contentDescription = null,
+                                                    tint = textPrimaryColor,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    text = "Administrar",
+                                                    fontSize = 14.sp,
+                                                    color = textPrimaryColor,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            onNavigateToAdmin()
+                                        }
+                                    )
+                                    
+                                    HorizontalDivider(color = textSecondaryColor.copy(alpha = 0.2f))
+                                    
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ExitToApp,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFEF4444),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    text = "Cerrar Sesión",
+                                                    fontSize = 14.sp,
+                                                    color = Color(0xFFEF4444),
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            onLogout()
+                                        }
+                                    )
                                 }
-                            )
+                            }
                         }
                     }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // BOTONES DE ACCIÓN RÁPIDA (FAST Y LICITACIONES)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Botón Servicio Fast
+                        Surface(
+                            modifier = Modifier
+                                .clickable { /* Servicio Fast */ },
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFACC15),
+                            shadowElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Servicio Fast",
+                                    tint = Color(0xFF713F12),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "Fast",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF713F12)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        // Botón Licitaciones
+                        Surface(
+                            modifier = Modifier
+                                .clickable { showBiddingScreen = true },
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF6366F1),
+                            shadowElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.List,
+                                    contentDescription = "Licitaciones",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "Licitar",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(40.dp))
-                
-                // Buscador estilo Google con animación
-                val searchBarWidth by animateFloatAsState(
-                    targetValue = if (shouldExpand) 1f else 0.5f,
-                    animationSpec = tween(
-                        durationMillis = 300,
-                        easing = FastOutSlowInEasing
-                    ),
-                    label = "searchBarWidth"
-                )
-                
-                val searchBarHeight by animateDpAsState(
-                    targetValue = if (shouldExpand) 56.dp else 40.dp,
-                    animationSpec = tween(
-                        durationMillis = 300,
-                        easing = FastOutSlowInEasing
-                    ),
-                    label = "searchBarHeight"
-                )
-                
-                val searchBarRadius by animateDpAsState(
-                    targetValue = if (shouldExpand) 28.dp else 22.dp,
-                    animationSpec = tween(
-                        durationMillis = 300,
-                        easing = FastOutSlowInEasing
-                    ),
-                    label = "searchBarRadius"
-                )
-                
-                val searchBarElevation by animateDpAsState(
-                    targetValue = if (shouldExpand) 8.dp else 2.dp,
-                    animationSpec = tween(
-                        durationMillis = 300,
-                        easing = FastOutSlowInEasing
-                    ),
-                    label = "searchBarElevation"
-                )
-                
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = if (shouldExpand) Alignment.TopStart else Alignment.CenterStart
+            }
+
+            // CONTENIDO PRINCIPAL
+            val scrollState = rememberScrollState()
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .padding(bottom = 80.dp)
                 ) {
-                    // Buscador
-                    Column(
+                    val firebaseCategories by categoryViewModel.categories.collectAsState()
+                    val subCategoryViewModel: com.example.myapplication.ViewModel.SubCategoryViewModel = hiltViewModel()
+                    
+                    // BUSCADOR DE SERVICIOS
+                    val searchBarWidth by animateFloatAsState(
+                        targetValue = if (shouldExpand) 1f else 0.95f,
+                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                        label = "searchBarWidth"
+                    )
+                    val searchBarHeight by animateDpAsState(
+                        targetValue = if (shouldExpand) 56.dp else 48.dp,
+                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                        label = "searchBarHeight"
+                    )
+
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .pointerInput(Unit) {
-                                detectTapGestures(onTap = { /* Consume el tap para evitar que se propague */ })
-                            }
+                            .zIndex(10f),
+                        contentAlignment = Alignment.TopCenter
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth(searchBarWidth)
                                     .height(searchBarHeight),
-                                shape = RoundedCornerShape(searchBarRadius),
+                                shape = RoundedCornerShape(24.dp),
                                 color = if (shouldExpand) {
                                     if (isDarkTheme) Color(0xFF1E293B) else Color.White
                                 } else {
                                     surfaceColor
                                 },
-                                shadowElevation = searchBarElevation,
-                                tonalElevation = 0.dp
+                                shadowElevation = if (shouldExpand) 8.dp else 4.dp
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -942,18 +951,16 @@ fun ClientDashboardScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(horizontal = if (shouldExpand) 16.dp else 12.dp),
+                                            .padding(horizontal = 16.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Search,
                                             contentDescription = "Buscar",
                                             tint = textSecondaryColor,
-                                            modifier = Modifier.size(if (shouldExpand) 20.dp else 18.dp)
+                                            modifier = Modifier.size(20.dp)
                                         )
-                                        
-                                        Spacer(modifier = Modifier.width(if (shouldExpand) 12.dp else 8.dp))
-                                        
+                                        Spacer(modifier = Modifier.width(12.dp))
                                         Box(modifier = Modifier.weight(1f)) {
                                             androidx.compose.foundation.text.BasicTextField(
                                                 value = searchText,
@@ -961,7 +968,7 @@ fun ClientDashboardScreen(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 singleLine = true,
                                                 textStyle = androidx.compose.ui.text.TextStyle(
-                                                    fontSize = if (shouldExpand) 14.sp else 13.sp,
+                                                    fontSize = 14.sp,
                                                     color = textPrimaryColor,
                                                     fontWeight = FontWeight.Medium
                                                 ),
@@ -970,8 +977,8 @@ fun ClientDashboardScreen(
                                                     Box(modifier = Modifier.fillMaxWidth()) {
                                                         if (searchText.isEmpty()) {
                                                             Text(
-                                                                text = if (shouldExpand) "Buscar servicios..." else "Buscar...",
-                                                                fontSize = if (shouldExpand) 14.sp else 13.sp,
+                                                                text = "Buscar servicios...",
+                                                                fontSize = 14.sp,
                                                                 color = textSecondaryColor.copy(alpha = 0.6f),
                                                                 fontWeight = FontWeight.Medium
                                                             )
@@ -981,236 +988,98 @@ fun ClientDashboardScreen(
                                                 }
                                             )
                                         }
-                                    
-                                    if (searchText.isNotEmpty()) {
-                                        IconButton(onClick = { 
-                                            searchText = ""
-                                        }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Limpiar búsqueda",
-                                                tint = textSecondaryColor,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    } else if (shouldExpand) {
-                                        IconButton(onClick = { 
-                                            isSearchExpanded = false
-                                            isSearchFocused = false
-                                        }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Contraer búsqueda",
-                                                tint = textSecondaryColor,
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                        if (searchText.isNotEmpty() || shouldExpand) {
+                                            IconButton(onClick = {
+                                                if (searchText.isNotEmpty()) searchText = ""
+                                                else {
+                                                    isSearchExpanded = false
+                                                    isSearchFocused = false
+                                                }
+                                            }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Cerrar",
+                                                    tint = textSecondaryColor,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        }
-                        
-                        // Dropdown de resultados con animación
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = searchText.isNotEmpty(),
-                            enter = androidx.compose.animation.fadeIn(
-                                animationSpec = tween(200, easing = FastOutSlowInEasing)
-                            ) + androidx.compose.animation.expandVertically(
-                                animationSpec = tween(200, easing = FastOutSlowInEasing)
-                            ),
-                            exit = androidx.compose.animation.fadeOut(
-                                animationSpec = tween(150)
-                            ) + androidx.compose.animation.shrinkVertically(
-                                animationSpec = tween(150)
-                            )
-                        ) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // Preparar categorías para búsqueda
-                            val searchCategories = listOf(
-                                Triple(R.drawable.ic_electricista, "Electricista", Color(0xFFF59E0B)),
-                                Triple(R.drawable.ic_plomero, "Plomería", Color(0xFF3B82F6)),
-                                Triple(R.drawable.ic_pintura, "Pintura", Color(0xFFEC4899)),
-                                Triple(R.drawable.ic_mudanza, "Mudanzas", Color(0xFF10B981)),
-                                Triple(R.drawable.ic_limpieza, "Limpieza", Color(0xFF8B5CF6)),
-                                Triple(R.drawable.ic_jardin, "Paisajismo", Color(0xFF16A34A)),
-                                Triple(R.drawable.ic_mecanico, "Reparaciones", Color(0xFF0369A1)),
-                                Triple(R.drawable.ic_mudanza, "Transporte", Color(0xFF059669)),
-                                Triple(R.drawable.ic_albanil, "Construcción", Color(0xFFEA580C)),
-                                Triple(R.drawable.ic_electricista, "Refrigeración", Color(0xFF0284C7)),
-                                Triple(R.drawable.ic_otros, "Otros", Color(0xFF9CA3AF))
-                            )
-                            
-                            val categoriesResults = searchCategories.filter { 
-                                it.second.contains(searchText, ignoreCase = true) 
-                            }
-                            
-                            val professionalsResults = listOf(
-                                Quadruple("Carlos Ruiz", "Electricista Master", Color(0xFFF59E0B), "4.9", "120", 8),
-                                Quadruple("Ana López", "Limpieza Profunda", Color(0xFF8B5CF6), "5.0", "85", 5),
-                                Quadruple("Mario Bross", "Plomero Certificado", Color(0xFFEF4444), "4.8", "210", 3),
-                                Quadruple("Luis García", "Pintor Profesional", Color(0xFFEC4899), "4.7", "95", 4),
-                                Quadruple("Pedro Martínez", "Jardinero Experto", Color(0xFF84CC16), "4.9", "150", 6)
-                            ).filter { 
-                                it.first.contains(searchText, ignoreCase = true) || 
-                                it.second.contains(searchText, ignoreCase = true) 
-                            }
-                            
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 300.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color.White,
-                                shadowElevation = 12.dp,
-                                tonalElevation = 0.dp
+
+                            // Resultados de búsqueda
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = searchText.isNotEmpty(),
+                                enter = androidx.compose.animation.fadeIn(
+                                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                                ) + androidx.compose.animation.expandVertically(
+                                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                                ),
+                                exit = androidx.compose.animation.fadeOut(
+                                    animationSpec = tween(150)
+                                ) + androidx.compose.animation.shrinkVertically(
+                                    animationSpec = tween(150)
+                                )
                             ) {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
-                                ) {
-                                    // Mostrar categorías
-                                    if (categoriesResults.isNotEmpty()) {
-                                        item {
-                                            Text(
-                                                text = "Categorías",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = textSecondaryColor,
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                            )
-                                        }
-                                        
-                                        items(categoriesResults.size) { index ->
-                                            val category = categoriesResults[index]
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        selectedCategory = category.second
-                                                        showSearchResults = true
-                                                        searchText = ""
-                                                    }
-                                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    painter = painterResource(id = category.first),
-                                                    contentDescription = category.second,
-                                                    tint = Color.Unspecified,
-                                                    modifier = Modifier.size(32.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                Text(
-                                                    text = category.second,
-                                                    fontSize = 14.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = textPrimaryColor
-                                                )
-                                            }
-                                            if (index < categoriesResults.size - 1 || professionalsResults.isNotEmpty()) {
-                                                HorizontalDivider(color = textSecondaryColor.copy(alpha = 0.2f), thickness = 1.dp)
-                                            }
-                                        }
+                                Column {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    val searchCategories = listOf(
+                                        Triple(R.drawable.ic_electricista, "Electricista", Color(0xFFFBBF24)),
+                                        Triple(R.drawable.ic_plomero, "Plomero", Color(0xFF06B6D4)),
+                                        Triple(R.drawable.ic_pintura, "Pintura", Color(0xFFEC4899)),
+                                        Triple(R.drawable.ic_limpieza, "Limpieza", Color(0xFF8B5CF6)),
+                                        Triple(R.drawable.ic_jardin, "Jardín", Color(0xFF84CC16)),
+                                        Triple(R.drawable.ic_mecanico, "Mecánico", Color(0xFF475569))
+                                    )
+                                    
+                                    val filteredResults = searchCategories.filter { 
+                                        it.second.contains(searchText, ignoreCase = true) 
                                     }
                                     
-                                    // Mostrar profesionales
-                                    if (professionalsResults.isNotEmpty()) {
-                                        item {
-                                            Text(
-                                                text = "Profesionales",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = textSecondaryColor,
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                            )
-                                        }
-                                        
-                                        items(professionalsResults.size) { index ->
-                                            val professional = professionalsResults[index]
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Surface(
-                                                    modifier = Modifier.size(40.dp),
-                                                    shape = CircleShape,
-                                                    color = professional.color.copy(alpha = 0.1f)
-                                                ) {
-                                                    Box(contentAlignment = Alignment.Center) {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = surfaceColor,
+                                        shadowElevation = 8.dp
+                                    ) {
+                                        if (filteredResults.isNotEmpty()) {
+                                            Column {
+                                                filteredResults.forEach { (icon, name, color) ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+                                                                selectedCategory = name
+                                                                showSearchResults = true
+                                                                searchText = ""
+                                                            }
+                                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(40.dp)
+                                                                .background(color.copy(alpha = 0.15f), CircleShape),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                painter = painterResource(id = icon),
+                                                                contentDescription = name,
+                                                                tint = color,
+                                                                modifier = Modifier.size(20.dp)
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.width(12.dp))
                                                         Text(
-                                                            text = professional.first.first().toString(),
-                                                            fontSize = 18.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = professional.color
+                                                            text = name,
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = textPrimaryColor
                                                         )
                                                     }
                                                 }
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                Column {
-                                                    Text(
-                                                        text = professional.first,
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = textPrimaryColor
-                                                    )
-                                                    Text(
-                                                        text = professional.second,
-                                                        fontSize = 12.sp,
-                                                        color = textSecondaryColor
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.weight(1f))
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Star,
-                                                        contentDescription = null,
-                                                        tint = Color(0xFFFBBF24),
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text(
-                                                        text = professional.third.toString(),
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = textPrimaryColor
-                                                    )
-                                                }
-                                            }
-                                            if (index < professionalsResults.size - 1) {
-                                                HorizontalDivider(color = textSecondaryColor.copy(alpha = 0.2f), thickness = 1.dp)
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Sin resultados
-                                    if (categoriesResults.isEmpty() && professionalsResults.isEmpty()) {
-                                        item {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(32.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Search,
-                                                        contentDescription = null,
-                                                        tint = textSecondaryColor,
-                                                        modifier = Modifier.size(48.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.height(8.dp))
-                                                    Text(
-                                                        text = "No se encontraron resultados",
-                                                        fontSize = 14.sp,
-                                                        color = textSecondaryColor,
-                                                        textAlign = TextAlign.Center
-                                                    )
-                                                }
                                             }
                                         }
                                     }
@@ -1218,435 +1087,146 @@ fun ClientDashboardScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(24.dp))
                     
-                    // Botones FAB en el lado derecho (solo visible cuando el buscador NO está expandido)
-                    // Animación de rotación del botón principal a 45°
-                    val fabRotation by animateFloatAsState(
-                        targetValue = if (isFabOpen) 45f else 0f,
-                        animationSpec = tween(300, easing = FastOutSlowInEasing),
-                        label = "fab_rotation_header"
-                    )
-                    
-                    // Animaciones para botones secundarios
-                    // Opacidad: 0 (invisible) -> 1 (visible)
-                    val fabOptionsAlpha by animateFloatAsState(
-                        targetValue = if (isFabOpen) 1f else 0f,
-                        animationSpec = tween(300, easing = FastOutSlowInEasing),
-                        label = "fab_alpha"
-                    )
-                    
-                    // Translación vertical: 10dp hacia abajo cuando está cerrado
-                    val fabOptionsOffset by animateDpAsState(
-                        targetValue = if (isFabOpen) 0.dp else 10.dp,
-                        animationSpec = tween(300, easing = FastOutSlowInEasing),
-                        label = "fab_offset"
-                    )
-                    
-                    // Para el efecto cascada: Licitaciones con delay (75ms)
-                    val fabLicitacionesAlpha by animateFloatAsState(
-                        targetValue = if (isFabOpen) 1f else 0f,
-                        animationSpec = tween(300, delayMillis = 75, easing = FastOutSlowInEasing),
-                        label = "fab_licitaciones_alpha"
-                    )
-                    
-                    val fabLicitacionesOffset by animateDpAsState(
-                        targetValue = if (isFabOpen) 0.dp else 10.dp,
-                        animationSpec = tween(300, delayMillis = 75, easing = FastOutSlowInEasing),
-                        label = "fab_licitaciones_offset"
-                    )
-                    
-                    if (!shouldExpand) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .padding(end = 0.dp, top = 35.dp)
-                        ) {
-                            // Column para los botones secundarios (aparecen arriba)
-                            // SIEMPRE renderizados pero invisibles cuando está cerrado
-                            Column(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(bottom = 46.dp), // Espacio para el botón principal
-                                horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom)
-                            ) {
-                                // Opción 2: Licitaciones (más cerca del botón +)
-                                // Con animación de opacidad, traslación y DELAY (efecto cascada)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier
-                                        .graphicsLayer {
-                                            alpha = fabLicitacionesAlpha
-                                            translationY = fabLicitacionesOffset.toPx()
-                                        }
-                                ) {
-                                    // Etiqueta
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color.White,
-                                        shadowElevation = 2.dp
-                                    ) {
-                                        Text(
-                                            text = "Licitaciones",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF475569),
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                    
-                                    // Botón
-                                    FloatingActionButton(
-                                        onClick = { /* TODO: Navegar a Licitaciones */ },
-                                        containerColor = Color(0xFF6366F1),
-                                        contentColor = Color.White,
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.List,
-                                            contentDescription = "Licitaciones",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                                
-                                // Opción 1: Servicio Fast (más arriba)
-                                // Con animación de opacidad y traslación SIN delay
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier
-                                        .graphicsLayer {
-                                            alpha = fabOptionsAlpha
-                                            translationY = fabOptionsOffset.toPx()
-                                        }
-                                ) {
-                                    // Etiqueta
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color.White,
-                                        shadowElevation = 2.dp
-                                    ) {
-                                        Text(
-                                            text = "Servicio Fast",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF475569),
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                    
-                                    // Botón
-                                    FloatingActionButton(
-                                        onClick = { /* TODO: Navegar a Servicio Fast */ },
-                                        containerColor = Color(0xFFFACC15),
-                                        contentColor = Color(0xFF713F12),
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Star,
-                                            contentDescription = "Servicio Fast",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            // Botón Principal Toggle (+) - POSICIÓN ABSOLUTA FIJA
-                            FloatingActionButton(
-                                onClick = { isFabOpen = !isFabOpen },
-                                containerColor = if (isFabOpen) Color(0xFFEF4444) else Color(0xFF3B82F6),
-                                contentColor = Color.White,
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .align(Alignment.BottomEnd)
-                                    .graphicsLayer {
-                                        rotationZ = fabRotation
-                                    }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = if (isFabOpen) "Cerrar" else "Abrir menú",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Categorías",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textPrimaryColor
+                        )
+                        TextButton(onClick = { }) {
+                            Text("Ver todas", color = Color(0xFF3B82F6))
                         }
                     }
-                }
-            }
-        }
-
-        
-
-
-        
-        // Contenido scrollable con scrollbar
-        val scrollState = rememberScrollState()
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 80.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-            ) {
-            // Cargar categorías desde Firebase al iniciar
-            val firebaseCategories by categoryViewModel.categories.collectAsState()
-            val isLoadingCategories by categoryViewModel.isLoading.collectAsState()
-            
-            // Título de Categorías
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Categorías",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimaryColor
-                )
-                
-                TextButton(onClick = { }) {
-                    Text(
-                        text = "Ver todas",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF3B82F6)
+                    
+                    val iconMap = mapOf(
+                        "ic_electricista" to R.drawable.ic_electricista,
+                        "ic_plomero" to R.drawable.ic_plomero,
+                        "ic_pintura" to R.drawable.ic_pintura,
+                        "ic_mudanza" to R.drawable.ic_mudanza,
+                        "ic_limpieza" to R.drawable.ic_limpieza,
+                        "ic_jardin" to R.drawable.ic_jardin,
+                        "ic_mecanico" to R.drawable.ic_mecanico,
+                        "ic_albanil" to R.drawable.ic_albanil,
+                        "ic_otros" to R.drawable.ic_otros
                     )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Mapeo de iconos desde Firebase
-            val iconMap = mapOf(
-                "ic_electricista" to R.drawable.ic_electricista,
-                "ic_plomero" to R.drawable.ic_plomero,
-                "ic_pintura" to R.drawable.ic_pintura,
-                "ic_mudanza" to R.drawable.ic_mudanza,
-                "ic_limpieza" to R.drawable.ic_limpieza,
-                "ic_jardin" to R.drawable.ic_jardin,
-                "ic_mecanico" to R.drawable.ic_mecanico,
-                "ic_albanil" to R.drawable.ic_albanil,
-                "ic_otros" to R.drawable.ic_otros
-            )
-            
-            // Usar categorías de Firebase si existen, sino usar las locales
-            val allCategories = if (firebaseCategories.isNotEmpty()) {
-                // Convertir categorías de Firebase al formato local
-                firebaseCategories.map { category ->
-                    val iconRes = iconMap[category.iconName] ?: R.drawable.ic_otros
-                    val color = try {
-                        Color(android.graphics.Color.parseColor(category.colorHex))
-                    } catch (e: Exception) {
-                        Color(0xFF9CA3AF)
+
+                    val categoriesToShow = if (firebaseCategories.isNotEmpty()) {
+                        firebaseCategories.map {
+                            val color = try {
+                                Color(android.graphics.Color.parseColor(it.colorHex))
+                            } catch (e: Exception) {
+                                Color(0xFF9CA3AF)
+                            }
+                            Triple(iconMap[it.iconName] ?: R.drawable.ic_otros, it.name, color)
+                        }
+                    } else {
+                        listOf(
+                            Triple(R.drawable.ic_electricista, "Electricista", Color(0xFFFBBF24)),
+                            Triple(R.drawable.ic_plomero, "Plomero", Color(0xFF06B6D4)),
+                            Triple(R.drawable.ic_pintura, "Pintura", Color(0xFFEC4899)),
+                            Triple(R.drawable.ic_limpieza, "Limpieza", Color(0xFF8B5CF6)),
+                            Triple(R.drawable.ic_jardin, "Jardín", Color(0xFF84CC16)),
+                            Triple(R.drawable.ic_mecanico, "Mecánico", Color(0xFF475569))
+                        )
                     }
-                    Triple(iconRes, category.name, color)
-                }
-            } else {
-                // Categorías locales como fallback
-                listOf(
-                    Triple(R.drawable.ic_electricista, "Electricista", Color(0xFFFBBF24)),
-                    Triple(R.drawable.ic_plomero, "Plomero", Color(0xFF06B6D4)),
-                    Triple(R.drawable.ic_pintura, "Pintura", Color(0xFFEC4899)),
-                    Triple(R.drawable.ic_mudanza, "Mudanza", Color(0xFF10B981)),
-                    Triple(R.drawable.ic_limpieza, "Limpieza", Color(0xFF8B5CF6)),
-                    Triple(R.drawable.ic_jardin, "Jardín", Color(0xFF84CC16)),
-                    Triple(R.drawable.ic_mecanico, "Mecánico", Color(0xFF475569)),
-                    Triple(R.drawable.ic_albanil, "Albañilería", Color(0xFFF97316)),
-                    Triple(R.drawable.ic_electricista, "Carpintería", Color(0xFF92400E)),
-                    Triple(R.drawable.ic_plomero, "Cerrajería", Color(0xFF78350F)),
-                    Triple(R.drawable.ic_pintura, "Decoración", Color(0xFFDB2777)),
-                    Triple(R.drawable.ic_limpieza, "Lavandería", Color(0xFF0891B2)),
-                    Triple(R.drawable.ic_jardin, "Paisajismo", Color(0xFF16A34A)),
-                    Triple(R.drawable.ic_mecanico, "Reparaciones", Color(0xFF0369A1)),
-                    Triple(R.drawable.ic_mudanza, "Transporte", Color(0xFF059669)),
-                    Triple(R.drawable.ic_albanil, "Construcción", Color(0xFFEA580C)),
-                    Triple(R.drawable.ic_electricista, "Refrigeración", Color(0xFF0284C7)),
-                    Triple(R.drawable.ic_otros, "Otros", Color(0xFF9CA3AF))
-                )
-            }
-            
-            // Mostrar indicador de carga o grid
-            if (isLoadingCategories && firebaseCategories.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(240.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color(0xFF3B82F6))
-                }
-            } else {
-                // Grid de Categorías con scroll vertical
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(240.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(4.dp)
-                ) {
-                    items(allCategories.size) { index ->
-                        val category = allCategories[index]
-                        CategoryItem(
-                            iconRes = category.first,
-                            label = category.second,
-                            color = category.third,
-                            onClick = {
-                                selectedCategory = category.second
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.fillMaxWidth().height(240.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        items(categoriesToShow.size) { index ->
+                            val cat = categoriesToShow[index]
+                            CategoryItem(cat.first, cat.second, cat.third) {
+                                selectedCategory = cat.second
                                 showSearchResults = true
                             }
-                        )
+                        }
                     }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Título de Profesionales más usados
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Tus favoritos ⭐",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimaryColor
-                )
-                
-                TextButton(onClick = { }) {
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
                     Text(
-                        text = "Ver todos",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF3B82F6)
+                        text = "Tus favoritos ⭐",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimaryColor,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Definir todos los profesionales
-            val allProfessionals = listOf(
-                Quadruple("Carlos Ruiz", "Electricista Master", Color(0xFFF59E0B), "4.9", "120", 8),
-                Quadruple("Ana López", "Limpieza Profunda", Color(0xFF8B5CF6), "5.0", "85", 5),
-                Quadruple("Mario Bross", "Plomero Certificado", Color(0xFFEF4444), "4.8", "210", 3),
-                Quadruple("Luis García", "Pintor Profesional", Color(0xFFEC4899), "4.7", "95", 4),
-                Quadruple("Pedro Martínez", "Jardinero Experto", Color(0xFF84CC16), "4.9", "150", 6)
-            )
-            
-            // Grid de profesionales favoritos en 2 columnas
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(400.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(4.dp)
-            ) {
-                items(allProfessionals.size) { index ->
-                    val pro = allProfessionals[index]
-                    ProCard(
-                        name = pro.first,
-                        job = pro.second,
-                        rating = pro.third,
-                        reviews = pro.fourth,
-                        avatarColor = pro.color,
-                        timesUsed = pro.fifth,
-                        surfaceColor = surfaceColor,
-                        textPrimaryColor = textPrimaryColor,
-                        textSecondaryColor = textSecondaryColor
+
+                    val allProfessionals = listOf(
+                        Quadruple("Carlos Ruiz", "Electricista Master", Color(0xFFF59E0B), "4.9", "120", 8),
+                        Quadruple("Ana López", "Limpieza Profunda", Color(0xFF8B5CF6), "5.0", "85", 5),
+                        Quadruple("Mario Bross", "Plomero Certificado", Color(0xFFEF4444), "4.8", "210", 3),
+                        Quadruple("Luis García", "Pintor Profesional", Color(0xFFEC4899), "4.7", "95", 4)
                     )
-                }
-            }
-            }
-        }
-        }
-        
-        // --- BOTONES FLOTANTES (FAB) ---
-        // Overlay para cerrar FAB al hacer clic fuera
-        androidx.compose.animation.AnimatedVisibility(
-            visible = isFabOpen,
-            enter = androidx.compose.animation.fadeIn(
-                animationSpec = tween(200)
-            ),
-            exit = androidx.compose.animation.fadeOut(
-                animationSpec = tween(200)
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.2f))
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = {
-                                isFabOpen = false
-                            }
-                        )
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxWidth().height(400.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        items(allProfessionals.size) { index ->
+                            val pro = allProfessionals[index]
+                            ProCard(
+                                name = pro.first,
+                                job = pro.second,
+                                rating = pro.third,
+                                reviews = pro.fourth,
+                                avatarColor = pro.color,
+                                timesUsed = pro.fifth,
+                                surfaceColor = surfaceColor,
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                        }
                     }
-            )
+                }
+            }
         }
-        
-        // Bottom Navigation Bar
+
+        // BARRA DE NAVEGACIÓN INFERIOR
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding(),
+                .align(Alignment.BottomCenter),
             color = Color.White,
-            shadowElevation = 8.dp
+            shadowElevation = 16.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BottomNavItem(
-                    icon = Icons.Default.Home,
-                    label = "Inicio",
-                    isSelected = true
-                )
-                
-                // Presupuesto con ícono personalizado de papel y lápiz
-                BottomNavItemCustom(
-                    painter = painterResource(id = R.drawable.ic_presupuesto),
-                    label = "Presupuesto",
-                    isSelected = false
-                )
-                
-                BottomNavItem(
-                    icon = Icons.Default.DateRange,
-                    label = "Pedidos"
-                )
-                
-                BottomNavItem(
-                    icon = Icons.Default.Email,
-                    label = "Chat",
-                    onClick = onNavigateToChat
-                )
-                
-                // Promociones con ícono personalizado de porcentaje
-                BottomNavItemCustom(
-                    painter = painterResource(id = R.drawable.ic_percent),
-                    label = "Promociones",
-                    isSelected = false
-                )
+                BottomNavItem(Icons.Default.Home, "Inicio", true)
+                BottomNavItemCustom(painterResource(R.drawable.ic_presupuesto), "Presupuesto", false)
+                BottomNavItem(Icons.Default.DateRange, "Calendario", false, onClick = onNavigateToCalendar)
+                BottomNavItem(Icons.Default.Email, "Chat", false, onClick = onNavigateToChat)
+                BottomNavItemCustom(painterResource(R.drawable.ic_percent), "Promociones", false)
             }
         }
+    }
+    
+    // Mostrar pantalla de licitaciones
+    if (showBiddingScreen) {
+        BiddingScreen(
+            onBack = { showBiddingScreen = false }
+        )
     }
     
     // Mostrar pantalla de resultados (fuera del Box principal)
