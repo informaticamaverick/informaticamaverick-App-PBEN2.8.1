@@ -29,7 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
-
+// Creo q aqui esta el problema de inicio de secion
 
 @Composable
 fun LoginScreen(
