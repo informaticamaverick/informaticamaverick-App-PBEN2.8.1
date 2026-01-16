@@ -56,6 +56,14 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
     }
 
+    fun onAddressHomeChange(addressHome: String) {
+        _uiState.update { it.copy(addressHome = addressHome, error = null) }
+    }
+
+    fun onAddressWorkChange(addressWork: String) {
+        _uiState.update { it.copy(addressWork = addressWork, error = null) }
+    }
+
 
     fun onCityChange(city: String) {
 
@@ -117,6 +125,8 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     email = currentUser.email ?: "",
                     phoneNumber = _uiState.value.phoneNumber,
                     address = _uiState.value.address,
+                    addressHome = _uiState.value.addressHome,
+                    addressWork = _uiState.value.addressWork,
                     city = _uiState.value.city,
                     state = _uiState.value.state,
                     zipCode = _uiState.value.zipCode,
@@ -243,6 +253,10 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                             phoneNumber = profile?.phoneNumber ?: "",
 
                             address = profile?.address ?: "",
+
+                            addressHome = profile?.addressHome ?: "",
+
+                            addressWork = profile?.addressWork ?: "",
 
                             city = profile?.city ?: "",
 

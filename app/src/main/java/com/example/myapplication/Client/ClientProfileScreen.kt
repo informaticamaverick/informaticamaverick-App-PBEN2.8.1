@@ -39,6 +39,7 @@ fun ClientProfileScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var showEditEmailDialog by remember {mutableStateOf(false)}
     var showChangePasswordDialog by remember { mutableStateOf(false) }
+    var showAddressManagerDialog by remember { mutableStateOf(false) }
     
     // Manejar el botón "Atrás" del sistema (hardware o gestos)
     BackHandler {
@@ -149,7 +150,7 @@ fun ClientProfileScreen(
                                 icon = Icons.Default.LocationOn,
                                 title = "Dirección",
                                 subtitle = uiState.address.ifEmpty { "Agregar dirección" },
-                                onClick = { showEditDialog = true },
+                                onClick = { showAddressManagerDialog = true },
                                 textPrimaryColor = textPrimaryColor,
                                 textSecondaryColor = textSecondaryColor
                             )
@@ -247,6 +248,31 @@ fun ClientProfileScreen(
                 profileViewModel.updatePassword(currentPassword, newPassword)
                 showChangePasswordDialog = false
             }
+        )
+    }
+    
+    // Diálogo para gestionar direcciones
+    if (showAddressManagerDialog) {
+        AddressManagerDialog(
+            currentAddress = uiState.address,
+            homeAddress = uiState.addressHome,
+            workAddress = uiState.addressWork,
+            onDismiss = { showAddressManagerDialog = false },
+            onSaveCurrentAddress = { address ->
+                profileViewModel.onAddressChange(address)
+                profileViewModel.saveProfile()
+            },
+            onSaveHomeAddress = { address ->
+                profileViewModel.onAddressHomeChange(address)
+                profileViewModel.saveProfile()
+            },
+            onSaveWorkAddress = { address ->
+                profileViewModel.onAddressWorkChange(address)
+                profileViewModel.saveProfile()
+            },
+            surfaceColor = surfaceColor,
+            textPrimaryColor = textPrimaryColor,
+            textSecondaryColor = textSecondaryColor
         )
     }
 }
@@ -897,6 +923,202 @@ fun ChangePasswordDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancelar", color = appColors.textSecondaryColor)
+            }
+        }
+    )
+}
+
+// ===== DIÁLOGO: Gestionar Direcciones con botón + =====
+@Composable
+fun AddressManagerDialog(
+    currentAddress: String,
+    homeAddress: String,
+    workAddress: String,
+    onDismiss: () -> Unit,
+    onSaveCurrentAddress: (String) -> Unit,
+    onSaveHomeAddress: (String) -> Unit,
+    onSaveWorkAddress: (String) -> Unit,
+    surfaceColor: Color = Color.White,
+    textPrimaryColor: Color = Color(0xFF1E293B),
+    textSecondaryColor: Color = Color(0xFF64748B)
+) {
+    var currentAddressText by remember { mutableStateOf(currentAddress) }
+    var homeAddressText by remember { mutableStateOf(homeAddress) }
+    var workAddressText by remember { mutableStateOf(workAddress) }
+    var showHomeField by remember { mutableStateOf(homeAddress.isNotEmpty()) }
+    var showWorkField by remember { mutableStateOf(workAddress.isNotEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = surfaceColor,
+        title = {
+            Text(
+                text = "Gestionar Direcciones",
+                fontWeight = FontWeight.Bold,
+                color = textPrimaryColor
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Dirección Actual
+                Text(
+                    text = "Dirección Actual",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = textSecondaryColor,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                OutlinedTextField(
+                    value = currentAddressText,
+                    onValueChange = { currentAddressText = it },
+                    placeholder = { Text("Ingresa tu dirección", color = textSecondaryColor) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF3B82F6),
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = textPrimaryColor,
+                        unfocusedTextColor = textPrimaryColor
+                    ),
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = Color(0xFF3B82F6)
+                        )
+                    }
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Dirección de Casa
+                if (showHomeField) {
+                    Text(
+                        text = "Dirección de Casa",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textSecondaryColor,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    OutlinedTextField(
+                        value = homeAddressText,
+                        onValueChange = { homeAddressText = it },
+                        placeholder = { Text("Ingresa dirección de casa", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Home,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981)
+                            )
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                
+                // Dirección de Trabajo
+                if (showWorkField) {
+                    Text(
+                        text = "Dirección de Trabajo",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textSecondaryColor,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    OutlinedTextField(
+                        value = workAddressText,
+                        onValueChange = { workAddressText = it },
+                        placeholder = { Text("Ingresa dirección de trabajo", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B)
+                            )
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                
+                // Botones para agregar direcciones
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (!showHomeField) {
+                        Button(
+                            onClick = { showHomeField = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFDCFCE7)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Casa", color = Color(0xFF10B981), fontSize = 12.sp)
+                        }
+                    }
+                    
+                    if (!showWorkField) {
+                        Button(
+                            onClick = { showWorkField = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFEF3C7)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Trabajo", color = Color(0xFFF59E0B), fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSaveCurrentAddress(currentAddressText)
+                    if (showHomeField) onSaveHomeAddress(homeAddressText)
+                    if (showWorkField) onSaveWorkAddress(workAddressText)
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3B82F6)
+                )
+            ) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = textSecondaryColor)
             }
         }
     )

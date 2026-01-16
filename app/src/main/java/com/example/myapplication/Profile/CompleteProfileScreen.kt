@@ -130,7 +130,7 @@ fun CompleteProfileScreen(
                         placeholder = "Dirección completa",
                         icon = Icons.Default.Home
                     )
-                    
+
                     // Ciudad
                     CustomTextField(
                         value = uiState.city,

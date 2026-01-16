@@ -6,6 +6,8 @@ data class ProfileUiState(
     val phoneNumber: String = "",
     val password: String = "",
     val address: String = "",
+    val addressHome: String = "",
+    val addressWork: String = "",
     val city: String = "",
     val state: String = "",
     val zipCode: String = "",

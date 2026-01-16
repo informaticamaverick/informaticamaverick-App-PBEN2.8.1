@@ -62,7 +62,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.ViewModel.LocationViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
-import com.example.myapplication.Client.SearchResultsScreen
 import coil.compose.rememberAsyncImagePainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -204,110 +203,83 @@ fun ProCard(
         else -> R.drawable.ic_otros
     }
 
-    Box(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp) // Espacio entre cada item de la lista
+            .padding(bottom = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        // --- 1. CAPA INFERIOR: La Tarjeta Grande (Perfil) ---
-        Card(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp) // Bajamos esta tarjeta para que la de arriba "monte" el borde
-                .zIndex(0f),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = surfaceColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                .padding(5.dp)
         ) {
-            // Contenido de la tarjeta grande
+            // Avatar con inicial
+            Box(
+                modifier = Modifier
+                    .size(35.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(avatarColor)
+                    .align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = name.first().toString(),
+                    fontSize = 15.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Nombre completo
+            Text(
+                text = name,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp,
+                color = textPrimaryColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            // Categoría/profesión destacada
+            Text(
+                text = job.uppercase(),
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 8.sp,
+                color = avatarColor,
+                letterSpacing = 0.5.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            // Rating
             Row(
                 modifier = Modifier
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        bottom = 16.dp,
-                        top = 24.dp // Damos espacio interno extra arriba para que el texto no choque con la etiqueta
-                    ),
+                    .background(Color(0xFFFFF7ED), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 7.dp, vertical = 4.dp)
+                    .align(Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar (Círculo)
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(avatarColor),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = name.first().toString(),
-                        fontSize = 20.sp,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // Textos (Nombre y Rating)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = name,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = textPrimaryColor
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    // Row de estrellas/rating
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Rating",
-                            tint = Color(0xFFFBBF24),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "$rating ($reviews reviews)",
-                            fontSize = 12.sp,
-                            color = textSecondaryColor
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- 2. CAPA SUPERIOR: La Tarjeta Pequeña (Categoría) ---
-        Card(
-            modifier = Modifier
-                .fillMaxWidth() // Mismo ancho que la tarjeta del perfil
-                .align(Alignment.TopStart) // Pegamos al techo de la Box
-                .zIndex(1f)
-                .shadow(
-                    elevation = 4.dp,
-                    shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
-                    clip = false
-                ), // Sombra solo en las puntas de arriba
-            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
-            colors = CardDefaults.cardColors(containerColor = surfaceColor.copy(alpha = 0.9f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Icono pequeño
                 Icon(
-                    painter = painterResource(id = categoryIcon),
-                    contentDescription = null,
-                    tint = avatarColor, // Usamos el color del tema
-                    modifier = Modifier.size(16.dp)
+                    imageVector = Icons.Default.Star,
+                    contentDescription = "Rating",
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier.size(10.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(3.dp))
                 Text(
-                    text = job,
-                    fontSize = 12.sp,
+                    text = rating,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    color = textPrimaryColor
+                    color = Color(0xFFB45309)
                 )
             }
         }
@@ -1160,22 +1132,6 @@ fun ClientDashboardScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Categorías",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textPrimaryColor
-                        )
-                        TextButton(onClick = { }) {
-                            Text("Ver todas", color = Color(0xFF3B82F6))
-                        }
-                    }
-
                     val iconMap = mapOf(
                         "ic_electricista" to R.drawable.ic_electricista,
                         "ic_plomero" to R.drawable.ic_plomero,
@@ -1208,50 +1164,93 @@ fun ClientDashboardScreen(
                         )
                     }
 
+                    // Filtrar categorías según búsqueda o categoría seleccionada
+                    val categoriasAMostrar = if (searchText.isNotEmpty() || selectedCategory.isNotEmpty()) {
+                        categoriesToShow.filter { 
+                            val matchesSearch = if (searchText.isNotEmpty()) {
+                                it.second.contains(searchText, ignoreCase = true)
+                            } else true
+                            
+                            val matchesCategory = if (selectedCategory.isNotEmpty()) {
+                                it.second.equals(selectedCategory, ignoreCase = true)
+                            } else true
+                            
+                            matchesSearch && matchesCategory
+                        }
+                    } else {
+                        categoriesToShow
+                    }
+
+                    // Card que encapsula las categorías
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(320.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (searchText.isNotEmpty() || selectedCategory.isNotEmpty()) "Resultados" else "Categorías",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textPrimaryColor
+                                )
+                                TextButton(onClick = { 
+                                    searchText = ""
+                                    selectedCategory = ""
+                                }) {
+                                    Text(
+                                        text = if (searchText.isNotEmpty() || selectedCategory.isNotEmpty()) "Limpiar" else "Ver todas",
+                                        color = Color(0xFF3B82F6)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
                     // Grid de categorías con scroll independiente
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(240.dp)
-                            .nestedScroll(remember {
-                                object : NestedScrollConnection {
-                                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                                        return Offset.Zero
-                                    }
-                                }
-                            }),
+                            .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(4.dp)
+                        contentPadding = PaddingValues(4.dp),
+                        userScrollEnabled = true
                     ) {
-                        items(categoriesToShow.size) { index ->
-                            val cat = categoriesToShow[index]
+                        items(categoriasAMostrar.size) { index ->
+                            val cat = categoriasAMostrar[index]
                             CategoryItem(
                                 cat.first,
                                 cat.second,
                                 cat.third
                             ) {
-                                selectedCategory = cat.second
-                                showSearchResults = true
+                                // No cambiar selectedCategory, solo resetear búsqueda
+                                searchText = ""
                             }
                         }
                     }
+                        } // Cierra Column
+                    } // Cierra Card
 
                     Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        text = "Tus favoritos ⭐",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textPrimaryColor,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
 
                     val allProfessionals = listOf(
                         Quadruple(
                             "Carlos Ruiz",
-                            "Electricista Master",
+                            "Electricista",
                             Color(0xFFF59E0B),
                             "4.9",
                             "120",
@@ -1259,7 +1258,7 @@ fun ClientDashboardScreen(
                         ),
                         Quadruple(
                             "Ana López",
-                            "Limpieza Profunda",
+                            "Limpieza",
                             Color(0xFF8B5CF6),
                             "5.0",
                             "85",
@@ -1267,7 +1266,7 @@ fun ClientDashboardScreen(
                         ),
                         Quadruple(
                             "Mario Bross",
-                            "Plomero Certificado",
+                            "Plomero",
                             Color(0xFFEF4444),
                             "4.8",
                             "210",
@@ -1275,7 +1274,7 @@ fun ClientDashboardScreen(
                         ),
                         Quadruple(
                             "Luis García",
-                            "Pintor Profesional",
+                            "Pintor",
                             Color(0xFFEC4899),
                             "4.7",
                             "95",
@@ -1283,12 +1282,35 @@ fun ClientDashboardScreen(
                         )
                     )
 
-                    // Grid de favoritos con scroll independiente
-                    Box(
+                    // Card que encapsula favoritos
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(400.dp)
+                            .height(450.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp)
+                        ) {
+                            Text(
+                                text = "Tus favoritos ⭐",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimaryColor
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Grid de favoritos con scroll independiente
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                            ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -1327,6 +1349,8 @@ fun ClientDashboardScreen(
                             }
                         }
                     }
+                        } // Cierra Column
+                    } // Cierra Card
 
 
                 }
@@ -1374,11 +1398,5 @@ fun ClientDashboardScreen(
         )
     }
 
-    // Mostrar pantalla de resultados (fuera del Box principal)
-    if (showSearchResults) {
-        SearchResultsScreen(
-            category = selectedCategory,
-            onBack = { showSearchResults = false }
-        )
-    }
+    // Ya no necesitamos SearchResultsScreen, los resultados se muestran en el grid
 }
