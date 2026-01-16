@@ -18,6 +18,7 @@ data class Message(
 data class ChatConversation(
     val userId: String,           // ID único del usuario
     val name: String,             // Nombre del usuario
+    val job: String,              // Profesión del usuario (para agrupar)
     val avatarColor: Color,       // Color del avatar
     val lastMessage: String,      // Último mensaje enviado
     val lastMessageTime: String,  // "10:05", "Ayer", etc.

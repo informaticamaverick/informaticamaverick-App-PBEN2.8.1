@@ -13,6 +13,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -106,6 +109,12 @@ fun ChatListView(
     onBack: () -> Unit,
     appColors: com.example.myapplication.ui.theme.AppColors
 ) {
+    // Estado para controlar categorías colapsadas
+    var collapsedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    // Agrupar chats por profesión
+    val groupedChats = ChatData.conversations.groupBy { it.job }
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -141,19 +150,44 @@ fun ChatListView(
             }
         }
         
-        // Lista de conversaciones
+        // Lista de conversaciones agrupadas por categoría
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(ChatData.conversations) { conversation ->
-                ChatListItem(
-                    conversation = conversation,
-                    onClick = { onChatClick(conversation.userId) },
-                    appColors = appColors
-                )
+            groupedChats.forEach { (category, chats) ->
+                // Header de categoría
+                item(key = "header_$category") {
+                    CategoryHeader(
+                        category = category,
+                        count = chats.size,
+                        isCollapsed = collapsedCategories.contains(category),
+                        onToggle = {
+                            collapsedCategories = if (collapsedCategories.contains(category)) {
+                                collapsedCategories - category
+                            } else {
+                                collapsedCategories + category
+                            }
+                        },
+                        appColors = appColors
+                    )
+                }
+                
+                // Chats de la categoría (solo si no está colapsada)
+                if (!collapsedCategories.contains(category)) {
+                    items(
+                        items = chats,
+                        key = { chat -> chat.userId }
+                    ) { conversation ->
+                        ChatListItem(
+                            conversation = conversation,
+                            onClick = { onChatClick(conversation.userId) },
+                            appColors = appColors
+                        )
+                    }
+                }
             }
         }
     }
@@ -495,5 +529,46 @@ fun MessageInputBar(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun CategoryHeader(
+    category: String,
+    count: Int,
+    isCollapsed: Boolean,
+    onToggle: () -> Unit,
+    appColors: com.example.myapplication.ui.theme.AppColors
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = category,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = appColors.textPrimaryColor
+            )
+            Text(
+                text = "($count)",
+                fontSize = 14.sp,
+                color = appColors.textSecondaryColor
+            )
+        }
+        
+        Icon(
+            imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+            contentDescription = if (isCollapsed) "Expandir" else "Colapsar",
+            tint = appColors.textSecondaryColor
+        )
     }
 }

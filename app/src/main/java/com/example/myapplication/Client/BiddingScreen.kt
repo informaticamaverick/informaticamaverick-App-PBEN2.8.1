@@ -1,6 +1,7 @@
 package com.example.myapplication.Client
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,6 +50,11 @@ fun BiddingScreen(
     onBack: () -> Unit,
     categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
+    //Manejar  boton atras del sistema
+    BackHandler() {
+        onBack()
+    }
+
     // Estados del formulario
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }

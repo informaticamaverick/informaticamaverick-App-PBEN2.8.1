@@ -14,6 +14,7 @@ object ChatData {
         ChatConversation(
             userId = "user_1",
             name = "Mario Bross",
+            job = "Plomero",
             avatarColor = Color(0xFFEF4444), // Rojo
             lastMessage = "¡Hola! Sí, claro. ¿Qué necesitas?",
             lastMessageTime = "10:05",
@@ -22,6 +23,7 @@ object ChatData {
         ChatConversation(
             userId = "user_2",
             name = "Ana López",
+            job = "Limpieza",
             avatarColor = Color(0xFF8B5CF6), // Púrpura
             lastMessage = "Servicio finalizado con éxito.",
             lastMessageTime = "Ayer",
@@ -30,6 +32,7 @@ object ChatData {
         ChatConversation(
             userId = "user_3",
             name = "Carlos Ruiz",
+            job = "Electricista",
             avatarColor = Color(0xFF10B981), // Verde
             lastMessage = "Perfecto, entonces mañana a las 3pm",
             lastMessageTime = "Hace 2 días",
@@ -38,10 +41,20 @@ object ChatData {
         ChatConversation(
             userId = "user_4",
             name = "Laura Méndez",
+            job = "Electricista",
             avatarColor = Color(0xFF3B82F6), // Azul
             lastMessage = "Muchas gracias por el servicio",
             lastMessageTime = "15/01",
             isOnline = true
+        ),
+        ChatConversation(
+            userId = "user_5",
+            name = "José Electric",
+            job = "Electricista",
+            avatarColor = Color(0xFFFBBF24), // Amarillo
+            lastMessage = "¿Te sirvió el presupuesto?",
+            lastMessageTime = "Ayer",
+            isOnline = false
         )
     )
     
