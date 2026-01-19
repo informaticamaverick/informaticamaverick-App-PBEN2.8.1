@@ -39,7 +39,6 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // CORRECCIÓN 1: Cambiado 'resul' a 'result'
             val result = authRepository.signInWithEmailAndPassword(
                 _uiState.value.email,
                 _uiState.value.password
@@ -48,9 +47,12 @@ class LoginViewModel @Inject constructor(
             result.onSuccess { user ->
                 _userName.value = user.displayName
 
-
+                android.util.Log.d("LoginViewModel", "Usuario logueado: ${user.uid}, nombre: ${user.displayName}")
+                
                 val profileExists = authRepository.checkUserProfileExists(user.uid)
                 _hasProfile.value = profileExists
+                
+                android.util.Log.d("LoginViewModel", "¿Perfil existe? $profileExists")
 
                 _uiState.update {
                     it.copy(
@@ -104,16 +106,21 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    // --- FUNCIÓN CORREGIDA ---
+    // --- FUNCIÓN PARA RECUPERACIÓN DE CONTRASEÑA ---
     fun resetPassword(email: String) {
-        // Primero validamos si el email está vacío antes de lanzar la corrutina
+        // Validar email vacío
         if (email.isEmpty()) {
             _uiState.update { it.copy(error = "Por favor ingresa tu email") }
             return
         }
+        
+        // Validar formato de email
+        if (!email.contains("@")) {
+            _uiState.update { it.copy(error = "Email inválido") }
+            return
+        }
 
         viewModelScope.launch {
-            // Corregido: isLoading (sin n) y _uiState
             _uiState.update { it.copy(isLoading = true, error = null) }
 
             val result = authRepository.sendPasswordResetEmail(email)
@@ -121,16 +128,27 @@ class LoginViewModel @Inject constructor(
             result.onSuccess {
                 _uiState.update {
                     it.copy(
-                        isLoading = false, // Corregido typo
-                        error = null,      // Agregada la coma que faltaba
+                        isLoading = false,
+                        error = null,
                         passwordResetEmailSent = true
                     )
                 }
-            }.onFailure { error -> // Corregida sintaxis de lambda
+            }.onFailure { error ->
+                val errorMessage = when {
+                    error.message?.contains("user-not-found") == true -> 
+                        "No existe una cuenta con este email"
+                    error.message?.contains("invalid-email") == true -> 
+                        "Email inválido"
+                    error.message?.contains("too-many-requests") == true -> 
+                        "Demasiados intentos. Intenta más tarde"
+                    else -> 
+                        "Error al enviar el correo: ${error.message}"
+                }
+                
                 _uiState.update {
                     it.copy(
-                        isLoading = false, // Corregido typo
-                        error = error.message ?: "Error al enviar el correo de recuperación"
+                        isLoading = false,
+                        error = errorMessage
                     )
                 }
             }
@@ -152,5 +170,24 @@ class LoginViewModel @Inject constructor(
         }
 
         return true
+    }
+
+    fun checkCurrentUser() {
+        viewModelScope.launch {
+            val user = authRepository.getCurrentUser()
+            if (user != null) {
+                _userName.value = user.displayName
+                
+                val profileExists = authRepository.checkUserProfileExists(user.uid)
+                _hasProfile.value = profileExists
+                
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isLoginSuccess = true
+                    )
+                }
+            }
+        }
     }
 }

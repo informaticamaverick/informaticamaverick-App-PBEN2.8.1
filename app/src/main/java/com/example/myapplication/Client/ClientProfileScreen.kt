@@ -2,6 +2,7 @@ package com.example.myapplication.Client
 
 import android.R
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,7 +28,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.Profile.ProfileViewModel
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
+import kotlin.contracts.contract
 
 @Composable
 fun ClientProfileScreen(
@@ -40,6 +46,14 @@ fun ClientProfileScreen(
     var showEditEmailDialog by remember {mutableStateOf(false)}
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showAddressManagerDialog by remember { mutableStateOf(false) }
+    
+    // Estados para confirmación de cambios
+    var showConfirmEmailChangeDialog by remember { mutableStateOf(false) }
+    var showConfirmPasswordChangeDialog by remember { mutableStateOf(false) }
+    var pendingNewEmail by remember { mutableStateOf("") }
+    var pendingPassword by remember { mutableStateOf("") }
+    var pendingCurrentPassword by remember { mutableStateOf("") }
+    var pendingNewPassword by remember { mutableStateOf("") }
     
     // Manejar el botón "Atrás" del sistema (hardware o gestos)
     BackHandler {
@@ -62,11 +76,75 @@ fun ClientProfileScreen(
             profileViewModel.updateProfilePhoto(it)
         }
     }
+
+
+    // Launcher para seleccionar foto de portada
+    val  coverPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            profileViewModel.updateCoverPhoto(it)
+        }
+    }
+
+    // Launcher para permisos de ubicación
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            profileViewModel.getCurrentLocation(context)
+        }
+    }
+    
+    // Snackbar para mensajes de éxito y error
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Observar mensajes de éxito y error
+    LaunchedEffect(uiState.successMessage, uiState.error) {
+        uiState.successMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+            profileViewModel.clearMessages()
+        }
+        uiState.error?.let { error ->
+            snackbarHostState.showSnackbar(
+                message = error,
+                duration = SnackbarDuration.Long
+            )
+            profileViewModel.clearMessages()
+        }
+    }
     
     // Cargar perfil al iniciar
     LaunchedEffect(Unit) {
         profileViewModel.loadUserProfile()
+        // Verificar si el email fue actualizado después de verificación
+        profileViewModel.checkAndCompleteEmailChange()
     }
+    
+    // Detectar cuando la app vuelve al primer plano para recargar datos
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Cuando la app vuelve del navegador (después de verificar email)
+                profileViewModel.checkAndCompleteEmailChange()
+                profileViewModel.loadUserProfile()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    
+    // Calcular la opacidad y progreso del scroll
+    val scrollOffset = scrollState.value.toFloat()
+    val headerHeight = 180f // Altura de la foto de portada
+    val scrollProgress = (scrollOffset / headerHeight).coerceIn(0f, 1f)
     
     Box(
         modifier = Modifier
@@ -84,26 +162,42 @@ fun ClientProfileScreen(
                     .fillMaxSize()
                     .verticalScroll(scrollState)
             ) {
-                // Header con foto de perfil
+                // Header con foto de perfil y portada (con parallax)
                 ProfileHeader(
                     userName = uiState.displayName.ifEmpty { "Usuario" },
                     userEmail = uiState.email,
                     photoUrl = uiState.photoUrl,
+                    coverPhotoUrl = uiState.coverPhotoUrl,
                     onBackClick = onNavigateBack,
                     onCameraClick = { imagePickerLauncher.launch("image/*") },
-                    onDeletePhoto = { profileViewModel.deleteProfilePhoto()},
+                    onDeletePhoto = { profileViewModel.deleteProfilePhoto() },
+                    onCoverPhotoClick = { coverPhotoPickerLauncher.launch("image/*") },
+                    onDeleteCoverPhoto = { profileViewModel.deleteCoverPhoto() },
                     surfaceColor = surfaceColor,
                     textPrimaryColor = textPrimaryColor,
-                    textSecondaryColor = textSecondaryColor
+                    textSecondaryColor = textSecondaryColor,
+                    scrollOffset = scrollOffset // Pasar el offset para parallax
                 )
                 
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Información personal
-                ProfileSection(
-                    title = "Información Personal",
-                    surfaceColor = surfaceColor,
-                    textPrimaryColor = textPrimaryColor,
+                // Contenido principal con bordes redondeados superiores
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = (-30).dp), // Deslizar sobre la portada
+                    shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+                    color = backgroundColor,
+                    shadowElevation = 8.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(top = 16.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Información personal
+                        ProfileSection(
+                            title = "Información Personal",
+                            surfaceColor = surfaceColor,
+                            textPrimaryColor = textPrimaryColor,
                     content = {
                         Column {
                             ProfileMenuItem(
@@ -206,6 +300,33 @@ fun ClientProfileScreen(
                 LogoutButton(onClick = onLogout)
                 
                 Spacer(modifier = Modifier.height(24.dp))
+                    }
+                }
+            }
+            
+            // Header dinámico que aparece al hacer scroll
+            AnimatedTopBar(
+                userName = uiState.displayName.ifEmpty { "Usuario" },
+                photoUrl = uiState.photoUrl,
+                scrollProgress = scrollProgress,
+                onBackClick = onNavigateBack,
+                surfaceColor = surfaceColor,
+                textPrimaryColor = textPrimaryColor
+            )
+            
+            // Snackbar Host
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+            ) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (uiState.error != null) Color(0xFFEF4444) else Color(0xFF10B981),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(12.dp)
+                )
             }
         }
     }
@@ -215,13 +336,12 @@ fun ClientProfileScreen(
         EditProfileDialog(
             currentName = uiState.displayName,
             currentPhone = uiState.phoneNumber,
-            currentAddress = uiState.address,
             onDismiss = { showEditDialog = false },
-            onSave = { name, phone, address ->
+            onSave = { name, phone ->
                 profileViewModel.updateProfile(
                     displayName = name,
                     phoneNumber = phone,
-                    address = address
+                    address = uiState.address
                 )
                 showEditDialog = false
             }
@@ -234,8 +354,12 @@ fun ClientProfileScreen(
             currentEmail = uiState.email,
             onDismiss = { showEditEmailDialog = false },
             onConfirm = { newEmail, password ->
-                profileViewModel.updateEmail(newEmail, password)
+                // Mostrar confirmación antes de cambiar
                 showEditEmailDialog = false
+                // Aquí mostramos el diálogo de confirmación
+                showConfirmEmailChangeDialog = true
+                pendingNewEmail = newEmail
+                pendingPassword = password
             }
         )
     }
@@ -245,8 +369,11 @@ fun ClientProfileScreen(
         ChangePasswordDialog(
             onDismiss = { showChangePasswordDialog = false },
             onConfirm = { currentPassword, newPassword ->
-                profileViewModel.updatePassword(currentPassword, newPassword)
+                // Mostrar confirmación antes de cambiar
                 showChangePasswordDialog = false
+                showConfirmPasswordChangeDialog = true
+                pendingCurrentPassword = currentPassword
+                pendingNewPassword = newPassword
             }
         )
     }
@@ -258,107 +385,406 @@ fun ClientProfileScreen(
             homeAddress = uiState.addressHome,
             workAddress = uiState.addressWork,
             onDismiss = { showAddressManagerDialog = false },
+            onGetLocation = {
+                locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            },
             onSaveCurrentAddress = { address ->
                 profileViewModel.onAddressChange(address)
-                profileViewModel.saveProfile()
+                profileViewModel.updateAddresses()
             },
             onSaveHomeAddress = { address ->
                 profileViewModel.onAddressHomeChange(address)
-                profileViewModel.saveProfile()
+                profileViewModel.updateAddresses()
             },
             onSaveWorkAddress = { address ->
                 profileViewModel.onAddressWorkChange(address)
-                profileViewModel.saveProfile()
+                profileViewModel.updateAddresses()
             },
             surfaceColor = surfaceColor,
             textPrimaryColor = textPrimaryColor,
             textSecondaryColor = textSecondaryColor
         )
     }
+    
+    // Diálogo de confirmación para cambio de email
+    if (showConfirmEmailChangeDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmEmailChangeDialog = false },
+            containerColor = surfaceColor,
+            title = {
+                Text(
+                    text = "⚠️ Confirmar cambio de email",
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimaryColor
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Estás a punto de cambiar tu email a:",
+                        fontSize = 14.sp,
+                        color = textSecondaryColor
+                    )
+                    Text(
+                        text = pendingNewEmail,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF3B82F6)
+                    )
+                    Text(
+                        text = "Se enviará un correo de verificación al nuevo email. Tu email actual seguirá activo hasta que confirmes el cambio.",
+                        fontSize = 13.sp,
+                        color = textSecondaryColor
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        profileViewModel.updateEmail(pendingNewEmail, pendingPassword)
+                        showConfirmEmailChangeDialog = false
+                    }
+                ) {
+                    Text(
+                        "Confirmar",
+                        color = Color(0xFF3B82F6),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showConfirmEmailChangeDialog = false }
+                ) {
+                    Text(
+                        "Cancelar",
+                        color = textSecondaryColor
+                    )
+                }
+            }
+        )
+    }
+    
+    // Diálogo de confirmación para cambio de contraseña
+    if (showConfirmPasswordChangeDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmPasswordChangeDialog = false },
+            containerColor = surfaceColor,
+            title = {
+                Text(
+                    text = "⚠️ Confirmar cambio de contraseña",
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimaryColor
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "¿Estás seguro de que deseas cambiar tu contraseña?",
+                        fontSize = 14.sp,
+                        color = textSecondaryColor
+                    )
+                    Text(
+                        text = "Tu sesión actual seguirá activa, pero necesitarás la nueva contraseña en futuros inicios de sesión.",
+                        fontSize = 13.sp,
+                        color = textSecondaryColor
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        profileViewModel.updatePassword(pendingCurrentPassword, pendingNewPassword)
+                        showConfirmPasswordChangeDialog = false
+                    }
+                ) {
+                    Text(
+                        "Confirmar",
+                        color = Color(0xFF3B82F6),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showConfirmPasswordChangeDialog = false }
+                ) {
+                    Text(
+                        "Cancelar",
+                        color = textSecondaryColor
+                    )
+                }
+            }
+        )
+    }
 }
 
-// ===== COMPONENTE: Header con foto de perfil =====
+// ===== COMPONENTE: Barra superior animada que aparece al hacer scroll =====
+@Composable
+fun AnimatedTopBar(
+    userName: String,
+    photoUrl: String,
+    scrollProgress: Float,
+    onBackClick: () -> Unit,
+    surfaceColor: Color,
+    textPrimaryColor: Color
+) {
+    // Animar la opacidad del fondo
+    val backgroundAlpha by animateFloatAsState(
+        targetValue = scrollProgress,
+        label = "backgroundAlpha"
+    )
+    
+    // Animar la opacidad del texto y avatar
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (scrollProgress > 0.7f) 1f else 0f,
+        label = "contentAlpha"
+    )
+    
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp),
+        color = surfaceColor.copy(alpha = backgroundAlpha),
+        shadowElevation = if (backgroundAlpha > 0.5f) 4.dp else 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Botón de volver
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = if (backgroundAlpha > 0.5f) textPrimaryColor else Color.White
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            
+            // Avatar pequeño y nombre (aparecen gradualmente)
+            if (contentAlpha > 0f) {
+                Row(
+                    modifier = Modifier
+                        .graphicsLayer { alpha = contentAlpha },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Mini avatar
+                    if (photoUrl.isNotEmpty()) {
+                        AsyncImage(
+                            model = photoUrl,
+                            contentDescription = "Avatar",
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Surface(
+                            modifier = Modifier.size(32.dp),
+                            shape = CircleShape,
+                            color = Color(0xFF3B82F6)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = userName.firstOrNull()?.uppercase() ?: "U",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    // Nombre
+                    Text(
+                        text = userName,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textPrimaryColor
+                    )
+                }
+            } else {
+                // Mostrar "Mi Perfil" cuando está arriba
+                Text(
+                    text = "Mi Perfil",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (backgroundAlpha > 0.5f) textPrimaryColor else Color.White,
+                    modifier = Modifier.graphicsLayer { 
+                        alpha = 1f - contentAlpha 
+                    }
+                )
+            }
+        }
+    }
+}
+
+// ===== COMPONENTE: Header con foto de perfil y portada =====
 @Composable
 fun ProfileHeader(
     userName: String,
     userEmail: String,
     photoUrl: String = "",
+    coverPhotoUrl: String = "",
     onBackClick: () -> Unit,
     onCameraClick: () -> Unit,
     onDeletePhoto: () -> Unit = {},
+    onCoverPhotoClick: () -> Unit = {},
+    onDeleteCoverPhoto: () -> Unit = {},
     surfaceColor: Color = Color.White,
     textPrimaryColor: Color = Color(0xFF1E293B),
-    textSecondaryColor: Color = Color(0xFF64748B)
+    textSecondaryColor: Color = Color(0xFF64748B),
+    scrollOffset: Float = 0f
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = surfaceColor,
-        shadowElevation = 2.dp
+    val parallaxEffect = scrollOffset * 0.5f // Efecto parallax (se mueve más lento)
+    
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(280.dp)
     ) {
-        Column(
+        // Foto de portada con efecto parallax
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .height(180.dp)
+                .graphicsLayer {
+                    translationY = -parallaxEffect // Se mueve más lento que el scroll
+                }
         ) {
-            // Botón de regresar
-            IconButton(
-                onClick = onBackClick,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Volver",
-                    tint = textPrimaryColor
+            if (coverPhotoUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = coverPhotoUrl,
+                    contentDescription = "Foto de portada",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF3B82F6),
+                                    Color(0xFF2563EB)
+                                )
+                            )
+                        )
                 )
             }
             
-            Spacer(modifier = Modifier.height(24.dp))
+            IconButton(
+                onClick = onCoverPhotoClick,
+                modifier = Modifier
+                    .padding(8.dp)
+                    .size(40.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(y = 150.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.5f),
+                    shadowElevation = 4.dp
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Editar portada",
+                        tint = Color.White,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
             
-            // Avatar y nombre centrados
+            if (coverPhotoUrl.isNotEmpty()) {
+                IconButton(
+                    onClick = onDeleteCoverPhoto,
+                    modifier = Modifier
+                        .padding(top = 8.dp, end = 56.dp)
+                        .size(40.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(y = 150.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFEF4444).copy(alpha = 0.9f),
+                        shadowElevation = 4.dp
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Eliminar portada",
+                            tint = Color.White,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+            }
+        }
+        
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+        ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .offset(y = 50.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Obtener el nombre para mostrar
-                val displayName = userName.ifEmpty { "Usuario" }
-                
-                // Avatar circular con botón de cámara
-                Box {
-                    // Avatar principal
+                Box(
+                    modifier = Modifier.offset(y = (-50).dp)
+                ) {
+                    val displayName = userName.ifEmpty { "Usuario" }
+                    
                     Box(
                         modifier = Modifier
-                            .size(120.dp)
+                            .size(100.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF3B82F6)), // Azul
+                            .background(surfaceColor)
+                            .padding(3.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Texto siempre presente (inicial)
-                        Text(
-                            text = displayName.firstOrNull()?.uppercase()?.toString() ?: "U",
-                            fontSize = 48.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        
-                        // Foto encima si existe
-                        if (photoUrl.isNotEmpty()) {
-                            AsyncImage(
-                                model = photoUrl,
-                                contentDescription = "Foto de perfil",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(Color(0xFF3B82F6)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = displayName.firstOrNull()?.uppercase()?.toString() ?: "U",
+                                fontSize = 36.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
+                            
+                            if (photoUrl.isNotEmpty()) {
+                                AsyncImage(
+                                    model = photoUrl,
+                                    contentDescription = "Foto de perfil",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
                         }
                     }
                     
-                    // Botón de cámara flotante (derecha inferior)
                     Surface(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(32.dp)
                             .align(Alignment.BottomEnd)
-                            .offset(x = (-8).dp, y = (-8).dp)
+                            .offset(x = (-4).dp, y = (-4).dp)
                             .clickable { onCameraClick() },
                         shape = CircleShape,
                         color = Color(0xFF3B82F6),
@@ -372,18 +798,17 @@ fun ProfileHeader(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Cambiar foto",
                                 tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
-
-                    // Botón de eliminar foto (izquierda inferior - solo si hay foto)
+                    
                     if (photoUrl.isNotEmpty()) {
                         Surface(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(32.dp)
                                 .align(Alignment.BottomStart)
-                                .offset(x = 8.dp, y = (-8).dp)
+                                .offset(x = 4.dp, y = (-4).dp)
                                 .clickable { onDeletePhoto() },
                             shape = CircleShape,
                             color = Color(0xFFEF4444),
@@ -397,34 +822,30 @@ fun ProfileHeader(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Eliminar foto",
                                     tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Nombre
-                Text(
-                    text = userName,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimaryColor
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                // Email
                 Text(
                     text = userEmail,
                     fontSize = 14.sp,
-                    color = textSecondaryColor
+                    color = textSecondaryColor,
+                    modifier = Modifier.offset(y = (-40).dp)
                 )
+                
+                Text(
+                    text = userName,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimaryColor,
+                    modifier = Modifier.offset(y = (-36).dp)
+                )
+                
+                Spacer(modifier = Modifier.height((-36).dp))
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -498,19 +919,19 @@ fun ProfileMenuItem(
         
         // Textos
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = textPrimaryColor
-            )
             if (subtitle.isNotEmpty()) {
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
-                    color = textSecondaryColor
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimaryColor
                 )
             }
+            Text(
+                text = title,
+                fontSize = 12.sp,
+                color = textSecondaryColor
+            )
         }
         
         // Flecha
@@ -561,13 +982,11 @@ fun LogoutButton(onClick: () -> Unit) {
 fun EditProfileDialog(
     currentName: String,
     currentPhone: String,
-    currentAddress: String,
     onDismiss: () -> Unit,
-    onSave: (String, String, String) -> Unit
+    onSave: (String, String) -> Unit
 ) {
     var name by remember { mutableStateOf(currentName) }
     var phone by remember { mutableStateOf(currentPhone) }
-    var address by remember { mutableStateOf(currentAddress) }
     
     // Colores adaptativos
     val appColors = com.example.myapplication.ui.theme.getAppColors()
@@ -613,26 +1032,11 @@ fun EditProfileDialog(
                         cursorColor = appColors.accentBlue
                     )
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("Dirección", color = appColors.textSecondaryColor) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = appColors.textPrimaryColor,
-                        unfocusedTextColor = appColors.textPrimaryColor,
-                        focusedBorderColor = appColors.accentBlue,
-                        unfocusedBorderColor = appColors.textSecondaryColor,
-                        cursorColor = appColors.accentBlue
-                    )
-                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(name, phone, address) }
+                onClick = { onSave(name, phone) }
             ) {
                 Text("Guardar", color = appColors.accentBlue)
             }
@@ -643,7 +1047,6 @@ fun EditProfileDialog(
             }
         }
     )
-
 }
 
 // ===== DIÁLOGOS =====
@@ -935,6 +1338,7 @@ fun AddressManagerDialog(
     homeAddress: String,
     workAddress: String,
     onDismiss: () -> Unit,
+    onGetLocation: () -> Unit,
     onSaveCurrentAddress: (String) -> Unit,
     onSaveHomeAddress: (String) -> Unit,
     onSaveWorkAddress: (String) -> Unit,
@@ -944,7 +1348,13 @@ fun AddressManagerDialog(
 ) {
     var currentAddressText by remember { mutableStateOf(currentAddress) }
     var homeAddressText by remember { mutableStateOf(homeAddress) }
+    var homeCityText by remember { mutableStateOf("") }
+    var homeStateText by remember { mutableStateOf("") }
+    var homeZipCodeText by remember { mutableStateOf("") }
     var workAddressText by remember { mutableStateOf(workAddress) }
+    var workCityText by remember { mutableStateOf("") }
+    var workStateText by remember { mutableStateOf("") }
+    var workZipCodeText by remember { mutableStateOf("") }
     var showHomeField by remember { mutableStateOf(homeAddress.isNotEmpty()) }
     var showWorkField by remember { mutableStateOf(workAddress.isNotEmpty()) }
 
@@ -989,6 +1399,15 @@ fun AddressManagerDialog(
                             contentDescription = null,
                             tint = Color(0xFF3B82F6)
                         )
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = onGetLocation) {
+                            Icon(
+                                imageVector = Icons.Default.Place,
+                                contentDescription = "Obtener ubicación GPS",
+                                tint = Color(0xFF10B981)
+                            )
+                        }
                     }
                 )
                 
@@ -998,15 +1417,17 @@ fun AddressManagerDialog(
                 if (showHomeField) {
                     Text(
                         text = "Dirección de Casa",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = textSecondaryColor,
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimaryColor,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
+                    
+                    // Dirección completa
                     OutlinedTextField(
                         value = homeAddressText,
                         onValueChange = { homeAddressText = it },
-                        placeholder = { Text("Ingresa dirección de casa", color = textSecondaryColor) },
+                        placeholder = { Text("Calle y número", color = textSecondaryColor) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF3B82F6),
@@ -1022,6 +1443,76 @@ fun AddressManagerDialog(
                             )
                         }
                     )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Ciudad
+                    OutlinedTextField(
+                        value = homeCityText,
+                        onValueChange = { homeCityText = it },
+                        placeholder = { Text("Ciudad", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = Color(0xFF3B82F6)
+                            )
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Provincia/Estado
+                    OutlinedTextField(
+                        value = homeStateText,
+                        onValueChange = { homeStateText = it },
+                        placeholder = { Text("Provincia/Estado", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Place,
+                                contentDescription = null,
+                                tint = Color(0xFF3B82F6)
+                            )
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Código Postal
+                    OutlinedTextField(
+                        value = homeZipCodeText,
+                        onValueChange = { homeZipCodeText = it },
+                        placeholder = { Text("Código Postal", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = null,
+                                tint = Color(0xFF3B82F6)
+                            )
+                        }
+                    )
+                    
                     Spacer(modifier = Modifier.height(16.dp))
                 }
                 
@@ -1029,15 +1520,17 @@ fun AddressManagerDialog(
                 if (showWorkField) {
                     Text(
                         text = "Dirección de Trabajo",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = textSecondaryColor,
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimaryColor,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
+                    
+                    // Dirección completa
                     OutlinedTextField(
                         value = workAddressText,
                         onValueChange = { workAddressText = it },
-                        placeholder = { Text("Ingresa dirección de trabajo", color = textSecondaryColor) },
+                        placeholder = { Text("Calle y número", color = textSecondaryColor) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF3B82F6),
@@ -1053,6 +1546,76 @@ fun AddressManagerDialog(
                             )
                         }
                     )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Ciudad
+                    OutlinedTextField(
+                        value = workCityText,
+                        onValueChange = { workCityText = it },
+                        placeholder = { Text("Ciudad", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = Color(0xFF3B82F6)
+                            )
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Provincia/Estado
+                    OutlinedTextField(
+                        value = workStateText,
+                        onValueChange = { workStateText = it },
+                        placeholder = { Text("Provincia/Estado", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Place,
+                                contentDescription = null,
+                                tint = Color(0xFF3B82F6)
+                            )
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Código Postal
+                    OutlinedTextField(
+                        value = workZipCodeText,
+                        onValueChange = { workZipCodeText = it },
+                        placeholder = { Text("Código Postal", color = textSecondaryColor) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedTextColor = textPrimaryColor,
+                            unfocusedTextColor = textPrimaryColor
+                        ),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = null,
+                                tint = Color(0xFF3B82F6)
+                            )
+                        }
+                    )
+                    
                     Spacer(modifier = Modifier.height(16.dp))
                 }
                 

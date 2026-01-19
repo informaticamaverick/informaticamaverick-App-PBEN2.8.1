@@ -38,14 +38,42 @@ class AuthRepository @Inject constructor(
 
     suspend fun checkUserProfileExists(uid: String): Boolean {
         return try {
+            android.util.Log.d("AuthRepository", "Verificando perfil para uid: $uid")
+            
             val userDoc = firestore.collection("users").document(uid).get().await()
+            
+            android.util.Log.d("AuthRepository", "Documento existe: ${userDoc.exists()}")
+            
             if (!userDoc.exists()) {
                 return false
             }
+            
             // Verificar si el perfil está completo
             val isProfileComplete = userDoc.getBoolean("isProfileComplete") ?: false
+            
+            android.util.Log.d("AuthRepository", "isProfileComplete: $isProfileComplete")
+            
+            // Si no tiene el campo pero sí tiene datos importantes, considerarlo completo
+            if (!isProfileComplete) {
+                val phoneNumber = userDoc.getString("phoneNumber")
+                val address = userDoc.getString("address")
+                
+                android.util.Log.d("AuthRepository", "phoneNumber: $phoneNumber, address: $address")
+                
+                // Si tiene teléfono y dirección, el perfil ya está completo
+                if (!phoneNumber.isNullOrEmpty() && !address.isNullOrEmpty()) {
+                    android.util.Log.d("AuthRepository", "Actualizando isProfileComplete a true")
+                    // Actualizar el campo isProfileComplete en Firebase
+                    firestore.collection("users").document(uid)
+                        .update("isProfileComplete", true)
+                        .await()
+                    return true
+                }
+            }
+            
             isProfileComplete
         } catch (e: Exception) {
+            android.util.Log.e("AuthRepository", "Error verificando perfil: ${e.message}")
             false
         }
     }
@@ -53,9 +81,12 @@ class AuthRepository @Inject constructor(
     // --- CORRECCIÓN AQUÍ ---
     suspend fun sendPasswordResetEmail(email: String): Result<Unit> {
         return try {
+            // Configurar idioma español para el email
+            auth.setLanguageCode("es")
+            
             auth.sendPasswordResetEmail(email).await()
             Result.success(Unit)
-        } catch (e: Exception) { // Se corrigió el tipo de excepción
+        } catch (e: Exception) {
             Result.failure(e)
         }
     }

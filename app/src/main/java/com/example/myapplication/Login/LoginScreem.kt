@@ -84,6 +84,11 @@ fun LoginScreen(
         }
     }
 
+    // Verificar si ya hay un usuario logueado al iniciar
+    LaunchedEffect(Unit) {
+        viewModel.checkCurrentUser()
+    }
+
     //Mensaje de exito
     LaunchedEffect(uiState.passwordResetEmailSent) {
         if (uiState.passwordResetEmailSent) {
@@ -310,16 +315,28 @@ fun LoginScreen(
             onDismissRequest = { showSuccessDialog = false },
             title = {
                 Text(
-                    text = "¡Correo Enviado!",
+                    text = "✅ ¡Correo Enviado!",
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF10B981)
+                    color = Color(0xFF10B981),
+                    fontSize = 20.sp
                 )
             },
             text = {
-                Text(
-                    text = "Hemos enviado un enlace de recuperacion a tu correo electronico. Revisa tu bandeja de entrada.",
-                    fontSize = 14.sp
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "📧 Hemos enviado un correo de recuperación a tu email.",
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "Revisa tu bandeja de entrada y sigue las instrucciones para restablecer tu contraseña.",
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "💡 Revisa también la carpeta de SPAM si no lo encuentras.",
+                        fontSize = 12.sp,
+                        color = textSecondaryColor
+                    )
+                }
             },
             confirmButton = {
                 TextButton(

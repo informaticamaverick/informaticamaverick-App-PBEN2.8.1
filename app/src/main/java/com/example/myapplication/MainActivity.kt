@@ -55,7 +55,8 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation() {
     val navController = rememberNavController()
     val currentUser = Firebase.auth.currentUser
-    val startDestination = if (currentUser != null) "dashboard/${currentUser.displayName ?: "Usuario"}" else "login"
+    // Siempre iniciar en login para verificar el estado del perfil
+    val startDestination = "login"
 
     NavHost(
         navController = navController,

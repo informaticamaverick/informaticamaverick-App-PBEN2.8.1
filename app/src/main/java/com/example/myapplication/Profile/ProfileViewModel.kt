@@ -1,5 +1,7 @@
 package com.example.myapplication.Profile
 
+import android.content.Context
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.Data.Model.UserProfile
@@ -85,6 +87,32 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
     }
 
+    // Funciones para dirección de casa
+    fun onCityHomeChange(cityHome: String) {
+        _uiState.update { it.copy(cityHome = cityHome, error = null) }
+    }
+
+    fun onStateHomeChange(stateHome: String) {
+        _uiState.update { it.copy(stateHome = stateHome, error = null) }
+    }
+
+    fun onZipCodeHomeChange(zipCodeHome: String) {
+        _uiState.update { it.copy(zipCodeHome = zipCodeHome, error = null) }
+    }
+
+    // Funciones para dirección de trabajo
+    fun onCityWorkChange(cityWork: String) {
+        _uiState.update { it.copy(cityWork = cityWork, error = null) }
+    }
+
+    fun onStateWorkChange(stateWork: String) {
+        _uiState.update { it.copy(stateWork = stateWork, error = null) }
+    }
+
+    fun onZipCodeWorkChange(zipCodeWork: String) {
+        _uiState.update { it.copy(zipCodeWork = zipCodeWork, error = null) }
+    }
+
 
     fun saveProfile() {
         if (!validateInputs()) return
@@ -127,6 +155,12 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     address = _uiState.value.address,
                     addressHome = _uiState.value.addressHome,
                     addressWork = _uiState.value.addressWork,
+                    cityHome = _uiState.value.cityHome,
+                    stateHome = _uiState.value.stateHome,
+                    zipCodeHome = _uiState.value.zipCodeHome,
+                    cityWork = _uiState.value.cityWork,
+                    stateWork = _uiState.value.stateWork,
+                    zipCodeWork = _uiState.value.zipCodeWork,
                     city = _uiState.value.city,
                     state = _uiState.value.state,
                     zipCode = _uiState.value.zipCode,
@@ -264,7 +298,22 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
                             zipCode = profile?.zipCode ?: "",
 
-                            photoUrl = profile?.photoUrl ?: currentUser.photoUrl?.toString() ?: ""
+                            photoUrl = profile?.photoUrl ?: currentUser.photoUrl?.toString() ?: "",
+
+                            coverPhotoUrl = profile?.coverPhotoUrl ?: "",
+
+                            cityHome = profile?.cityHome ?: "",
+
+                            stateHome = profile?.stateHome ?: "",
+
+                            zipCodeHome = profile?.zipCodeHome ?: "",
+
+                            cityWork = profile?.cityWork ?: "",
+
+                            stateWork = profile?.stateWork ?: "",
+
+                            zipCodeWork = profile?.zipCodeWork ?: ""
+
 
                         )
 
@@ -287,7 +336,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
         viewModelScope.launch {
 
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null) }
 
 
             try {
@@ -295,6 +344,17 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                 val currentUser = auth.currentUser
 
                 if (currentUser != null) {
+                    
+                    // Detectar qué cambió para mostrar mensaje específico
+                    val nameChanged = displayName != _uiState.value.displayName
+                    val phoneChanged = phoneNumber != _uiState.value.phoneNumber
+                    
+                    val successMsg = when {
+                        nameChanged && phoneChanged -> "✓ Nombre y teléfono actualizados"
+                        nameChanged -> "✓ Nombre actualizado correctamente"
+                        phoneChanged -> "✓ Teléfono actualizado correctamente"
+                        else -> "✓ Perfil actualizado correctamente"
+                    }
 
                     val updates = mapOf(
 
@@ -302,7 +362,9 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
                         "phoneNumber" to phoneNumber,
 
-                        "address" to address
+                        "address" to address,
+
+                        "isProfileComplete" to true
 
                     )
 
@@ -326,7 +388,9 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
                             phoneNumber = phoneNumber,
 
-                            address = address
+                            address = address,
+
+                            successMessage = successMsg
 
                         )
 
@@ -336,7 +400,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
             } catch (e: Exception) {
 
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                _uiState.update { it.copy(isLoading = false, error = "Error al actualizar perfil: ${e.message}") }
 
             }
 
@@ -344,10 +408,51 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
     }
 
+    // Función para actualizar solo las direcciones sin requerir contraseña
+    fun updateAddresses() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null) }
+
+            try {
+                val currentUser = auth.currentUser
+                if (currentUser != null) {
+                    val updates = mapOf(
+                        "address" to _uiState.value.address,
+                        "city" to _uiState.value.city,
+                        "state" to _uiState.value.state,
+                        "zipCode" to _uiState.value.zipCode,
+                        "addressHome" to _uiState.value.addressHome,
+                        "cityHome" to _uiState.value.cityHome,
+                        "stateHome" to _uiState.value.stateHome,
+                        "zipCodeHome" to _uiState.value.zipCodeHome,
+                        "addressWork" to _uiState.value.addressWork,
+                        "cityWork" to _uiState.value.cityWork,
+                        "stateWork" to _uiState.value.stateWork,
+                        "zipCodeWork" to _uiState.value.zipCodeWork
+                    )
+
+                    firestore.collection("users")
+                        .document(currentUser.uid)
+                        .update(updates)
+                        .await()
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "✓ Direcciones actualizadas correctamente"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = "Error al actualizar direcciones: ${e.message}") }
+            }
+        }
+    }
+
 
     fun updateProfilePhoto(uri: android.net.Uri) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null) }
             
             try {
                 val currentUser = auth.currentUser
@@ -359,7 +464,8 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            photoUrl = photoUrlString
+                            photoUrl = photoUrlString,
+                            successMessage = "✓ Foto de perfil actualizada"
                         )
                     }
                     
@@ -370,14 +476,14 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                         .await()
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                _uiState.update { it.copy(isLoading = false, error = "Error al actualizar foto: ${e.message}") }
             }
         }
     }
 
     fun deleteProfilePhoto() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true)}
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null)}
             try {
                 val  currentUser = auth.currentUser
                 if (currentUser != null) {
@@ -385,7 +491,8 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            photoUrl = ""
+                            photoUrl = "",
+                            successMessage = "✓ Foto de perfil eliminada"
                         )
                     }
 
@@ -396,54 +503,254 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                         .await()
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                _uiState.update { it.copy(isLoading = false, error = "Error al eliminar foto: ${e.message}") }
             }
         }
     }
-    
-    fun updateEmail(newEmail: String, password: String) {
+
+
+    fun updateCoverPhoto(uri: android.net.Uri) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null) }
             
             try {
                 val currentUser = auth.currentUser
-                if (currentUser != null && currentUser.email != null) {
-                    // Re-autenticar al usuario antes de cambiar el email
-                    val credential = EmailAuthProvider.getCredential(currentUser.email!!, password)
-                    currentUser.reauthenticate(credential).await()
+                if (currentUser != null) {
+                    val coverPhotoUrlString = uri.toString()
                     
-                    // Actualizar el email en Firebase Auth
-                    currentUser.updateEmail(newEmail).await()
-                    
-                    // Actualizar el email en Firestore
-                    firestore.collection("users")
-                        .document(currentUser.uid)
-                        .update("email", newEmail)
-                        .await()
-                    
-                    // Actualizar el estado local
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            email = newEmail,
-                            error = null
+                            coverPhotoUrl = coverPhotoUrlString,
+                            successMessage = "✓ Foto de portada actualizada"
                         )
+                    }
+                    
+                    firestore.collection("users")
+                        .document(currentUser.uid)
+                        .update("coverPhotoUrl", coverPhotoUrlString)
+                        .await()
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = "Error al actualizar portada: ${e.message}") }
+            }
+        }
+    }
+
+
+    fun deleteCoverPhoto() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null) }
+            try {
+                val currentUser = auth.currentUser
+                if (currentUser != null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            coverPhotoUrl = "",
+                            successMessage = "✓ Foto de portada eliminada"
+                        )
+                    }
+                    
+                    firestore.collection("users")
+                        .document(currentUser.uid)
+                        .update("coverPhotoUrl", "")
+                        .await()
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = "Error al eliminar portada: ${e.message}") }
+            }
+        }
+    }
+
+
+    fun getCurrentLocation(context: android.content.Context) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            try {
+                val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
+                
+                if (ActivityCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.ACCESS_FINE_LOCATION
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            error = "Permisos de ubicación no concedidos"
+                        ) 
+                    }
+                    return@launch
+                }
+                
+                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                    if (location != null) {
+                        viewModelScope.launch {
+                            getAddressFromLocation(context, location.latitude, location.longitude)
+                        }
+                    } else {
+                        _uiState.update { 
+                            it.copy(
+                                isLoading = false,
+                                error = "No se pudo obtener la ubicación"
+                            ) 
+                        }
+                    }
+                }.addOnFailureListener { exception ->
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            error = "Error al obtener ubicación: ${exception.message}"
+                        ) 
                     }
                 }
             } catch (e: Exception) {
                 _uiState.update { 
                     it.copy(
+                        isLoading = false,
+                        error = "Error: ${e.message}"
+                    ) 
+                }
+            }
+        }
+    }
+
+    private suspend fun getAddressFromLocation(context: android.content.Context, latitude: Double, longitude: Double) {
+        try {
+            val geocoder = android.location.Geocoder(context, java.util.Locale.getDefault())
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                geocoder.getFromLocation(latitude, longitude, 1) { addresses ->
+                    if (addresses.isNotEmpty()) {
+                        val address = addresses[0]
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                address = address.getAddressLine(0) ?: "",
+                                city = address.locality ?: "",
+                                state = address.adminArea ?: "",
+                                zipCode = address.postalCode ?: ""
+                            )
+                        }
+                    }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val addresses = geocoder.getFromLocation(latitude, longitude, 1)
+                if (!addresses.isNullOrEmpty()) {
+                    val address = addresses[0]
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            address = address.getAddressLine(0) ?: "",
+                            city = address.locality ?: "",
+                            state = address.adminArea ?: "",
+                            zipCode = address.postalCode ?: ""
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            _uiState.update { 
+                it.copy(
+                    isLoading = false,
+                    error = "Error al obtener dirección: ${e.message}"
+                ) 
+            }
+        }
+    }
+
+    
+    fun updateEmail(newEmail: String, password: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null) }
+            
+            try {
+                val currentUser = auth.currentUser
+                if (currentUser != null && currentUser.email != null) {
+                    // Configurar idioma español para el email
+                    auth.setLanguageCode("es")
+                    
+                    // Re-autenticar al usuario antes de cambiar el email
+                    val credential = EmailAuthProvider.getCredential(currentUser.email!!, password)
+                    currentUser.reauthenticate(credential).await()
+                    
+                    // Usar verifyBeforeUpdateEmail para mayor seguridad
+                    // Esto envía un email de verificación ANTES de cambiar el email
+                    currentUser.verifyBeforeUpdateEmail(newEmail).await()
+                    
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = null,
+                            successMessage = "✓ Se envió un correo de verificación a $newEmail. Revisa tu bandeja de entrada y confirma el cambio."
+                        )
+                    }
+                    
+                    // Nota: El email en Firestore se actualizará después de que el usuario verifique
+                    // el link en su correo. Puedes agregar un listener para detectar cuando se verifica.
+                }
+            } catch (e: Exception) {
+                val errorMessage = when {
+                    e.message?.contains("invalid-email") == true -> "Email inválido"
+                    e.message?.contains("email-already-in-use") == true -> "Este email ya está en uso"
+                    e.message?.contains("wrong-password") == true -> "Contraseña incorrecta"
+                    e.message?.contains("requires-recent-login") == true -> "Por seguridad, vuelve a iniciar sesión"
+                    else -> "Error al actualizar email: ${e.message}"
+                }
+                
+                _uiState.update { 
+                    it.copy(
                         isLoading = false, 
-                        error = "Error al actualizar email: ${e.message}"
+                        error = errorMessage
                     ) 
                 }
             }
         }
     }
     
+    // Función para verificar y completar el cambio de email después de la verificación
+    fun checkAndCompleteEmailChange() {
+        viewModelScope.launch {
+            try {
+                val currentUser = auth.currentUser
+                if (currentUser != null) {
+                    // Recargar el usuario para obtener el email actualizado
+                    currentUser.reload().await()
+                    
+                    val newEmail = currentUser.email
+                    if (newEmail != null && newEmail != _uiState.value.email) {
+                        // El email fue verificado y actualizado, ahora actualizar Firestore
+                        firestore.collection("users")
+                            .document(currentUser.uid)
+                            .update("email", newEmail)
+                            .await()
+                        
+                        _uiState.update {
+                            it.copy(
+                                email = newEmail,
+                                successMessage = "✓ Email verificado y actualizado exitosamente"
+                            )
+                        }
+                    } else if (newEmail != null) {
+                        // Actualizar el estado aunque sea el mismo email
+                        // para asegurar sincronización
+                        _uiState.update {
+                            it.copy(email = newEmail)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProfileViewModel", "Error verificando email: ${e.message}")
+            }
+        }
+    }
+    
     fun updatePassword(currentPassword: String, newPassword: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, successMessage = null) }
             
             try {
                 val currentUser = auth.currentUser
@@ -459,7 +766,8 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = null
+                            error = null,
+                            successMessage = "✓ Contraseña actualizada exitosamente"
                         )
                     }
                 }
@@ -472,5 +780,10 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                 }
             }
         }
+    }
+    
+    // Función para limpiar mensajes después de mostrarlos
+    fun clearMessages() {
+        _uiState.update { it.copy(error = null, successMessage = null) }
     }
 }
