@@ -147,30 +147,102 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     // Nota: Si la contraseña es débil, esto lanzará error y lo atraparás aquí.
                 }
 
-                val userProfile = UserProfile(
-                    uid = currentUser.uid,
-                    displayName = currentUser.displayName ?: "",
-                    email = currentUser.email ?: "",
-                    phoneNumber = _uiState.value.phoneNumber,
-                    address = _uiState.value.address,
-                    addressHome = _uiState.value.addressHome,
-                    addressWork = _uiState.value.addressWork,
-                    cityHome = _uiState.value.cityHome,
-                    stateHome = _uiState.value.stateHome,
-                    zipCodeHome = _uiState.value.zipCodeHome,
-                    cityWork = _uiState.value.cityWork,
-                    stateWork = _uiState.value.stateWork,
-                    zipCodeWork = _uiState.value.zipCodeWork,
-                    city = _uiState.value.city,
-                    state = _uiState.value.state,
-                    zipCode = _uiState.value.zipCode,
-                    isProfileComplete = true
-                )
+                // Verificar si ya existe documento (puede ser prestador también)
+                val userDocRef = firestore.collection("usuarios").document(currentUser.uid)
+                val existingDoc = userDocRef.get().await()
+                
+                if (existingDoc.exists()) {
+                    // El usuario ya existe, agregar rol de cliente
+                    val currentRoles = existingDoc.get("roles") as? MutableList<String> ?: mutableListOf()
+                    if (!currentRoles.contains("cliente")) {
+                        currentRoles.add("cliente")
+                    }
+                    
+                    // Actualizar con nuevos datos de cliente
+                    val updateData = hashMapOf<String, Any>(
+                        "roles" to currentRoles,
+                        "displayName" to (currentUser.displayName ?: ""),
+                        "email" to (currentUser.email ?: ""),
+                        "phoneNumber" to _uiState.value.phoneNumber,
+                        "address" to _uiState.value.address,
+                        "city" to _uiState.value.city,
+                        "state" to _uiState.value.state,
+                        "zipCode" to _uiState.value.zipCode,
+                        "isProfileComplete" to true,
+                        "clienteCreatedAt" to System.currentTimeMillis()
+                    )
+                    
+                    // Si tiene valores de addressHome, agregarlos
+                    if (_uiState.value.addressHome.isNotEmpty()) {
+                        updateData["addressHome"] = _uiState.value.addressHome
+                        updateData["cityHome"] = _uiState.value.cityHome
+                        updateData["stateHome"] = _uiState.value.stateHome
+                        updateData["zipCodeHome"] = _uiState.value.zipCodeHome
+                    }
+                    
+                    // Si tiene valores de addressWork, agregarlos
+                    if (_uiState.value.addressWork.isNotEmpty()) {
+                        updateData["addressWork"] = _uiState.value.addressWork
+                        updateData["cityWork"] = _uiState.value.cityWork
+                        updateData["stateWork"] = _uiState.value.stateWork
+                        updateData["zipCodeWork"] = _uiState.value.zipCodeWork
+                    }
+                    
+                    userDocRef.update(updateData).await()
+                } else {
+                    // Usuario nuevo, crear documento
+                    val userProfile = UserProfile(
+                        uid = currentUser.uid,
+                        displayName = currentUser.displayName ?: "",
+                        email = currentUser.email ?: "",
+                        phoneNumber = _uiState.value.phoneNumber,
+                        address = _uiState.value.address,
+                        addressHome = _uiState.value.addressHome,
+                        addressWork = _uiState.value.addressWork,
+                        cityHome = _uiState.value.cityHome,
+                        stateHome = _uiState.value.stateHome,
+                        zipCodeHome = _uiState.value.zipCodeHome,
+                        cityWork = _uiState.value.cityWork,
+                        stateWork = _uiState.value.stateWork,
+                        zipCodeWork = _uiState.value.zipCodeWork,
+                        city = _uiState.value.city,
+                        state = _uiState.value.state,
+                        zipCode = _uiState.value.zipCode,
+                        isProfileComplete = true
+                    )
 
-                firestore.collection("users")
-                    .document(currentUser.uid)
-                    .set(userProfile)
-                    .await()
+                    // Convertir a Map y agregar roles
+                    val profileData = hashMapOf<String, Any>(
+                        "uid" to userProfile.uid,
+                        "displayName" to userProfile.displayName,
+                        "email" to userProfile.email,
+                        "phoneNumber" to userProfile.phoneNumber,
+                        "address" to userProfile.address,
+                        "city" to userProfile.city,
+                        "state" to userProfile.state,
+                        "zipCode" to userProfile.zipCode,
+                        "isProfileComplete" to true,
+                        "roles" to listOf("cliente"),
+                        "createdAt" to System.currentTimeMillis()
+                    )
+                    
+                    // Agregar campos opcionales si tienen valor
+                    if (userProfile.addressHome.isNotEmpty()) {
+                        profileData["addressHome"] = userProfile.addressHome
+                        profileData["cityHome"] = userProfile.cityHome
+                        profileData["stateHome"] = userProfile.stateHome
+                        profileData["zipCodeHome"] = userProfile.zipCodeHome
+                    }
+                    
+                    if (userProfile.addressWork.isNotEmpty()) {
+                        profileData["addressWork"] = userProfile.addressWork
+                        profileData["cityWork"] = userProfile.cityWork
+                        profileData["stateWork"] = userProfile.stateWork
+                        profileData["zipCodeWork"] = userProfile.zipCodeWork
+                    }
+
+                    userDocRef.set(profileData).await()
+                }
 
                 _uiState.update { it.copy(isLoading = false, isComplete = true) }
 
@@ -263,7 +335,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
                 if (currentUser != null) {
 
-                    val doc = firestore.collection("users")
+                    val doc = firestore.collection("usuarios")
 
                         .document(currentUser.uid)
 
@@ -369,7 +441,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     )
 
 
-                    firestore.collection("users")
+                    firestore.collection("usuarios")
 
                         .document(currentUser.uid)
 
@@ -431,7 +503,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                         "zipCodeWork" to _uiState.value.zipCodeWork
                     )
 
-                    firestore.collection("users")
+                    firestore.collection("usuarios")
                         .document(currentUser.uid)
                         .update(updates)
                         .await()
@@ -470,7 +542,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     }
                     
                     // Actualizar en Firestore con la URI local
-                    firestore.collection("users")
+                    firestore.collection("usuarios")
                         .document(currentUser.uid)
                         .update("photoUrl", photoUrlString)
                         .await()
@@ -497,7 +569,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     }
 
                     //Actualizar en Firestore (Eliminar el campo)
-                    firestore.collection("users")
+                    firestore.collection("usuarios")
                         .document(currentUser.uid)
                         .update("photoUrl", "")
                         .await()
@@ -526,7 +598,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                         )
                     }
                     
-                    firestore.collection("users")
+                    firestore.collection("usuarios")
                         .document(currentUser.uid)
                         .update("coverPhotoUrl", coverPhotoUrlString)
                         .await()
@@ -552,7 +624,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                         )
                     }
                     
-                    firestore.collection("users")
+                    firestore.collection("usuarios")
                         .document(currentUser.uid)
                         .update("coverPhotoUrl", "")
                         .await()
@@ -723,7 +795,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     val newEmail = currentUser.email
                     if (newEmail != null && newEmail != _uiState.value.email) {
                         // El email fue verificado y actualizado, ahora actualizar Firestore
-                        firestore.collection("users")
+                        firestore.collection("usuarios")
                             .document(currentUser.uid)
                             .update("email", newEmail)
                             .await()

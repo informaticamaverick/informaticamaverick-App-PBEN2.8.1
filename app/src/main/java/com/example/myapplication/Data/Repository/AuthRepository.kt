@@ -40,7 +40,7 @@ class AuthRepository @Inject constructor(
         return try {
             android.util.Log.d("AuthRepository", "Verificando perfil para uid: $uid")
             
-            val userDoc = firestore.collection("users").document(uid).get().await()
+            val userDoc = firestore.collection("usuarios").document(uid).get().await()
             
             android.util.Log.d("AuthRepository", "Documento existe: ${userDoc.exists()}")
             
@@ -48,28 +48,48 @@ class AuthRepository @Inject constructor(
                 return false
             }
             
-            // Verificar si el perfil está completo
+            // Verificar si tiene el rol de cliente
+
+            val roles = userDoc.get("roles")as? List<*>
+            val  hasClientRole = roles?.contains("cliente") == true
+
+            android.util.Log.d("AuthRepository", "Roles encontrados: $roles")
+            android.util.Log.d("AuthRepository", "¿Tiene rol cliente?: $hasClientRole")
+
+            if (!hasClientRole) {
+                android.util.Log.d("AuthRepository", "No tiene rol de cliente")
+                return false
+            }
+
+            //Verifica si el perfil de cliente esta completo
             val isProfileComplete = userDoc.getBoolean("isProfileComplete") ?: false
-            
+
             android.util.Log.d("AuthRepository", "isProfileComplete: $isProfileComplete")
-            
-            // Si no tiene el campo pero sí tiene datos importantes, considerarlo completo
+
+            //Si no tiene el campo pero si tiene datos importante, considerarlo completo
+
             if (!isProfileComplete) {
                 val phoneNumber = userDoc.getString("phoneNumber")
                 val address = userDoc.getString("address")
-                
+
                 android.util.Log.d("AuthRepository", "phoneNumber: $phoneNumber, address: $address")
-                
-                // Si tiene teléfono y dirección, el perfil ya está completo
+
+                //si tiene telefono y direccion, el perfil esta completo
+
                 if (!phoneNumber.isNullOrEmpty() && !address.isNullOrEmpty()) {
-                    android.util.Log.d("AuthRepository", "Actualizando isProfileComplete a true")
-                    // Actualizar el campo isProfileComplete en Firebase
-                    firestore.collection("users").document(uid)
-                        .update("isProfileComplete", true)
+
+                    android.util.Log.d("AuthRepository", "Actualizado isProfileComplete a true")
+
+                    //Actualizar el campo en Firebase
+
+                    firestore.collection("usuarios").document(uid)
+                        .update("isProfileComplete",
+                            true)
                         .await()
                     return true
                 }
             }
+
             
             isProfileComplete
         } catch (e: Exception) {

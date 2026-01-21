@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PBEM"
 include(":app")
+include(":prestador")
