@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import com.example.myapplication.prestador.ui.login.PrestadorLoginScreen
 import com.example.myapplication.prestador.ui.register.PrestadorRegisterScreen
 import com.example.myapplication.prestador.ui.success.PrestadorSuccessScreen
+import com.example.myapplication.prestador.ui.dashboard.PrestadorDashboardScreen
 
 @Composable
 fun PrestadorNavGraph(
@@ -63,8 +64,7 @@ fun PrestadorNavGraph(
         }
         
         composable(PrestadorRoutes.Dashboard.route) {
-            // Dashboard temporal
-            Text("Dashboard del Prestador - ¡Bienvenido!")
+            PrestadorDashboardScreen()
         }
     }
 }
