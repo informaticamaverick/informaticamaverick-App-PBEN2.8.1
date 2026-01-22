@@ -1,9 +1,11 @@
 package com.example.myapplication
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -20,20 +22,17 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.myapplication.Admin.AdminInitScreen
-import com.example.myapplication.Client.CalendarScreen
-import com.example.myapplication.Client.ChatScreen
-import com.example.myapplication.Client.ClientDashboardScreen
-import com.example.myapplication.Client.ClientProfileScreen
+import com.example.myapplication.Client.* // Import all from Client
 import com.example.myapplication.Login.LoginScreen
 import com.example.myapplication.Profile.CompleteProfileScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
-import com.example.myapplication.Client.CalendarScreen
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge() // Habilita soporte para edge-to-edge y gestos
@@ -51,6 +50,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
@@ -90,8 +90,8 @@ fun AppNavigation() {
             LoginScreen(
                 onLoginSuccess = { hasProfile, userName ->
                     if (hasProfile) {
-                        // Si ya tiene perfil, ir directamente al dashboard
-                        navController.navigate("dashboard/$userName") {
+                        // Si ya tiene perfil, ir directamente al nuevo dashboard
+                        navController.navigate("main_screen") {
                             popUpTo("login") { inclusive = true }
                         }
                     } else {
@@ -103,7 +103,7 @@ fun AppNavigation() {
                 }
             )
         }
-        
+
         composable(
             route = "complete_profile/{userName}",
             arguments = listOf(
@@ -114,17 +114,23 @@ fun AppNavigation() {
             )
         ) { backStackEntry ->
             val userName = backStackEntry.arguments?.getString("userName") ?: "Usuario"
-            
+
             CompleteProfileScreen(
                 userName = userName,
                 onProfileComplete = {
-                    navController.navigate("dashboard/$userName") {
+                    navController.navigate("main_screen") {
                         popUpTo("complete_profile/$userName") { inclusive = true }
                     }
                 }
             )
         }
 
+        // New route for our main screen
+        composable("main_screen") {
+            MainScreen()
+        }
+
+        // The old dashboard is no longer directly used from here, but kept for reference if needed
         composable(
             route = "dashboard/{userName}",
             arguments = listOf(
@@ -135,7 +141,7 @@ fun AppNavigation() {
             )
         ) { backStackEntry ->
             val userName = backStackEntry.arguments?.getString("userName") ?: "Usuario"
-            
+
             ClientDashboardScreen(
                 userName = userName,
                 location = "Buenos Aires, AR",
@@ -159,7 +165,7 @@ fun AppNavigation() {
                 }
             )
         }
-        
+
         composable("calendar") {
             CalendarScreen(
                 onBack = {
@@ -167,7 +173,7 @@ fun AppNavigation() {
                 }
             )
         }
-        
+
         composable("chat") {
             ChatScreen(
                 onBack = {
@@ -189,7 +195,7 @@ fun AppNavigation() {
                 }
             )
         }
-        
+
         composable("admin_init") {
             AdminInitScreen(
                 onBack = {

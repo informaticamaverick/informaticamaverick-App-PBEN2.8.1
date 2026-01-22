@@ -30,6 +30,7 @@ import com.example.myapplication.R
 import com.example.myapplication.Data.Model.Prestador
 import com.example.myapplication.Data.Model.PrestadoresData
 import com.example.myapplication.Data.Model.SubscriptionType
+import androidx.compose.ui.tooling.preview.Preview
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -725,5 +726,13 @@ fun PrestadorCard(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SearchResultsScreenPreview() {
+    com.example.myapplication.ui.theme.MyApplicationTheme {
+        SearchResultsScreen(category = "Electricista", onBack = {})
     }
 }

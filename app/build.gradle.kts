@@ -83,6 +83,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
+    implementation("androidx.compose.material:material-icons-extended")
+
 
     // Google Sign In
     implementation(libs.play.services.auth)

@@ -1,5 +1,7 @@
 package com.example.myapplication.Client
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,8 +9,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.getAppColors
@@ -57,38 +62,42 @@ fun CalendarScreen(
 ) {
     // Obtener colores adaptables al tema
     val colors = getAppColors()
-    
+
     // Estados para manejar fechas
     var currentDate by remember { mutableStateOf(Calendar.getInstance()) }
     var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
-    
+
     // Estados para el modal de cancelación
     var showCancelModal by remember { mutableStateOf(false) }
     var visitToCancel by remember { mutableStateOf<String?>(null) }
-    
+
     // Lista mutable de visitas (para poder modificar el estado)
     var visits by remember { mutableStateOf(SAMPLE_VISITS) }
-    
+
     // Formato de fecha para comparación
     val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    
+
     // Filtrar eventos del día seleccionado
     val selectedDateStr = dateFormat.format(selectedDate.time)
     val eventsForSelectedDay = visits.filter { it.date == selectedDateStr }
-    
+
     // Días que tienen eventos (para mostrar indicador)
     val daysWithEvents = visits.filter { it.status != VisitStatus.CANCELLED }.map { it.date }.toSet()
-    
+
+    // Estado para controlar si la lista de eventos está expandida
+    var isExpanded by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 TopAppBar(
-                    title = { 
+                    title = {
                         Text(
-                            "Calendario de Visitas",
+                            "Eventos / Turnos",
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp
-                        ) 
+                        )
                     },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
@@ -100,112 +109,116 @@ fun CalendarScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = colors.surfaceColor,
-                        titleContentColor = colors.textPrimaryColor
+                        containerColor = colors.textSecondaryColor,
+                        titleContentColor = colors.backgroundColor,
                     )
                 )
             },
-            containerColor = colors.backgroundColor
+            //containerColor = colors.backgroundColor
         ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // Widget del Calendario
-            Surface(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = colors.surfaceColor,
-                shadowElevation = 4.dp
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState()) // HACE LA PANTALLA DESPLAZABLE
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
+                // Widget del Calendario
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = colors.surfaceColor,
+                    shadowElevation = 4.dp,
+                    border = BorderStroke(1.dp, colors.dividerColor) // Borde añadido
                 ) {
-                    // Header con navegación de mes
-                    CalendarHeader(
-                        currentDate = currentDate,
-                        onPreviousMonth = {
-                            currentDate = Calendar.getInstance().apply {
-                                time = currentDate.time
-                                add(Calendar.MONTH, -1)
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        // Header con navegación de mes
+                        CalendarHeader(
+                            currentDate = currentDate,
+                            onPreviousMonth = {
+                                currentDate = Calendar.getInstance().apply {
+                                    time = currentDate.time
+                                    add(Calendar.MONTH, -1)
+                                }
+                            },
+                            onNextMonth = {
+                                currentDate = Calendar.getInstance().apply {
+                                    time = currentDate.time
+                                    add(Calendar.MONTH, 1)
+                                }
+                            },
+                            colors = colors
+                        )
+
+                        // Contenido del calendario que se puede minimizar
+                        AnimatedVisibility(visible = !isExpanded) {
+                            Column {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                // Días de la semana
+                                WeekDaysHeader(colors = colors)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                // Grilla de días del mes
+                                CalendarGrid(
+                                    currentDate = currentDate,
+                                    selectedDate = selectedDate,
+                                    daysWithEvents = daysWithEvents,
+                                    dateFormat = dateFormat,
+                                    onDayClick = { day ->
+                                        selectedDate = Calendar.getInstance().apply {
+                                            time = currentDate.time
+                                            set(Calendar.DAY_OF_MONTH, day)
+                                        }
+                                    },
+                                    colors = colors
+                                )
                             }
-                        },
-                        onNextMonth = {
-                            currentDate = Calendar.getInstance().apply {
-                                time = currentDate.time
-                                add(Calendar.MONTH, 1)
-                            }
-                        },
-                        colors = colors
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Días de la semana
-                    WeekDaysHeader(colors = colors)
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Grilla de días del mes
-                    CalendarGrid(
-                        currentDate = currentDate,
-                        selectedDate = selectedDate,
-                        daysWithEvents = daysWithEvents,
-                        dateFormat = dateFormat,
-                        onDayClick = { day ->
-                            selectedDate = Calendar.getInstance().apply {
-                                time = currentDate.time
-                                set(Calendar.DAY_OF_MONTH, day)
-                            }
-                        },
-                        colors = colors
-                    )
+                        }
+                    }
                 }
+
+                // Lista de eventos del día
+                EventsList(
+                    selectedDate = selectedDate,
+                    events = eventsForSelectedDay,
+                    colors = colors,
+                    onCancelClick = { visitId ->
+                        visitToCancel = visitId
+                        showCancelModal = true
+                    },
+                    onRescheduleClick = { /* TODO: Implementar reprogramación */ },
+                    isExpanded = isExpanded,
+                    onExpandClick = { isExpanded = !isExpanded }
+                )
             }
-            
-            // Lista de eventos del día
-            EventsList(
-                selectedDate = selectedDate,
-                events = eventsForSelectedDay,
+        }
+
+        // Modal de cancelación
+        if (showCancelModal) {
+            CancelVisitModal(
                 colors = colors,
-                onCancelClick = { visitId ->
-                    visitToCancel = visitId
-                    showCancelModal = true
+                onConfirm = {
+                    visitToCancel?.let { id ->
+                        visits = visits.map { visit ->
+                            if (visit.id == id) {
+                                visit.copy(status = VisitStatus.CANCELLED)
+                            } else {
+                                visit
+                            }
+                        }
+                    }
+                    showCancelModal = false
+                    visitToCancel = null
                 },
-                onRescheduleClick = { visitId ->
-                    // TODO: Implementar reprogramación
+                onDismiss = {
+                    showCancelModal = false
+                    visitToCancel = null
                 }
             )
         }
     }
-    
-    // Modal de cancelación
-    if (showCancelModal) {
-        CancelVisitModal(
-            colors = colors,
-            onConfirm = {
-                visitToCancel?.let { id ->
-                    visits = visits.map { visit ->
-                        if (visit.id == id) {
-                            visit.copy(status = VisitStatus.CANCELLED)
-                        } else {
-                            visit
-                        }
-                    }
-                }
-                showCancelModal = false
-                visitToCancel = null
-            },
-            onDismiss = {
-                showCancelModal = false
-                visitToCancel = null
-            }
-        )
-    }
-}
 }
 
 // Composable para el header del calendario con navegación
@@ -220,9 +233,12 @@ fun CalendarHeader(
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
     )
-    
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.accentBlue, shape = RoundedCornerShape(12.dp)) // Fondo azul con bordes redondeados
+            .padding(vertical = 4.dp), // Padding vertical
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -230,22 +246,22 @@ fun CalendarHeader(
             Icon(
                 imageVector = Icons.Default.KeyboardArrowLeft,
                 contentDescription = "Mes anterior",
-                tint = colors.textSecondaryColor
+                tint = Color.White // Ícono en blanco
             )
         }
-        
+
         Text(
             text = "${monthNames[currentDate.get(Calendar.MONTH)]} ${currentDate.get(Calendar.YEAR)}",
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
-            color = colors.textPrimaryColor
+            color = Color.White // Texto en blanco
         )
-        
+
         IconButton(onClick = onNextMonth) {
             Icon(
                 imageVector = Icons.Default.KeyboardArrowRight,
                 contentDescription = "Mes siguiente",
-                tint = colors.textSecondaryColor
+                tint = Color.White // Ícono en blanco
             )
         }
     }
@@ -255,7 +271,7 @@ fun CalendarHeader(
 @Composable
 fun WeekDaysHeader(colors: com.example.myapplication.ui.theme.AppColors) {
     val weekDays = listOf("Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa")
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
@@ -288,16 +304,16 @@ fun CalendarGrid(
         time = currentDate.time
         set(Calendar.DAY_OF_MONTH, 1)
     }.get(Calendar.DAY_OF_WEEK) - 1
-    
+
     val today = Calendar.getInstance()
-    
+
     Column {
         var dayCounter = 1
-        
+
         // Calcular número de filas necesarias
         val totalCells = firstDayOfMonth + daysInMonth
         val rows = (totalCells + 6) / 7
-        
+
         repeat(rows) { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -305,7 +321,7 @@ fun CalendarGrid(
             ) {
                 repeat(7) { dayOfWeek ->
                     val cellIndex = week * 7 + dayOfWeek
-                    
+
                     if (cellIndex < firstDayOfMonth || dayCounter > daysInMonth) {
                         // Celda vacía
                         Box(
@@ -320,11 +336,11 @@ fun CalendarGrid(
                             set(Calendar.DAY_OF_MONTH, day)
                         }
                         val dateStr = dateFormat.format(dateToCheck.time)
-                        
+
                         val isSelected = isSameDay(dateToCheck, selectedDate)
                         val isToday = isSameDay(dateToCheck, today)
                         val hasEvent = daysWithEvents.contains(dateStr)
-                        
+
                         DayCell(
                             day = day,
                             isSelected = isSelected,
@@ -333,12 +349,12 @@ fun CalendarGrid(
                             onClick = { onDayClick(day) },
                             colors = colors
                         )
-                        
+
                         dayCounter++
                     }
                 }
             }
-            
+
             if (week < rows - 1) {
                 Spacer(modifier = Modifier.height(4.dp))
             }
@@ -390,7 +406,7 @@ fun RowScope.DayCell(
                     else -> colors.textPrimaryColor
                 }
             )
-            
+
             if (hasEvent) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Box(
@@ -411,31 +427,49 @@ fun EventsList(
     events: List<TechnicalVisit>,
     colors: com.example.myapplication.ui.theme.AppColors,
     onCancelClick: (String) -> Unit,
-    onRescheduleClick: (String) -> Unit
+    onRescheduleClick: (String) -> Unit,
+    isExpanded: Boolean,
+    onExpandClick: () -> Unit
 ) {
     val monthNames = listOf(
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
     )
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Text(
-            text = "Eventos del ${selectedDate.get(Calendar.DAY_OF_MONTH)} de ${monthNames[selectedDate.get(Calendar.MONTH)]}",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = colors.textSecondaryColor,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        
+        // --- ENCABEZADO DE LA LISTA DE EVENTOS ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Eventos del ${selectedDate.get(Calendar.DAY_OF_MONTH)} de ${monthNames[selectedDate.get(Calendar.MONTH)]}",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textSecondaryColor
+            )
+            Text(
+                text = if (isExpanded) "Minimizar" else "Expandir",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.accentBlue,
+                modifier = Modifier.clickable { onExpandClick() }
+            )
+        }
+
         if (events.isNotEmpty()) {
-            LazyColumn(
+            // --- LISTA DE EVENTOS (NO-LAZY) ---
+            Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(events) { event ->
+                events.forEach { event ->
                     EventCard(
                         event = event,
                         colors = colors,
@@ -475,6 +509,7 @@ fun EventsList(
     }
 }
 
+
 // Composable para cada tarjeta de evento
 @Composable
 fun EventCard(
@@ -487,7 +522,8 @@ fun EventCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = colors.surfaceColor,
-        shadowElevation = 2.dp
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, colors.dividerColor) // Borde añadido
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -521,7 +557,7 @@ fun EventCard(
                         color = colors.textSecondaryColor
                     )
                 }
-                
+
                 // Divisor vertical
                 Box(
                     modifier = Modifier
@@ -529,9 +565,9 @@ fun EventCard(
                         .height(50.dp)
                         .background(colors.dividerColor)
                 )
-                
+
                 Spacer(modifier = Modifier.width(16.dp))
-                
+
                 // Información del evento
                 Column(
                     modifier = Modifier.weight(1f)
@@ -551,7 +587,7 @@ fun EventCard(
                                 colors.textPrimaryColor
                             }
                         )
-                        
+
                         // Badge de estado
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -597,9 +633,9 @@ fun EventCard(
                             }
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     // Avatar y nombre del proveedor
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -627,7 +663,7 @@ fun EventCard(
                     }
                 }
             }
-            
+
             // Botones de acción (solo si no está cancelado)
             if (event.status != VisitStatus.CANCELLED) {
                 HorizontalDivider(
@@ -635,7 +671,7 @@ fun EventCard(
                     thickness = 0.5.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -658,7 +694,7 @@ fun EventCard(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    
+
                     // Botón Cancelar
                     Button(
                         onClick = { onCancelClick(event.id) },
@@ -684,8 +720,8 @@ fun EventCard(
 // Función auxiliar para comparar días
 fun isSameDay(date1: Calendar, date2: Calendar): Boolean {
     return date1.get(Calendar.YEAR) == date2.get(Calendar.YEAR) &&
-           date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
-           date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
+            date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
+            date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
 }
 
 // Modal de confirmación de cancelación
@@ -738,9 +774,9 @@ fun CancelVisitModal(
                         tint = Color(0xFFEF4444)
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 // Título
                 Text(
                     text = "¿Cancelar Visita?",
@@ -749,9 +785,9 @@ fun CancelVisitModal(
                     color = colors.textPrimaryColor,
                     textAlign = TextAlign.Center
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 // Descripción
                 Text(
                     text = "Esta acción eliminará la visita programada. ¿Estás seguro de que quieres continuar?",
@@ -760,9 +796,9 @@ fun CancelVisitModal(
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
-                
+
                 // Botones
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -784,7 +820,7 @@ fun CancelVisitModal(
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
-                    
+
                     // Botón Volver
                     Button(
                         onClick = onDismiss,
@@ -806,4 +842,10 @@ fun CancelVisitModal(
             }
         }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun CalendarScreenPreview() {
+    CalendarScreen(onBack = {})
 }
