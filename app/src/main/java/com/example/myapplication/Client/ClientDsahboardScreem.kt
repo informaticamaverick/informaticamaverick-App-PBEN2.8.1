@@ -1,3 +1,4 @@
+/**
 package com.example.myapplication.Client
 
 import androidx.compose.ui.geometry.Offset
@@ -1400,3 +1401,4 @@ fun ClientDashboardScreen(
 
     // Ya no necesitamos SearchResultsScreen, los resultados se muestran en el grid
 }
+**/

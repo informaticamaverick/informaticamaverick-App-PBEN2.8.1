@@ -123,7 +123,7 @@ fun ProfileHeader(profile: PrestadorProfileFalso) {
         ) {
             Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                 // Esta llamada ahora usa la versión de FunComunesIUClienteFalso.kt
-                RatingBar(rating = profile.rating)
+                //RatingBar(rating = profile.rating)
             }
         }
         Box(

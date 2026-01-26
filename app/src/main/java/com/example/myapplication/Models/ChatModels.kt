@@ -9,7 +9,8 @@ data class Message(
     val id: Long,
     val text: String,
     val isFromMe: Boolean,  // true = yo envié, false = el otro usuario
-    val time: String        // Formato: "10:05"
+    val time: String,        // Formato: "10:05"
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 /**

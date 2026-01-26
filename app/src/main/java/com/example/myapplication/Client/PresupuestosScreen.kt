@@ -17,14 +17,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,29 +40,16 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import com.example.myapplication.R
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-
-// 1. Modelo de datos para representar un archivo
-data class Archivo(
-    val id: String,
-    val nombre: String,
-    val fecha: String,
-    val categoria: String, // "Presupuestos Generales" o "Presupuestos de Licitaciones"
-    val servicioCategoria: String, // E.g., "Albañilería", "Electricidad"
-    val empresaId: String,
-    val empresaNombre: String,
-    val empresaImagenUrl: String,
-    val precio: String,
-    val fechaInicioLicitacion: String? = null,
-    var fechaFinLicitacion: String? = null
-)
 
 // Estructura para la información de la categoría
 data class CategoriaInfo(
@@ -97,38 +89,40 @@ fun isLicitacionActiva(fechaInicio: String?, fechaFin: String?): Boolean {
     }
 }
 
-// Datos de ejemplo iniciales
-val initialArchivosDeEjemplo = listOf(
-    Archivo("p1", "Presupuesto Cocina", "15/05/2024", "Presupuestos de Licitaciones", "Albañilería", "emp1", "Constructora A", "https://picsum.photos/seed/emp1/100", "$2,500.00", "10/05/2024", "25/05/2024"),
-    Archivo("p2", "Presupuesto Baño", "12/05/2024", "Presupuestos Generales", "Plomería", "emp2", "Plomería Veloz", "https://picsum.photos/seed/emp2/100", "$800.00"),
-    Archivo("p3", "Presupuesto Jardín", "09/05/2024", "Presupuestos Generales", "Jardinería", "emp3", "Jardines Verdes", "https://picsum.photos/seed/emp3/100", "$450.00"),
-    Archivo("p4", "Reparación de Techo", "01/06/2024", "Presupuestos Generales", "Albañilería", "emp4", "Techos Seguros", "https://picsum.photos/seed/emp4/100", "$1,200.00"),
-    Archivo("p5", "Instalación Eléctrica Completa", "28/05/2024", "Presupuestos de Licitaciones", "Electricidad", "emp5", "Electro-Max", "https://picsum.photos/seed/emp5/100", "$7,800.00", "20/05/2024", "10/06/2024"),
-    Archivo("p6", "Pintura exterior edificio", "25/05/2024", "Presupuestos de Licitaciones", "Pintura", "emp1", "Constructora A", "https://picsum.photos/seed/emp1/100", "$15,000.00", "15/05/2024", "15/06/2024"),
-    Archivo("p9", "Remodelación Oficina Principal", "18/05/2024", "Presupuestos de Licitaciones", "Albañilería", "emp6", "Ofi-Diseños", "https://picsum.photos/seed/emp6/100", "$12,300.00", "10/05/2024", "01/06/2024"),
-    Archivo("p11", "Limpieza de Fachada", "16/05/2024", "Presupuestos de Licitaciones", "Limpieza", "emp8", "Clean-Glass", "https://picsum.photos/seed/emp8/100", "$3,400.00", "05/05/2024", "20/05/2024"),
-    Archivo("p12", "Instalación de Cámaras de Seguridad", "14/05/2024", "Presupuestos de Licitaciones", "Electricidad", "emp9", "Seguridad Total", "https://picsum.photos/seed/emp9/100", "$4,200.00", "01/05/2024", "20/05/2024"),
-    Archivo("p16", "Desarrollo de App Móvil", "18/01/2026", "Presupuestos de Licitaciones", "Software", "emp12", "Dev-Masters", "https://picsum.photos/seed/emp12/100", "$25,000.00", "01/01/2026", "19/01/2026")
-)
-
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PresupuestosScreen(
     onArchivoClick: (String) -> Unit = {},
     onProfileClick: (String) -> Unit = {},
+    onChatClick: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
-    var selectedTabIndex by remember { mutableStateOf(0) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Presupuestos de Licitaciones", "Presupuestos Generales")
 
     var sortOption by remember { mutableStateOf(SortOption.FECHA) }
     var showSortMenu by remember { mutableStateOf(false) }
-    var showOnlyActive by remember { mutableStateOf(true) } // Filtro activado por defecto
+    var showOnlyActive by remember { mutableStateOf(true) } // Filtro activado por defecto para licitaciones
+    
+    // Filtros
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedServiceCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    var archivos by remember { mutableStateOf(initialArchivosDeEjemplo) }
+    // Usar datos de PresupuestoSampleDataFalso
+    // No usamos 'remember' para la lista en sí para que reaccione a cambios en el objeto global si ocurren
+    // Pero si queremos filtrar localmente, podemos derivar de ahí.
+    // Para simplificar y permitir la modificación local (como finalizar licitación), usamos remember con mutableState
+    var presupuestos by remember { mutableStateOf(PresupuestoSampleDataFalso.presupuestos) }
+    
     var showEndLicitacionDialog by remember { mutableStateOf(false) }
-    var archivoToEnd by remember { mutableStateOf<Archivo?>(null) }
+    var presupuestoToEnd by remember { mutableStateOf<PresupuestoFalso?>(null) }
+
+    // Obtener categorías únicas disponibles para filtros
+    val availableServiceCategories = remember(presupuestos, selectedTabIndex) {
+        val currentTab = tabs[selectedTabIndex]
+        presupuestos.filter { it.categoria == currentTab }.map { it.servicioCategoria }.distinct().sorted()
+    }
 
     Scaffold(containerColor = Color.Transparent,
 
@@ -143,7 +137,7 @@ fun PresupuestosScreen(
                 actions = {
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
-                            Icon(imageVector = Icons.Filled.Sort, contentDescription = "Ordenar", tint = Color.White)
+                            Icon(imageVector = Icons.AutoMirrored.Filled.Sort, contentDescription = "Ordenar", tint = Color.White)
                         }
                         DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
                             DropdownMenuItem(text = { Text("Por Fecha (más reciente)") }, onClick = { sortOption = SortOption.FECHA; showSortMenu = false })
@@ -157,6 +151,25 @@ fun PresupuestosScreen(
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
+            // Barra de búsqueda
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("Buscar presupuesto o empresa...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = if (searchQuery.isNotEmpty()) {
+                    { IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Clear, contentDescription = "Borrar") } }
+                } else null,
+                shape = RoundedCornerShape(24.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent
+                )
+            )
+
             TabRow(selectedTabIndex = selectedTabIndex) {
                 tabs.forEachIndexed { index, title ->
                     Tab(selected = selectedTabIndex == index, onClick = { selectedTabIndex = index }, text = { Text(title) })
@@ -176,59 +189,99 @@ fun PresupuestosScreen(
                 }
             }
 
+            // Filtros de Categoría de Servicio (Chips)
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(availableServiceCategories) { category ->
+                    val isSelected = category in selectedServiceCategories
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            selectedServiceCategories = if (isSelected) {
+                                selectedServiceCategories - category
+                            } else {
+                                selectedServiceCategories + category
+                            }
+                        },
+                        label = { Text(category) },
+                        leadingIcon = if (isSelected) {
+                            { Icon(imageVector = Icons.Filled.Done, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                        } else null
+                    )
+                }
+            }
+
             val selectedCategory = tabs[selectedTabIndex]
-            val archivosFiltrados = remember(archivos, selectedCategory, showOnlyActive) {
-                val initialList = archivos.filter { it.categoria == selectedCategory }
+            val presupuestosFiltrados = remember(presupuestos, selectedCategory, showOnlyActive, searchQuery, selectedServiceCategories) {
+                var list = presupuestos.filter { it.categoria == selectedCategory }
+                
+                // Filtro "Activas"
                 if (selectedCategory == "Presupuestos de Licitaciones" && showOnlyActive) {
-                    initialList.filter { isLicitacionActiva(it.fechaInicioLicitacion, it.fechaFinLicitacion) }
-                } else {
-                    initialList
+                    list = list.filter { isLicitacionActiva(it.fechaInicioLicitacion, it.fechaFinLicitacion) }
                 }
-            }
-
-            val sortedArchivos = remember(archivosFiltrados, sortOption) {
-                when (sortOption) {
-                    SortOption.FECHA -> archivosFiltrados.sortedByDescending { it.fecha.split("/").reversed().joinToString("") }
-                    SortOption.MONTO -> archivosFiltrados.sortedByDescending { it.precio.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0 }
-                    SortOption.EMPRESA -> archivosFiltrados.sortedBy { it.empresaNombre }
-                }
-            }
-
-            val agrupadosPorServicio = sortedArchivos.groupBy { it.servicioCategoria }
-            var expandedServiceCategories by remember(selectedTabIndex) { mutableStateOf(agrupadosPorServicio.keys) }
-
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                agrupadosPorServicio.forEach { (servicio, archivosEnServicio) ->
-                    if (servicio.isNotBlank()) {
-                        stickyHeader {
-                            ServiceCategoryHeader(
-                                titulo = servicio,
-                                count = archivosEnServicio.size,
-                                isExpanded = servicio in expandedServiceCategories,
-                                onClick = {
-                                    expandedServiceCategories = if (servicio in expandedServiceCategories) {
-                                        expandedServiceCategories - servicio
-                                    } else {
-                                        expandedServiceCategories + servicio
-                                    }
-                                }
-                            )
-                        }
+                
+                // Filtro Búsqueda
+                if (searchQuery.isNotEmpty()) {
+                    val query = searchQuery.lowercase()
+                    list = list.filter { 
+                        it.nombre.lowercase().contains(query) || 
+                        it.empresaNombre.lowercase().contains(query) 
                     }
-                    items(archivosEnServicio, key = { it.id }) { archivo ->
-                        AnimatedVisibility(
-                            visible = servicio.isBlank() || servicio in expandedServiceCategories,
-                            enter = fadeIn(tween(300)) + expandVertically(tween(300)),
-                            exit = fadeOut(tween(300)) + shrinkVertically(tween(300))
-                        ) {
+                }
+                
+                // Filtro Categorías de Servicio
+                if (selectedServiceCategories.isNotEmpty()) {
+                    list = list.filter { it.servicioCategoria in selectedServiceCategories }
+                }
+                
+                list
+            }
+
+            val sortedPresupuestos = remember(presupuestosFiltrados, sortOption) {
+                when (sortOption) {
+                    SortOption.FECHA -> presupuestosFiltrados.sortedByDescending { it.fecha.split("/").reversed().joinToString("") }
+                    SortOption.MONTO -> presupuestosFiltrados.sortedByDescending { it.precio.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0 }
+                    SortOption.EMPRESA -> presupuestosFiltrados.sortedBy { it.empresaNombre }
+                }
+            }
+
+            val agrupadosPorServicio = sortedPresupuestos.groupBy { it.servicioCategoria }
+            var expandedServiceCategories by remember(selectedTabIndex) { mutableStateOf(agrupadosPorServicio.keys) }
+            
+            // Asegurarse de expandir categorías nuevas si cambian los filtros
+            LaunchedEffect(agrupadosPorServicio.keys) {
+                expandedServiceCategories = expandedServiceCategories + agrupadosPorServicio.keys
+            }
+
+            if (sortedPresupuestos.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(imageVector = Icons.Default.Email, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("No se encontraron presupuestos", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    agrupadosPorServicio.forEach { (servicio, archivosEnServicio) ->
+                        // Eliminamos el stickyHeader con el título de categoría para cumplir con la solicitud anterior de "sacar los separadores"
+                        // pero mantendremos la lista plana organizada por servicio implícitamente
+
+                        items(archivosEnServicio, key = { it.id }) { presupuesto ->
+                            // Como ya no hay header expandible, mostramos siempre
                             ArchivoItem(
-                                archivo = archivo,
-                                categoriaInfo = getCategoriaInfo(archivo.categoria),
-                                onClick = { onArchivoClick(archivo.id) },
-                                onProfileClick = { onProfileClick(archivo.empresaId) },
+                                archivo = presupuesto,
+                                categoriaInfo = getCategoriaInfo(presupuesto.categoria),
+                                onClick = { onArchivoClick(presupuesto.id) },
+                                onProfileClick = { onProfileClick(presupuesto.empresaId) },
+                                onChatClick = { onChatClick(presupuesto.empresaId) },
                                 onLongClick = {
-                                    if (archivo.categoria == "Presupuestos de Licitaciones") {
-                                        archivoToEnd = archivo
+                                    if (presupuesto.categoria == "Presupuestos de Licitaciones") {
+                                        presupuestoToEnd = presupuesto
                                         showEndLicitacionDialog = true
                                     }
                                 }
@@ -240,25 +293,29 @@ fun PresupuestosScreen(
         }
     }
 
-    if (showEndLicitacionDialog && archivoToEnd != null) {
+    if (showEndLicitacionDialog && presupuestoToEnd != null) {
         AlertDialog(
             onDismissRequest = { showEndLicitacionDialog = false },
             title = { Text("Finalizar Licitación") },
-            text = { Text("¿Estás seguro de que quieres finalizar la licitación para '${archivoToEnd!!.nombre}'? Esta acción no se puede deshacer.") },
+            text = { Text("¿Estás seguro de que quieres finalizar la licitación para '${presupuestoToEnd!!.nombre}'? Esta acción no se puede deshacer.") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
                         val yesterday = LocalDate.now().minusDays(1).format(formatter)
-                        archivos = archivos.map {
-                            if (it.id == archivoToEnd!!.id) {
-                                it.copy(fechaFinLicitacion = yesterday)
-                            } else {
-                                it
-                            }
+
+                        // Actualizar la lista local.
+                        // Nota: En una app real, esto debería actualizar la fuente de datos (Base de datos / API)
+                        val index = presupuestos.indexOfFirst { it.id == presupuestoToEnd!!.id }
+                        if (index != -1) {
+                            presupuestos[index] = presupuestos[index].copy(
+                                fechaFinLicitacion = yesterday,
+                                status = "Finalizada"
+                            )
                         }
+
                         showEndLicitacionDialog = false
-                        archivoToEnd = null
+                        presupuestoToEnd = null
                     }
                 ) {
                     Text("Confirmar")
@@ -273,43 +330,15 @@ fun PresupuestosScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun ServiceCategoryHeader(titulo: String, count: Int, isExpanded: Boolean, onClick: () -> Unit) {
-    val rotationAngle by animateFloatAsState(targetValue = if (isExpanded) -180f else 0f, label = "rotationAngle")
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .combinedClickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = titulo, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                Text(
-                    text = "$count",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Icon(imageVector = Icons.Filled.ArrowDropDown, contentDescription = "Expandir/Contraer", modifier = Modifier.rotate(rotationAngle))
-        }
-    }
-}
-
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ArchivoItem(
-    archivo: Archivo,
+    archivo: PresupuestoFalso,
     categoriaInfo: CategoriaInfo,
     onClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onChatClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     Card(
@@ -330,20 +359,27 @@ fun ArchivoItem(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                // Icono Categoria
                 Icon(imageVector = categoriaInfo.icon, contentDescription = "Icono de archivo", tint = categoriaInfo.color)
                 Spacer(modifier = Modifier.width(16.dp))
+                
                 Column(modifier = Modifier.weight(1f)) {
+                    // Titulo y Estado
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = archivo.nombre, fontWeight = FontWeight.SemiBold)
+                        Text(text = archivo.nombre, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
                         val isActiva = isLicitacionActiva(archivo.fechaInicioLicitacion, archivo.fechaFinLicitacion)
-                        if (isActiva) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                        val statusColor = if (isActiva) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary
+                        val statusText = if (isActiva) "ACTIVA" else archivo.status.uppercase()
+                        
+                        if (statusText.isNotEmpty()) {
                             Surface(
-                                color = MaterialTheme.colorScheme.tertiary,
+                                color = statusColor,
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
-                                    text = "ACTIVA",
+                                    text = statusText,
                                     color = MaterialTheme.colorScheme.onTertiary,
                                     style = MaterialTheme.typography.labelSmall,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -351,6 +387,7 @@ fun ArchivoItem(
                             }
                         }
                     }
+                    
                     Text(text = "Recibido: ${archivo.fecha}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
 
                     if (archivo.fechaInicioLicitacion != null && archivo.fechaFinLicitacion != null) {
@@ -368,18 +405,36 @@ fun ArchivoItem(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
+            
+            // Acciones: Perfil y Chat
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onProfileClick() }
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Image(
-                    painter = rememberAsyncImagePainter(archivo.empresaImagenUrl),
-                    contentDescription = "Logo de ${archivo.empresaNombre}",
-                    modifier = Modifier.size(40.dp).clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = archivo.empresaNombre, style = MaterialTheme.typography.bodySmall, maxLines = 1, fontSize = 10.sp)
+                // Imagen Perfil
+                Box(modifier = Modifier.clickable { onProfileClick() }) {
+                    Image(
+                        painter = rememberAsyncImagePainter(
+                            model = archivo.empresaImagenUrl,
+                            placeholder = painterResource(id = R.drawable.logo_app)
+                        ),
+                        contentDescription = "Logo de ${archivo.empresaNombre}",
+                        modifier = Modifier.size(40.dp).clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                
+                // Boton Chat
+                IconButton(
+                    onClick = onChatClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Message,
+                        contentDescription = "Chat con ${archivo.empresaNombre}",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
@@ -390,5 +445,4 @@ fun ArchivoItem(
 @Composable
 fun PresupuestosScreenPreview() {
     PresupuestosScreen(onBack = {})
-
 }

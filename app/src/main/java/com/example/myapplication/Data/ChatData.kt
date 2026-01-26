@@ -3,6 +3,7 @@ package com.example.myapplication.Data
 import androidx.compose.ui.graphics.Color
 import com.example.myapplication.Models.ChatConversation
 import com.example.myapplication.Models.Message
+import java.util.Calendar
 
 /**
  * Datos de prueba para el sistema de chat
@@ -57,6 +58,14 @@ object ChatData {
             isOnline = false
         )
     )
+
+    private fun getTimestamp(daysAgo: Int, hour: Int, minute: Int): Long {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, -daysAgo)
+        calendar.set(Calendar.HOUR_OF_DAY, hour)
+        calendar.set(Calendar.MINUTE, minute)
+        return calendar.timeInMillis
+    }
     
     // Mensajes de ejemplo para cada conversación
     private val messagesForMario = listOf(
@@ -64,25 +73,29 @@ object ChatData {
             id = 1L,
             text = "Hola, ¿estás disponible para una reparación?",
             isFromMe = true,
-            time = "10:00"
+            time = "10:00",
+            timestamp = getTimestamp(1, 10, 0)
         ),
         Message(
             id = 2L,
             text = "¡Hola! Sí, claro. ¿Qué necesitas?",
             isFromMe = false,
-            time = "10:05"
+            time = "10:05",
+            timestamp = getTimestamp(1, 10, 5)
         ),
         Message(
             id = 3L,
             text = "Necesito reparar mi lavadora, no está centrifugando bien",
             isFromMe = true,
-            time = "10:07"
+            time = "10:07",
+            timestamp = getTimestamp(0, 10, 7)
         ),
         Message(
             id = 4L,
             text = "Entendido. ¿Cuándo te vendría bien que pase a revisarla?",
             isFromMe = false,
-            time = "10:10"
+            time = "10:10",
+            timestamp = getTimestamp(0, 10, 10)
         )
     )
     
@@ -91,19 +104,22 @@ object ChatData {
             id = 1L,
             text = "Hola Ana, ya terminé el servicio",
             isFromMe = false,
-            time = "14:30"
+            time = "14:30",
+            timestamp = getTimestamp(2, 14, 30)
         ),
         Message(
             id = 2L,
             text = "Servicio finalizado con éxito.",
             isFromMe = false,
-            time = "14:35"
+            time = "14:35",
+            timestamp = getTimestamp(2, 14, 35)
         ),
         Message(
             id = 3L,
             text = "Muchas gracias! Todo quedó perfecto",
             isFromMe = true,
-            time = "14:40"
+            time = "14:40",
+            timestamp = getTimestamp(1, 14, 40)
         )
     )
     
@@ -112,25 +128,29 @@ object ChatData {
             id = 1L,
             text = "¿Puedes venir mañana?",
             isFromMe = true,
-            time = "09:15"
+            time = "09:15",
+            timestamp = getTimestamp(1, 9, 15)
         ),
         Message(
             id = 2L,
             text = "Sí, ¿a qué hora te viene bien?",
             isFromMe = false,
-            time = "09:20"
+            time = "09:20",
+            timestamp = getTimestamp(1, 9, 20)
         ),
         Message(
             id = 3L,
             text = "A las 3pm estaría genial",
             isFromMe = true,
-            time = "09:22"
+            time = "09:22",
+            timestamp = getTimestamp(0, 9, 22)
         ),
         Message(
             id = 4L,
             text = "Perfecto, entonces mañana a las 3pm",
             isFromMe = false,
-            time = "09:25"
+            time = "09:25",
+            timestamp = getTimestamp(0, 9, 25)
         )
     )
     
@@ -139,19 +159,22 @@ object ChatData {
             id = 1L,
             text = "El trabajo quedó excelente",
             isFromMe = true,
-            time = "16:00"
+            time = "16:00",
+            timestamp = getTimestamp(3, 16, 0)
         ),
         Message(
             id = 2L,
             text = "Muchas gracias por el servicio",
             isFromMe = true,
-            time = "16:01"
+            time = "16:01",
+            timestamp = getTimestamp(3, 16, 1)
         ),
         Message(
             id = 3L,
             text = "¡Gracias a ti! Cualquier cosa me avisas",
             isFromMe = false,
-            time = "16:05"
+            time = "16:05",
+            timestamp = getTimestamp(2, 16, 5)
         )
     )
     

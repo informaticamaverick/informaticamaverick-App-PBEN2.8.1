@@ -1,4 +1,4 @@
-package com.example.myapplication
+ package com.example.myapplication
 
 import android.os.Build
 import android.os.Bundle
@@ -29,6 +29,11 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
+
+
+
+
+
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -142,7 +147,7 @@ fun AppNavigation() {
         ) { backStackEntry ->
             val userName = backStackEntry.arguments?.getString("userName") ?: "Usuario"
 
-            ClientDashboardScreen(
+            /**ClientDashboardScreen(
                 userName = userName,
                 location = "Buenos Aires, AR",
                 onLogout = {
@@ -163,27 +168,13 @@ fun AppNavigation() {
                 onNavigateToCalendar = {
                     navController.navigate("calendar")
                 }
-            )
+            )**/
         }
 
-        composable("calendar") {
-            CalendarScreen(
-                onBack = {
-                    navController.popBackStack()
-                }
-            )
-        }
 
-        composable("chat") {
-            ChatScreen(
-                onBack = {
-                    navController.popBackStack()
-                }
-            )
-        }
-        
+
         composable("client_profile") {
-            ClientProfileScreen(
+            PerfilUsuarioScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 },
