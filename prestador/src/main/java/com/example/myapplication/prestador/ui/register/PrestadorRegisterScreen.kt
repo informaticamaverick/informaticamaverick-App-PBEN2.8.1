@@ -52,17 +52,14 @@ fun PrestadorRegisterScreen(
     var codigoPostal by remember { mutableStateOf("") }
     var ciudad by remember { mutableStateOf("") }
     var provincia by remember { mutableStateOf("") }
-    var provinciaSearch by remember { mutableStateOf("") }
     var showProvinciaDropdown by remember { mutableStateOf(false) }
     var serviciosSeleccionados by remember { mutableStateOf(listOf<String>()) }
     var isHomeService by remember { mutableStateOf(false) }
     var is24Hours by remember { mutableStateOf(false) }
-    var serviceSearch by remember { mutableStateOf("") }
     var showServiceDropdown by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showProvinciaMenu by remember { mutableStateOf(false) }
     var showServiciosDialog by remember { mutableStateOf(false) }
     
     val registerState by viewModel.registerState.collectAsState()
@@ -70,25 +67,11 @@ fun PrestadorRegisterScreen(
     // Listas de opciones
     val provincias = listOf("Tucumán")
     
-    // Filtrar provincias según búsqueda
-    val filteredProvincias = remember(provinciaSearch, provincia) {
-        provincias.filter {
-            it.contains(provinciaSearch, ignoreCase = true) && it != provincia
-        }
-    }
-    
     val serviciosDisponibles = listOf(
         "Plomería", "Electricidad", "Carpintería", "Pintura",
         "Albañilería", "Jardinería", "Limpieza", "Cerrajería",
         "Herrería", "Vidriería", "Climatización", "Mudanzas"
     )
-    
-    // Filtrar servicios según búsqueda
-    val filteredServices = remember(serviceSearch, serviciosSeleccionados) {
-        serviciosDisponibles.filter {
-            it.contains(serviceSearch, ignoreCase = true) && !serviciosSeleccionados.contains(it)
-        }
-    }
     
     // Manejar el estado del registro
     LaunchedEffect(registerState) {
@@ -201,13 +184,15 @@ fun PrestadorRegisterScreen(
                         color = Color(0xFF1E293B)
                     )
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     
                     // Campo Nombre
                     OutlinedTextField(
                         value = nombre,
-                        onValueChange = { nombre = it },
-                        label = { Text("Nombre") },
+                        onValueChange = {
+                            nombre  it },
+                        label = {
+                            Text("Nombre") },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Person,
@@ -216,25 +201,29 @@ fun PrestadorRegisterScreen(
                             )
                         },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFFF8FAFC),
                             unfocusedContainerColor = Color(0xFFF8FAFC),
                             focusedBorderColor = PrestadorOrange,
                             unfocusedBorderColor = Color(0xFFE2E8F0),
-                            focusedLabelColor = PrestadorOrange,
-                            cursorColor = PrestadorOrange
+                            focusedLabelColor = PrestadorOrange
+
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Spacer(modifier = Modifier.height(12.dp))
                     
                     // Campo Apellido
                     OutlinedTextField(
                         value = apellido,
-                        onValueChange = { apellido = it },
-                        label = { Text("Apellido") },
+                        onValueChange = {
+                            apellido = it },
+                        label = {
+                            Text("Apellido") },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Person,
@@ -243,7 +232,9 @@ fun PrestadorRegisterScreen(
                             )
                         },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = Color(0xFFF8FAFC),
                             unfocusedContainerColor = Color(0xFFF8FAFC),
@@ -254,8 +245,70 @@ fun PrestadorRegisterScreen(
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+
+                    // Campo DNI/CUIT/CUIL
+                    OutlinedTextField(
+                        value = dniCuit,
+                        onValueChange = {
+                            dniCuit = it },
+                        label = { Text("DNI / CUIT / CUIL")
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Badge,
+                                contentDescription = "DNI / CUIT / CUIL",
+                                tint = Color.Gray
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = True,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                        height(56.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC),
+                            focusedBorderColor = PrestadorOrange,
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedLabelColor = PrestadorOrange,
+                            cursorColor = PrestadorOrange
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    //Campo Nro de Matricula
+                    OutlinedTextField(
+                        value = matricula,
+                        onValueChange = {
+                            matricula = it },
+                        label = { Text("Nro de matrícula")
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CardMembership,
+                                contentDescription = "Matricula",
+                                tint = Color.Gray
+                            )
+                        },
+
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC),
+                            focusedBorderColor = PrestadorOrange,
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedLabelColor = PrestadorOrange,
+                            cursorColor = PrestadorOrange
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     
                     // Campo Email (solo si NO es usuario de Google)
                     if (!isGoogleUser) {
@@ -272,7 +325,9 @@ fun PrestadorRegisterScreen(
                             },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFFF8FAFC),
                                 unfocusedContainerColor = Color(0xFFF8FAFC),
@@ -284,7 +339,7 @@ fun PrestadorRegisterScreen(
                             shape = RoundedCornerShape(12.dp)
                         )
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         
                         // Campo Contraseña
                         OutlinedTextField(
@@ -312,7 +367,9 @@ fun PrestadorRegisterScreen(
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFFF8FAFC),
                                 unfocusedContainerColor = Color(0xFFF8FAFC),
@@ -324,7 +381,7 @@ fun PrestadorRegisterScreen(
                             shape = RoundedCornerShape(12.dp)
                         )
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         
                         // Campo Confirmar Contraseña
                         OutlinedTextField(
@@ -352,7 +409,9 @@ fun PrestadorRegisterScreen(
                             visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFFF8FAFC),
                                 unfocusedContainerColor = Color(0xFFF8FAFC),
@@ -364,7 +423,7 @@ fun PrestadorRegisterScreen(
                             shape = RoundedCornerShape(12.dp)
                         )
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                     } else {
                         // Mostrar email del usuario de Google (solo lectura)
                         OutlinedTextField(
@@ -380,7 +439,9 @@ fun PrestadorRegisterScreen(
                             },
                             enabled = false,
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 disabledContainerColor = Color(0xFFF1F5F9),
                                 disabledBorderColor = Color(0xFFE2E8F0),
@@ -390,7 +451,7 @@ fun PrestadorRegisterScreen(
                             shape = RoundedCornerShape(12.dp)
                         )
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
                     
                     // Campo Dirección
@@ -475,7 +536,7 @@ fun PrestadorRegisterScreen(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // --- CAMPO PROVINCIA CON BUSCADOR INTERACTIVO ---
+                    // --- CAMPO PROVINCIA (DROPDOWN) ---
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = "Provincia",
@@ -485,105 +546,95 @@ fun PrestadorRegisterScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         
-                        // Campo de búsqueda
-                        Box {
-                            OutlinedTextField(
-                                value = if (provincia.isNotEmpty() && provinciaSearch.isEmpty()) provincia else provinciaSearch,
-                                onValueChange = {
-                                    provinciaSearch = it
-                                    showProvinciaDropdown = it.isNotEmpty()
-                                    if (it.isEmpty()) {
-                                        provincia = ""
-                                    }
-                                },
-                                placeholder = { Text("Buscar provincia", fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = "Buscar",
-                                        tint = if (showProvinciaDropdown || provincia.isNotEmpty()) PrestadorOrange else Color.Gray
+                        // Mostrar provincia seleccionada
+                        if (provincia.isNotEmpty()) {
+                            AssistChip(
+                                onClick = { provincia = "" },
+                                label = {
+                                    Text(
+                                        provincia,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 },
                                 trailingIcon = {
-                                    if (provincia.isNotEmpty() && provinciaSearch.isEmpty()) {
-                                        IconButton(onClick = {
-                                            provincia = ""
-                                            provinciaSearch = ""
-                                        }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Limpiar",
-                                                tint = Color.Gray
-                                            )
-                                        }
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Eliminar",
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                 },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color(0xFFF8FAFC),
-                                    focusedBorderColor = PrestadorOrange,
-                                    unfocusedBorderColor = Color(0xFFE2E8F0),
-                                    cursorColor = PrestadorOrange
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color(0xFFFED7AA),
+                                    labelColor = Color(0xFFC2410C),
+                                    leadingIconContentColor = Color(0xFFC2410C)
                                 ),
-                                shape = RoundedCornerShape(16.dp)
+                                border = BorderStroke(1.dp, Color(0xFFFEBF8C)),
+                                modifier = Modifier.padding(bottom = 12.dp)
                             )
-                            
-                            // Dropdown de resultados
-                            if (showProvinciaDropdown && filteredProvincias.isNotEmpty()) {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 70.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        }
+                        
+                        // Botón selector con dropdown
+                        Box {
+                            OutlinedButton(
+                                onClick = { showProvinciaDropdown = !showProvinciaDropdown },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = Color(0xFFF8FAFC)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 150.dp)
-                                            .verticalScroll(rememberScrollState())
-                                    ) {
-                                        filteredProvincias.forEach { prov ->
-                                            TextButton(
-                                                onClick = {
-                                                    provincia = prov
-                                                    provinciaSearch = ""
-                                                    showProvinciaDropdown = false
-                                                },
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 4.dp),
-                                                colors = ButtonDefaults.textButtonColors(
-                                                    containerColor = Color.Transparent
-                                                )
+                                    Text(
+                                        text = if (provincia.isEmpty()) "Seleccionar provincia" else "Cambiar provincia",
+                                        color = Color(0xFF475569),
+                                        fontSize = 14.sp
+                                    )
+                                    Icon(
+                                        imageVector = if (showProvinciaDropdown) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Expandir",
+                                        tint = PrestadorOrange
+                                    )
+                                }
+                            }
+                            
+                            // Dropdown menu
+                            DropdownMenu(
+                                expanded = showProvinciaDropdown,
+                                onDismissRequest = { showProvinciaDropdown = false },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .heightIn(max = 300.dp)
+                            ) {
+                                provincias.forEach { prov ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    Text(
-                                                        text = prov,
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = Color(0xFF475569)
-                                                    )
+                                                Text(prov, fontSize = 14.sp)
+                                                if (provincia == prov) {
                                                     Icon(
                                                         imageVector = Icons.Default.Check,
-                                                        contentDescription = "Seleccionar",
+                                                        contentDescription = "Seleccionado",
                                                         tint = PrestadorOrange,
                                                         modifier = Modifier.size(20.dp)
                                                     )
                                                 }
                                             }
-                                            if (prov != filteredProvincias.last()) {
-                                                HorizontalDivider(color = Color(0xFFF1F5F9))
-                                            }
+                                        },
+                                        onClick = {
+                                            provincia = prov
+                                            showProvinciaDropdown = false
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -682,7 +733,7 @@ fun PrestadorRegisterScreen(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // --- BUSCADOR DE SERVICIOS INTERACTIVO ---
+                    // --- SELECTOR DE SERVICIOS (DROPDOWN) ---
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = "¿Qué servicios vas a prestar?",
@@ -728,88 +779,65 @@ fun PrestadorRegisterScreen(
                             }
                         }
                         
-                        // Campo de búsqueda
+                        // Botón selector con dropdown
                         Box {
-                            OutlinedTextField(
-                                value = serviceSearch,
-                                onValueChange = {
-                                    serviceSearch = it
-                                    showServiceDropdown = it.isNotEmpty()
-                                },
-                                placeholder = { Text("Buscar servicio (ej. Electricista)", fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = "Buscar",
-                                        tint = if (showServiceDropdown) PrestadorOrange else Color.Gray
-                                    )
-                                },
-                                singleLine = true,
+                            OutlinedButton(
+                                onClick = { showServiceDropdown = !showServiceDropdown },
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color(0xFFF8FAFC),
-                                    focusedBorderColor = PrestadorOrange,
-                                    unfocusedBorderColor = Color(0xFFE2E8F0),
-                                    cursorColor = PrestadorOrange
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = Color(0xFFF8FAFC)
                                 ),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            
-                            // Dropdown de resultados
-                            if (showServiceDropdown && filteredServices.isNotEmpty()) {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 70.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 200.dp)
-                                            .verticalScroll(rememberScrollState())
-                                    ) {
-                                        filteredServices.forEach { servicio ->
-                                            TextButton(
-                                                onClick = {
-                                                    serviciosSeleccionados = serviciosSeleccionados + servicio
-                                                    serviceSearch = ""
-                                                    showServiceDropdown = false
-                                                },
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 4.dp),
-                                                colors = ButtonDefaults.textButtonColors(
-                                                    containerColor = Color.Transparent
-                                                )
+                                    Text(
+                                        text = "Agregar servicio",
+                                        color = Color(0xFF475569),
+                                        fontSize = 14.sp
+                                    )
+                                    Icon(
+                                        imageVector = if (showServiceDropdown) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Expandir",
+                                        tint = PrestadorOrange
+                                    )
+                                }
+                            }
+                            
+                            // Dropdown menu
+                            DropdownMenu(
+                                expanded = showServiceDropdown,
+                                onDismissRequest = { showServiceDropdown = false },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .heightIn(max = 300.dp)
+                            ) {
+                                serviciosDisponibles.filter { !serviciosSeleccionados.contains(it) }.forEach { servicio ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    Text(
-                                                        text = servicio,
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = Color(0xFF475569)
-                                                    )
-                                                    Icon(
-                                                        imageVector = Icons.Default.Add,
-                                                        contentDescription = "Agregar",
-                                                        tint = PrestadorOrange,
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                }
+                                                Text(servicio, fontSize = 14.sp)
+                                                Icon(
+                                                    imageVector = Icons.Default.Add,
+                                                    contentDescription = "Agregar",
+                                                    tint = PrestadorOrange,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
                                             }
-                                            if (servicio != filteredServices.last()) {
-                                                HorizontalDivider(color = Color(0xFFF1F5F9))
-                                            }
+                                        },
+                                        onClick = {
+                                            serviciosSeleccionados = serviciosSeleccionados + servicio
+                                            showServiceDropdown = false
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -992,5 +1020,119 @@ fun PrestadorRegisterScreen(
                 }
             }
         )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun PreviewPrestadorRegisterScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFFFF5ED))
+    ) {
+        // Círculos de fondo
+        Box(
+            modifier = Modifier
+                .offset(x = (-96).dp, y = (-96).dp)
+                .size(384.dp)
+                .background(
+                    color = Color(0xFFFB923C).copy(alpha = 0.4f),
+                    shape = CircleShape
+                )
+                .blur(radius = 80.dp)
+        )
+        
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            Text(
+                text = "Completa tu Perfil",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Información Personal",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        placeholder = { Text("Nombre") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        placeholder = { Text("Apellido") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        placeholder = { Text("Teléfono") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = {},
+                        placeholder = { Text("Provincia") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = {},
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrestadorOrange
+                        )
+                    ) {
+                        Text("Completar Registro", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }

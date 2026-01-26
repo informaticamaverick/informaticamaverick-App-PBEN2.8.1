@@ -1,7 +1,10 @@
 package com.example.myapplication.prestador.ui.navigation
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.material3.Text
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -13,11 +16,33 @@ import com.example.myapplication.prestador.ui.dashboard.PrestadorDashboardScreen
 @Composable
 fun PrestadorNavGraph(
     navController: NavHostController,
-    startDestination: String = PrestadorRoutes.Login.route
+    startDestination: String = PrestadorRoutes.Dashboard.route // TEMPORAL para pruebas
 ) {
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = startDestination,
+        
+        // ANIMACIÓN GLOBAL: SUAVE Y PROFESIONAL
+        enterTransition = { 
+            // Entra desvaneciéndose y creciendo un poco
+            fadeIn(animationSpec = tween(300)) + 
+            scaleIn(initialScale = 0.92f, animationSpec = tween(300)) 
+        },
+        exitTransition = { 
+            // Sale desvaneciéndose y encogiéndose un poco
+            fadeOut(animationSpec = tween(300)) + 
+            scaleOut(targetScale = 0.92f, animationSpec = tween(300)) 
+        },
+        
+        // Para que al volver atrás no se sienta raro
+        popEnterTransition = { 
+            fadeIn(animationSpec = tween(300)) + 
+            scaleIn(initialScale = 0.92f, animationSpec = tween(300)) 
+        },
+        popExitTransition = { 
+            fadeOut(animationSpec = tween(300)) + 
+            scaleOut(targetScale = 0.92f, animationSpec = tween(300)) 
+        }
     ) {
 
         composable(PrestadorRoutes.Login.route) {
@@ -64,7 +89,22 @@ fun PrestadorNavGraph(
         }
         
         composable(PrestadorRoutes.Dashboard.route) {
-            PrestadorDashboardScreen()
+            PrestadorDashboardScreen(
+                onNavigateToEditProfile = {
+                    navController.navigate(PrestadorRoutes.EditProfile.route)
+                },
+                onLogout = {
+                    navController.navigate(PrestadorRoutes.Login.route) {
+                        popUpTo(0) { inclusive = true}
+                    } // Limpia toda la pila de navegacion
+                }
+
+            )
+        }
+        
+        composable(PrestadorRoutes.EditProfile.route) {
+            // TODO: Implementar PrestadorEditProfileScreen
+            Text("Editar Perfil - En construcción")
         }
     }
 }

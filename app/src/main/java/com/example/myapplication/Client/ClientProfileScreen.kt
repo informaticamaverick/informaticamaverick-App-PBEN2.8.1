@@ -127,12 +127,19 @@ fun ClientProfileScreen(
     
     // Detectar cuando la app vuelve al primer plano para recargar datos
     val lifecycleOwner = LocalLifecycleOwner.current
+    var isFirstLaunch by remember { mutableStateOf(true) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                // Cuando la app vuelve del navegador (después de verificar email)
-                profileViewModel.checkAndCompleteEmailChange()
-                profileViewModel.loadUserProfile()
+                //Correcion la primera carga (ya se hace en LaunchedEffect)
+                if (isFirstLaunch) {
+                    isFirstLaunch = false
+                } else {
+                    // Cuando la app vuelve del navegador (después de verificar email)
+                    profileViewModel.checkAndCompleteEmailChange()
+                    profileViewModel.loadUserProfile()
+                }
+
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
