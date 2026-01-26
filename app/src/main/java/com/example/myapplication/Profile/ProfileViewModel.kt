@@ -32,6 +32,9 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
+    //Linea de código modificada
+    private  var isEmailChangePending = false
+
 
     private val firestore = Firebase.firestore
 
@@ -752,6 +755,9 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                     // Usar verifyBeforeUpdateEmail para mayor seguridad
                     // Esto envía un email de verificación ANTES de cambiar el email
                     currentUser.verifyBeforeUpdateEmail(newEmail).await()
+
+                    //Correccion de mensaje de verificacion
+                    isEmailChangePending = true
                     
                     _uiState.update {
                         it.copy(
@@ -760,6 +766,8 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                             successMessage = "✓ Se envió un correo de verificación a $newEmail. Revisa tu bandeja de entrada y confirma el cambio."
                         )
                     }
+
+
                     
                     // Nota: El email en Firestore se actualizará después de que el usuario verifique
                     // el link en su correo. Puedes agregar un listener para detectar cuando se verifica.
@@ -803,7 +811,13 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                         _uiState.update {
                             it.copy(
                                 email = newEmail,
-                                successMessage = "✓ Email verificado y actualizado exitosamente"
+                                successMessage = if (isEmailChangePending) {
+                                    isEmailChangePending = false;
+                                    "✓ Email verificado y actualizado exitosamente"
+                                } else {
+
+                                    null
+                                }
                             )
                         }
                     } else if (newEmail != null) {

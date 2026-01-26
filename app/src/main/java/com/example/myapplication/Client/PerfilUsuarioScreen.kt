@@ -1,19 +1,16 @@
 package com.example.myapplication.Client
 
+import android.R
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,97 +21,32 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.Profile.ProfileViewModel
-import com.example.myapplication.Profile.ProfileUiState
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
-import com.example.myapplication.ui.theme.MyApplicationTheme
+import kotlin.contracts.contract
 
 @Composable
-fun PerfilUsuarioScreen(
+fun ClientProfileScreen(
     profileViewModel: ProfileViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
     val uiState by profileViewModel.uiState.collectAsState()
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-
-    // Cargar perfil al iniciar
-    LaunchedEffect(Unit) {
-        profileViewModel.loadUserProfile()
-        // Verificar si el email fue actualizado después de verificación
-        profileViewModel.checkAndCompleteEmailChange()
-    }
-
-    // Detectar cuando la app vuelve al primer plano para recargar datos
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                // Cuando la app vuelve del navegador (después de verificar email)
-                profileViewModel.checkAndCompleteEmailChange()
-                profileViewModel.loadUserProfile()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    PerfilUsuarioScreenContent(
-        uiState = uiState,
-        onNavigateBack = onNavigateBack,
-        onLogout = onLogout,
-        onUpdateProfilePhoto = profileViewModel::updateProfilePhoto,
-        onDeleteProfilePhoto = profileViewModel::deleteProfilePhoto,
-        onUpdateCoverPhoto = profileViewModel::updateCoverPhoto,
-        onDeleteCoverPhoto = profileViewModel::deleteCoverPhoto,
-        onGetCurrentLocation = profileViewModel::getCurrentLocation,
-        onUpdateProfile = profileViewModel::updateProfile,
-        onUpdateEmail = profileViewModel::updateEmail,
-        onUpdatePassword = profileViewModel::updatePassword,
-        onAddressChange = profileViewModel::onAddressChange,
-        onAddressHomeChange = profileViewModel::onAddressHomeChange,
-        onAddressWorkChange = profileViewModel::onAddressWorkChange,
-        onUpdateAddresses = profileViewModel::updateAddresses,
-        onClearMessages = profileViewModel::clearMessages
-    )
-}
-
-@Composable
-fun PerfilUsuarioScreenContent(
-    uiState: ProfileUiState,
-    onNavigateBack: () -> Unit,
-    onLogout: () -> Unit,
-    onUpdateProfilePhoto: (android.net.Uri) -> Unit,
-    onDeleteProfilePhoto: () -> Unit,
-    onUpdateCoverPhoto: (android.net.Uri) -> Unit,
-    onDeleteCoverPhoto: () -> Unit,
-    onGetCurrentLocation: (android.content.Context) -> Unit,
-    onUpdateProfile: (String, String, String) -> Unit,
-    onUpdateEmail: (String, String) -> Unit,
-    onUpdatePassword: (String, String) -> Unit,
-    onAddressChange: (String) -> Unit,
-    onAddressHomeChange: (String) -> Unit,
-    onAddressWorkChange: (String) -> Unit,
-    onUpdateAddresses: () -> Unit,
-    onClearMessages: () -> Unit
-) {
     val scrollState = rememberScrollState()
     var showEditDialog by remember { mutableStateOf(false) }
-    var showEditEmailDialog by remember { mutableStateOf(false) }
+    var showEditEmailDialog by remember {mutableStateOf(false)}
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showAddressManagerDialog by remember { mutableStateOf(false) }
-
+    
     // Estados para confirmación de cambios
     var showConfirmEmailChangeDialog by remember { mutableStateOf(false) }
     var showConfirmPasswordChangeDialog by remember { mutableStateOf(false) }
@@ -122,51 +54,52 @@ fun PerfilUsuarioScreenContent(
     var pendingPassword by remember { mutableStateOf("") }
     var pendingCurrentPassword by remember { mutableStateOf("") }
     var pendingNewPassword by remember { mutableStateOf("") }
-
+    
     // Manejar el botón "Atrás" del sistema (hardware o gestos)
     BackHandler {
         onNavigateBack()
     }
-
+    
     // Colores adaptativos para modo oscuro
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
     val backgroundColor = if (isDarkTheme) Color(0xFF0F172A) else Color(0xFFF8FAFC)
     val surfaceColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White
     val textPrimaryColor = if (isDarkTheme) Color.White else Color(0xFF1E293B)
     val textSecondaryColor = if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B)
     val dividerColor = if (isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)
-
+    
     // Launcher para seleccionar imagen
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            onUpdateProfilePhoto(it)
+            profileViewModel.updateProfilePhoto(it)
         }
     }
 
+
     // Launcher para seleccionar foto de portada
-    val coverPhotoPickerLauncher = rememberLauncherForActivityResult(
+    val  coverPhotoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            onUpdateCoverPhoto(it)
+            profileViewModel.updateCoverPhoto(it)
         }
     }
 
     // Launcher para permisos de ubicación
-    val context = LocalContext.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            onGetCurrentLocation(context)
+            profileViewModel.getCurrentLocation(context)
         }
     }
-
+    
     // Snackbar para mensajes de éxito y error
     val snackbarHostState = remember { SnackbarHostState() }
-
+    
     // Observar mensajes de éxito y error
     LaunchedEffect(uiState.successMessage, uiState.error) {
         uiState.successMessage?.let { message ->
@@ -174,22 +107,52 @@ fun PerfilUsuarioScreenContent(
                 message = message,
                 duration = SnackbarDuration.Short
             )
-            onClearMessages()
+            profileViewModel.clearMessages()
         }
         uiState.error?.let { error ->
             snackbarHostState.showSnackbar(
                 message = error,
                 duration = SnackbarDuration.Long
             )
-            onClearMessages()
+            profileViewModel.clearMessages()
         }
     }
+    
+    // Cargar perfil al iniciar
+    LaunchedEffect(Unit) {
+        profileViewModel.loadUserProfile()
+        // Verificar si el email fue actualizado después de verificación
+        profileViewModel.checkAndCompleteEmailChange()
+    }
+    
+    // Detectar cuando la app vuelve al primer plano para recargar datos
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isFirstLaunch by remember { mutableStateOf(true) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                //Correcion la primera carga (ya se hace en LaunchedEffect)
+                if (isFirstLaunch) {
+                    isFirstLaunch = false
+                } else {
+                    // Cuando la app vuelve del navegador (después de verificar email)
+                    profileViewModel.checkAndCompleteEmailChange()
+                    profileViewModel.loadUserProfile()
+                }
 
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    
     // Calcular la opacidad y progreso del scroll
     val scrollOffset = scrollState.value.toFloat()
     val headerHeight = 180f // Altura de la foto de portada
     val scrollProgress = (scrollOffset / headerHeight).coerceIn(0f, 1f)
-
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -214,15 +177,15 @@ fun PerfilUsuarioScreenContent(
                     coverPhotoUrl = uiState.coverPhotoUrl,
                     onBackClick = onNavigateBack,
                     onCameraClick = { imagePickerLauncher.launch("image/*") },
-                    onDeletePhoto = onDeleteProfilePhoto,
+                    onDeletePhoto = { profileViewModel.deleteProfilePhoto() },
                     onCoverPhotoClick = { coverPhotoPickerLauncher.launch("image/*") },
-                    onDeleteCoverPhoto = onDeleteCoverPhoto,
+                    onDeleteCoverPhoto = { profileViewModel.deleteCoverPhoto() },
                     surfaceColor = surfaceColor,
                     textPrimaryColor = textPrimaryColor,
                     textSecondaryColor = textSecondaryColor,
                     scrollOffset = scrollOffset // Pasar el offset para parallax
                 )
-
+                
                 // Contenido principal con bordes redondeados superiores
                 Surface(
                     modifier = Modifier
@@ -236,117 +199,118 @@ fun PerfilUsuarioScreenContent(
                         modifier = Modifier.padding(top = 16.dp)
                     ) {
                         Spacer(modifier = Modifier.height(16.dp))
-
+                        
                         // Información personal
                         ProfileSection(
                             title = "Información Personal",
                             surfaceColor = surfaceColor,
                             textPrimaryColor = textPrimaryColor,
-                            content = {
-                                Column {
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.Person,
-                                        title = "Nombre completo",
-                                        subtitle = uiState.displayName,
-                                        onClick = { showEditDialog = true },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                    HorizontalDivider(color = dividerColor)
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.Email,
-                                        title = "Correo electrónico",
-                                        subtitle = uiState.email,
-                                        onClick = { showEditEmailDialog = true },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                    HorizontalDivider(color = dividerColor)
+                    content = {
+                        Column {
+                            ProfileMenuItem(
+                                icon = Icons.Default.Person,
+                                title = "Nombre completo",
+                                subtitle = uiState.displayName,
+                                onClick = { showEditDialog = true },
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                            Divider(color = dividerColor)
+                            ProfileMenuItem(
+                                icon = Icons.Default.Email,
+                                title = "Correo electrónico",
+                                subtitle = uiState.email,
+                                onClick = { showEditEmailDialog = true },
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                            Divider(color = dividerColor)
 
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.Lock,
-                                        title = "Cambiar contraseña",
-                                        subtitle = "Actualizar contraseña",
-                                        iconColor = Color(0xFF8B5CF6),
-                                        onClick = { showChangePasswordDialog = true },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                    HorizontalDivider(color = dividerColor)
+                            ProfileMenuItem(
+                                icon = Icons.Default.Lock,
+                                title = "Cambiar contraseña",
+                                subtitle = "Actualizar contraseña",
+                                iconColor = Color(0xFF8B5CF6),
+                                onClick = { showChangePasswordDialog = true},
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                            Divider(color = dividerColor)
 
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.Phone,
-                                        title = "Teléfono",
-                                        subtitle = uiState.phoneNumber.ifEmpty { "Agregar teléfono" },
-                                        onClick = { showEditDialog = true },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                    HorizontalDivider(color = dividerColor)
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.LocationOn,
-                                        title = "Dirección",
-                                        subtitle = uiState.address.ifEmpty { "Agregar dirección" },
-                                        onClick = { showAddressManagerDialog = true },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                }
-                            }
-                        )
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Configuraciones
-                        ProfileSection(
-                            title = "Configuración",
-                            surfaceColor = surfaceColor,
-                            textPrimaryColor = textPrimaryColor,
-                            content = {
-                                Column {
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.Notifications,
-                                        title = "Notificaciones",
-                                        subtitle = "Configurar preferencias",
-                                        iconColor = Color(0xFFF59E0B),
-                                        onClick = { /* TODO */ },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                    HorizontalDivider(color = dividerColor)
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.Lock,
-                                        title = "Privacidad y seguridad",
-                                        subtitle = "Gestionar permisos",
-                                        iconColor = Color(0xFF8B5CF6),
-                                        onClick = { /* TODO */ },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                    HorizontalDivider(color = dividerColor)
-                                    ProfileMenuItem(
-                                        icon = Icons.Default.Info,
-                                        title = "Ayuda y soporte",
-                                        subtitle = "Centro de ayuda",
-                                        iconColor = Color(0xFF10B981),
-                                        onClick = { /* TODO */ },
-                                        textPrimaryColor = textPrimaryColor,
-                                        textSecondaryColor = textSecondaryColor
-                                    )
-                                }
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        // Botón de cerrar sesión
-                        LogoutButton(onClick = onLogout)
-
-                        Spacer(modifier = Modifier.height(24.dp))
+                            ProfileMenuItem(
+                                icon = Icons.Default.Phone,
+                                title = "Teléfono",
+                                subtitle = uiState.phoneNumber.ifEmpty { "Agregar teléfono" },
+                                onClick = { showEditDialog = true },
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                            Divider(color = dividerColor)
+                            ProfileMenuItem(
+                                icon = Icons.Default.LocationOn,
+                                title = "Dirección",
+                                subtitle = uiState.address.ifEmpty { "Agregar dirección" },
+                                onClick = { showAddressManagerDialog = true },
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                        }
+                    }
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Configuraciones
+                ProfileSection(
+                    title = "Configuración",
+                    surfaceColor = surfaceColor,
+                    textPrimaryColor = textPrimaryColor,
+                    content = {
+                        Column {
+                            ProfileMenuItem(
+                                icon = Icons.Default.Notifications,
+                                title = "Notificaciones",
+                                subtitle = "Configurar preferencias",
+                                iconColor = Color(0xFFF59E0B),
+                                onClick = { /* TODO */ },
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                            Divider(color = dividerColor)
+                            ProfileMenuItem(
+                                icon = Icons.Default.Lock,
+                                title = "Privacidad y seguridad",
+                                subtitle = "Gestionar permisos",
+                                iconColor = Color(0xFF8B5CF6),
+                                onClick = { /* TODO */ },
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                            Divider(color = dividerColor)
+                            ProfileMenuItem(
+                                icon = Icons.Default.Info,
+                                title = "Ayuda y soporte",
+                                subtitle = "Centro de ayuda",
+                                iconColor = Color(0xFF10B981),
+                                onClick = { /* TODO */ },
+                                textPrimaryColor = textPrimaryColor,
+                                textSecondaryColor = textSecondaryColor
+                            )
+                        }
+                    }
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Botón de cerrar sesión
+                LogoutButton(onClick = onLogout)
+                
+                Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
             }
-
+            
             // Header dinámico que aparece al hacer scroll
             AnimatedTopBar(
                 userName = uiState.displayName.ifEmpty { "Usuario" },
@@ -356,7 +320,7 @@ fun PerfilUsuarioScreenContent(
                 surfaceColor = surfaceColor,
                 textPrimaryColor = textPrimaryColor
             )
-
+            
             // Snackbar Host
             SnackbarHost(
                 hostState = snackbarHostState,
@@ -373,7 +337,7 @@ fun PerfilUsuarioScreenContent(
             }
         }
     }
-
+    
     // Diálogo de edición
     if (showEditDialog) {
         EditProfileDialog(
@@ -381,31 +345,38 @@ fun PerfilUsuarioScreenContent(
             currentPhone = uiState.phoneNumber,
             onDismiss = { showEditDialog = false },
             onSave = { name, phone ->
-                onUpdateProfile(name, phone, uiState.address)
+                profileViewModel.updateProfile(
+                    displayName = name,
+                    phoneNumber = phone,
+                    address = uiState.address
+                )
                 showEditDialog = false
             }
         )
     }
-
+    
     // Diálogo para editar email
     if (showEditEmailDialog) {
         EditEmailDialog(
             currentEmail = uiState.email,
             onDismiss = { showEditEmailDialog = false },
             onConfirm = { newEmail, password ->
+                // Mostrar confirmación antes de cambiar
                 showEditEmailDialog = false
+                // Aquí mostramos el diálogo de confirmación
                 showConfirmEmailChangeDialog = true
                 pendingNewEmail = newEmail
                 pendingPassword = password
             }
         )
     }
-
+    
     // Diálogo para cambiar contraseña
     if (showChangePasswordDialog) {
         ChangePasswordDialog(
             onDismiss = { showChangePasswordDialog = false },
             onConfirm = { currentPassword, newPassword ->
+                // Mostrar confirmación antes de cambiar
                 showChangePasswordDialog = false
                 showConfirmPasswordChangeDialog = true
                 pendingCurrentPassword = currentPassword
@@ -413,7 +384,7 @@ fun PerfilUsuarioScreenContent(
             }
         )
     }
-
+    
     // Diálogo para gestionar direcciones
     if (showAddressManagerDialog) {
         AddressManagerDialog(
@@ -425,23 +396,23 @@ fun PerfilUsuarioScreenContent(
                 locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
             },
             onSaveCurrentAddress = { address ->
-                onAddressChange(address)
-                onUpdateAddresses()
+                profileViewModel.onAddressChange(address)
+                profileViewModel.updateAddresses()
             },
             onSaveHomeAddress = { address ->
-                onAddressHomeChange(address)
-                onUpdateAddresses()
+                profileViewModel.onAddressHomeChange(address)
+                profileViewModel.updateAddresses()
             },
             onSaveWorkAddress = { address ->
-                onAddressWorkChange(address)
-                onUpdateAddresses()
+                profileViewModel.onAddressWorkChange(address)
+                profileViewModel.updateAddresses()
             },
             surfaceColor = surfaceColor,
             textPrimaryColor = textPrimaryColor,
             textSecondaryColor = textSecondaryColor
         )
     }
-
+    
     // Diálogo de confirmación para cambio de email
     if (showConfirmEmailChangeDialog) {
         AlertDialog(
@@ -477,7 +448,7 @@ fun PerfilUsuarioScreenContent(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onUpdateEmail(pendingNewEmail, pendingPassword)
+                        profileViewModel.updateEmail(pendingNewEmail, pendingPassword)
                         showConfirmEmailChangeDialog = false
                     }
                 ) {
@@ -500,7 +471,7 @@ fun PerfilUsuarioScreenContent(
             }
         )
     }
-
+    
     // Diálogo de confirmación para cambio de contraseña
     if (showConfirmPasswordChangeDialog) {
         AlertDialog(
@@ -530,7 +501,7 @@ fun PerfilUsuarioScreenContent(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onUpdatePassword(pendingCurrentPassword, pendingNewPassword)
+                        profileViewModel.updatePassword(pendingCurrentPassword, pendingNewPassword)
                         showConfirmPasswordChangeDialog = false
                     }
                 ) {
@@ -570,13 +541,13 @@ fun AnimatedTopBar(
         targetValue = scrollProgress,
         label = "backgroundAlpha"
     )
-
+    
     // Animar la opacidad del texto y avatar
     val contentAlpha by animateFloatAsState(
         targetValue = if (scrollProgress > 0.7f) 1f else 0f,
         label = "contentAlpha"
     )
-
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -593,14 +564,14 @@ fun AnimatedTopBar(
             // Botón de volver
             IconButton(onClick = onBackClick) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Volver",
                     tint = if (backgroundAlpha > 0.5f) textPrimaryColor else Color.White
                 )
             }
-
+            
             Spacer(modifier = Modifier.width(8.dp))
-
+            
             // Avatar pequeño y nombre (aparecen gradualmente)
             if (contentAlpha > 0f) {
                 Row(
@@ -626,7 +597,7 @@ fun AnimatedTopBar(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = userName.firstOrNull()?.uppercase()?.toString() ?: "U",
+                                    text = userName.firstOrNull()?.uppercase() ?: "U",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
@@ -634,9 +605,9 @@ fun AnimatedTopBar(
                             }
                         }
                     }
-
+                    
                     Spacer(modifier = Modifier.width(12.dp))
-
+                    
                     // Nombre
                     Text(
                         text = userName,
@@ -652,8 +623,8 @@ fun AnimatedTopBar(
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (backgroundAlpha > 0.5f) textPrimaryColor else Color.White,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = 1f - contentAlpha
+                    modifier = Modifier.graphicsLayer { 
+                        alpha = 1f - contentAlpha 
                     }
                 )
             }
@@ -679,7 +650,7 @@ fun ProfileHeader(
     scrollOffset: Float = 0f
 ) {
     val parallaxEffect = scrollOffset * 0.5f // Efecto parallax (se mueve más lento)
-
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -715,7 +686,7 @@ fun ProfileHeader(
                         )
                 )
             }
-
+            
             IconButton(
                 onClick = onCoverPhotoClick,
                 modifier = Modifier
@@ -737,7 +708,7 @@ fun ProfileHeader(
                     )
                 }
             }
-
+            
             if (coverPhotoUrl.isNotEmpty()) {
                 IconButton(
                     onClick = onDeleteCoverPhoto,
@@ -762,7 +733,7 @@ fun ProfileHeader(
                 }
             }
         }
-
+        
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -780,7 +751,7 @@ fun ProfileHeader(
                     modifier = Modifier.offset(y = (-50).dp)
                 ) {
                     val displayName = userName.ifEmpty { "Usuario" }
-
+                    
                     Box(
                         modifier = Modifier
                             .size(100.dp)
@@ -802,7 +773,7 @@ fun ProfileHeader(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
-
+                            
                             if (photoUrl.isNotEmpty()) {
                                 AsyncImage(
                                     model = photoUrl,
@@ -815,7 +786,7 @@ fun ProfileHeader(
                             }
                         }
                     }
-
+                    
                     Surface(
                         modifier = Modifier
                             .size(32.dp)
@@ -838,7 +809,7 @@ fun ProfileHeader(
                             )
                         }
                     }
-
+                    
                     if (photoUrl.isNotEmpty()) {
                         Surface(
                             modifier = Modifier
@@ -864,14 +835,14 @@ fun ProfileHeader(
                         }
                     }
                 }
-
+                
                 Text(
                     text = userEmail,
                     fontSize = 14.sp,
                     color = textSecondaryColor,
                     modifier = Modifier.offset(y = (-40).dp)
                 )
-
+                
                 Text(
                     text = userName,
                     fontSize = 28.sp,
@@ -879,7 +850,7 @@ fun ProfileHeader(
                     color = textPrimaryColor,
                     modifier = Modifier.offset(y = (-36).dp)
                 )
-
+                
                 Spacer(modifier = Modifier.height((-36).dp))
             }
         }
@@ -906,7 +877,7 @@ fun ProfileSection(
             color = textPrimaryColor,
             modifier = Modifier.padding(bottom = 12.dp)
         )
-
+        
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -950,9 +921,9 @@ fun ProfileMenuItem(
                 modifier = Modifier.size(20.dp)
             )
         }
-
+        
         Spacer(modifier = Modifier.width(12.dp))
-
+        
         // Textos
         Column(modifier = Modifier.weight(1f)) {
             if (subtitle.isNotEmpty()) {
@@ -969,10 +940,10 @@ fun ProfileMenuItem(
                 color = textSecondaryColor
             )
         }
-
+        
         // Flecha
         Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            imageVector = Icons.Default.KeyboardArrowRight,
             contentDescription = null,
             tint = textSecondaryColor
         )
@@ -998,7 +969,7 @@ fun LogoutButton(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                imageVector = Icons.Default.ExitToApp,
                 contentDescription = "Cerrar sesión",
                 tint = Color(0xFFEF4444)
             )
@@ -1023,10 +994,10 @@ fun EditProfileDialog(
 ) {
     var name by remember { mutableStateOf(currentName) }
     var phone by remember { mutableStateOf(currentPhone) }
-
+    
     // Colores adaptativos
     val appColors = com.example.myapplication.ui.theme.getAppColors()
-
+    
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = appColors.surfaceColor,
@@ -1096,10 +1067,10 @@ fun EditEmailDialog(
     var newEmail by remember { mutableStateOf(currentEmail) }
     var password by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
-
+    
     // Colores adaptativos
     val appColors = com.example.myapplication.ui.theme.getAppColors()
-
+    
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = appColors.surfaceColor,
@@ -1120,10 +1091,10 @@ fun EditEmailDialog(
                     fontSize = 14.sp,
                     color = appColors.textSecondaryColor
                 )
-
+                
                 OutlinedTextField(
                     value = newEmail,
-                    onValueChange = {
+                    onValueChange = { 
                         newEmail = it
                         showError = false
                     },
@@ -1147,10 +1118,10 @@ fun EditEmailDialog(
                         cursorColor = appColors.accentBlue
                     )
                 )
-
+                
                 OutlinedTextField(
                     value = password,
-                    onValueChange = {
+                    onValueChange = { 
                         password = it
                         showError = false
                     },
@@ -1174,7 +1145,7 @@ fun EditEmailDialog(
                         cursorColor = appColors.accentBlue
                     )
                 )
-
+                
                 if (showError) {
                     Text(
                         text = "El email debe ser válido y la contraseña correcta",
@@ -1219,10 +1190,10 @@ fun ChangePasswordDialog(
     var confirmPassword by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
-
+    
     // Colores adaptativos
     val appColors = com.example.myapplication.ui.theme.getAppColors()
-
+    
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = appColors.surfaceColor,
@@ -1240,7 +1211,7 @@ fun ChangePasswordDialog(
             ) {
                 OutlinedTextField(
                     value = currentPassword,
-                    onValueChange = {
+                    onValueChange = { 
                         currentPassword = it
                         showError = false
                     },
@@ -1264,10 +1235,10 @@ fun ChangePasswordDialog(
                         cursorColor = appColors.accentBlue
                     )
                 )
-
+                
                 OutlinedTextField(
                     value = newPassword,
-                    onValueChange = {
+                    onValueChange = { 
                         newPassword = it
                         showError = false
                     },
@@ -1292,10 +1263,10 @@ fun ChangePasswordDialog(
                         cursorColor = appColors.accentBlue
                     )
                 )
-
+                
                 OutlinedTextField(
                     value = confirmPassword,
-                    onValueChange = {
+                    onValueChange = { 
                         confirmPassword = it
                         showError = false
                     },
@@ -1320,7 +1291,7 @@ fun ChangePasswordDialog(
                         cursorColor = appColors.accentBlue
                     )
                 )
-
+                
                 if (showError) {
                     Text(
                         text = errorMessage,
@@ -1446,9 +1417,9 @@ fun AddressManagerDialog(
                         }
                     }
                 )
-
+                
                 Spacer(modifier = Modifier.height(16.dp))
-
+                
                 // Dirección de Casa
                 if (showHomeField) {
                     Text(
@@ -1458,7 +1429,7 @@ fun AddressManagerDialog(
                         color = textPrimaryColor,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-
+                    
                     // Dirección completa
                     OutlinedTextField(
                         value = homeAddressText,
@@ -1479,9 +1450,9 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(8.dp))
-
+                    
                     // Ciudad
                     OutlinedTextField(
                         value = homeCityText,
@@ -1502,9 +1473,9 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(8.dp))
-
+                    
                     // Provincia/Estado
                     OutlinedTextField(
                         value = homeStateText,
@@ -1525,9 +1496,9 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(8.dp))
-
+                    
                     // Código Postal
                     OutlinedTextField(
                         value = homeZipCodeText,
@@ -1548,10 +1519,10 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(16.dp))
                 }
-
+                
                 // Dirección de Trabajo
                 if (showWorkField) {
                     Text(
@@ -1561,7 +1532,7 @@ fun AddressManagerDialog(
                         color = textPrimaryColor,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-
+                    
                     // Dirección completa
                     OutlinedTextField(
                         value = workAddressText,
@@ -1582,9 +1553,9 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(8.dp))
-
+                    
                     // Ciudad
                     OutlinedTextField(
                         value = workCityText,
@@ -1605,9 +1576,9 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(8.dp))
-
+                    
                     // Provincia/Estado
                     OutlinedTextField(
                         value = workStateText,
@@ -1628,9 +1599,9 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(8.dp))
-
+                    
                     // Código Postal
                     OutlinedTextField(
                         value = workZipCodeText,
@@ -1651,10 +1622,10 @@ fun AddressManagerDialog(
                             )
                         }
                     )
-
+                    
                     Spacer(modifier = Modifier.height(16.dp))
                 }
-
+                
                 // Botones para agregar direcciones
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1678,7 +1649,7 @@ fun AddressManagerDialog(
                             Text("Casa", color = Color(0xFF10B981), fontSize = 12.sp)
                         }
                     }
-
+                    
                     if (!showWorkField) {
                         Button(
                             onClick = { showWorkField = true },
@@ -1723,33 +1694,16 @@ fun AddressManagerDialog(
     )
 }
 
-@Preview(showBackground = true)
+// Alias para compatibilidad con AppNavigation.kt
 @Composable
-fun PerfilUsuarioScreenPreview() {
-    MyApplicationTheme {
-        PerfilUsuarioScreenContent(
-            uiState = ProfileUiState(
-                displayName = "Usuario de Prueba",
-                email = "usuario@ejemplo.com",
-                phoneNumber = "1234567890",
-                address = "Calle Falsa 123",
-                isComplete = true
-            ),
-            onNavigateBack = {},
-            onLogout = {},
-            onUpdateProfilePhoto = {},
-            onDeleteProfilePhoto = {},
-            onUpdateCoverPhoto = {},
-            onDeleteCoverPhoto = {},
-            onGetCurrentLocation = {},
-            onUpdateProfile = { _, _, _ -> },
-            onUpdateEmail = { _, _ -> },
-            onUpdatePassword = { _, _ -> },
-            onAddressChange = {},
-            onAddressHomeChange = {},
-            onAddressWorkChange = {},
-            onUpdateAddresses = {},
-            onClearMessages = {}
-        )
-    }
+fun PerfilUsuarioScreen(
+    profileViewModel: ProfileViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit = {},
+    onLogout: () -> Unit = {}
+) {
+    ClientProfileScreen(
+        profileViewModel = profileViewModel,
+        onNavigateBack = onNavigateBack,
+        onLogout = onLogout
+    )
 }

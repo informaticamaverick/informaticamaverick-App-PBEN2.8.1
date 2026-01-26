@@ -1,7 +1,10 @@
 package com.example.myapplication.prestador.ui.dashboard
 
+import android.provider.CalendarContract
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,6 +13,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -19,24 +23,41 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.prestador.ui.chat.PrestadorChatScreen
+import com.example.myapplication.prestador.ui.calendar.PrestadorCalendarScreen
 
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun PreviewDashboard() {
-    PrestadorDashboardScreen()
+    MaterialTheme {
+        PrestadorDashboardScreen(
+            onNavigateToEditProfile = {},
+            onNavigateToServiceConfig = {},
+            onLogout = {}
+        )
+    }
 }
 
 @Composable
-fun PrestadorDashboardScreen() {
-    var selectedTab by remember { mutableStateOf(1) } // Inicia en Home (1)
+fun PrestadorDashboardScreen(
+    onNavigateToEditProfile: () -> Unit = {},
+    onNavigateToServiceConfig: () -> Unit = {},
+    onLogout: () -> Unit = {}, // Nuevo parametro
+    onNavigateToPresupuesto: () -> Unit = {}
+) {
+    var selectedTab by remember { mutableStateOf(2) } // Inicia en Home (2)
+    var isInConversation by remember { mutableStateOf(false) }
 
     Scaffold(
         bottomBar = {
-            PrestadorBottomNavigationBar(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
+            // Ocultar barra de navegación cuando se está en una conversación individual
+            if (!(selectedTab == 3 && isInConversation)) {
+                PrestadorBottomNavigationBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
+                )
+            }
         }
     ) { paddingValues ->
         Box(
@@ -45,12 +66,35 @@ fun PrestadorDashboardScreen() {
                 .padding(paddingValues)
                 .background(Color(0xFFFFF8F3))
         ) {
-            // Contenido según el tab seleccionado
-            when (selectedTab) {
-                0 -> CalendarioContent()
-                1 -> InicioContent()
-                2 -> ChatContent()
-                3 -> NotificacionesContent()
+            // Animación suave al cambiar de tab
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(300)) +
+                        scaleIn(initialScale = 0.92f, animationSpec = tween(300)) togetherWith
+                        fadeOut(animationSpec = tween(300)) +
+                        scaleOut(targetScale = 0.92f, animationSpec = tween(300))
+                },
+                label = "tab_transition"
+            ) { currentTab ->
+                // Contenido según el tab seleccionado
+                when (currentTab) {
+                    0 -> PresupuestoContent()
+                    1 -> PrestadorCalendarScreen(
+                        onBack = { selectedTab = 2 }
+                    )
+                    2 -> InicioContent(
+                        onNavigateToEditProfile = onNavigateToEditProfile,
+                        onNavigateToServiceConfig = onNavigateToServiceConfig,
+                        onLogout = onLogout
+                    )
+                    3 -> PrestadorChatScreen(
+                        onBack = { selectedTab = 2 },
+                        onInConversationChange = { isInConversation = it },
+                        onNavigateToPresupuesto = onNavigateToPresupuesto
+                    )
+                    4 -> NotificacionesContent()
+                }
             }
         }
     }
@@ -81,31 +125,36 @@ fun PrestadorBottomNavigationBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Calendario (Izquierda)
+            // Presupuesto (Extremo izquierdo)
             BottomNavItem(
-                icon = Icons.Default.DateRange,
-                label = "Calendario",
+                icon = Icons.Default.Edit,
+                label = "Presupuesto",
                 isSelected = selectedTab == 0,
                 onClick = { onTabSelected(0) }
             )
 
-            // Espaciador
-            Spacer(modifier = Modifier.width(8.dp))
+            // Calendario
+            BottomNavItem(
+                icon = Icons.Default.DateRange,
+                label = "Calendario",
+                isSelected = selectedTab == 1,
+                onClick = { onTabSelected(1) }
+            )
 
             // Inicio (Centro - Botón destacado)
             Box(
                 modifier = Modifier
                     .size(60.dp)
-                    .scale(if (selectedTab == 1) pulseScale else 1f),
+                    .scale(if (selectedTab == 2) pulseScale else 1f),
                 contentAlignment = Alignment.Center
             ) {
                 FloatingActionButton(
-                    onClick = { onTabSelected(1) },
-                    containerColor = if (selectedTab == 1) {
+                    onClick = { onTabSelected(2) },
+                    containerColor = if (selectedTab == 2) {
                         Color(0xFFFF6B35) // Naranja intenso
                     } else {
                         Color(0xFFFF9F66) // Naranja medio
@@ -125,15 +174,12 @@ fun PrestadorBottomNavigationBar(
                 }
             }
 
-            // Espaciador
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Chat (Derecha centro)
+            // Chat
             BottomNavItem(
                 icon = Icons.Default.Email,
                 label = "Chat",
-                isSelected = selectedTab == 2,
-                onClick = { onTabSelected(2) },
+                isSelected = selectedTab == 3,
+                onClick = { onTabSelected(3) },
                 showBadge = true,
                 badgeCount = 3
             )
@@ -142,8 +188,8 @@ fun PrestadorBottomNavigationBar(
             BottomNavItem(
                 icon = Icons.Default.Notifications,
                 label = "Alertas",
-                isSelected = selectedTab == 3,
-                onClick = { onTabSelected(3) },
+                isSelected = selectedTab == 4,
+                onClick = { onTabSelected(4) },
                 showBadge = true,
                 badgeCount = 5
             )
@@ -175,7 +221,7 @@ fun RowScope.BottomNavItem(
                 badge = {
                     if (showBadge && badgeCount > 0) {
                         Badge(
-                            containerColor = Color(0xFFEF4444), // Rojo
+                            containerColor = Color(0xFFFF6B35), // Rojo
                             contentColor = Color.White
                         ) {
                             Text(
@@ -213,7 +259,7 @@ fun RowScope.BottomNavItem(
 // ==================== CONTENIDO DE CADA TAB ====================
 
 @Composable
-fun InicioContent() {
+fun PresupuestoContent() {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -221,7 +267,6 @@ fun InicioContent() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Indicador visual con gradiente naranja
         Box(
             modifier = Modifier
                 .size(120.dp)
@@ -237,7 +282,7 @@ fun InicioContent() {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.Home,
+                imageVector = Icons.Default.Edit,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(60.dp)
@@ -247,7 +292,7 @@ fun InicioContent() {
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Inicio",
+            text = "Presupuesto",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFFFF6B35)
@@ -256,10 +301,210 @@ fun InicioContent() {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Panel principal del prestador",
+            text = "Gestiona tus cotizaciones",
             fontSize = 16.sp,
             color = Color(0xFF6B7280)
         )
+    }
+}
+
+@Composable
+fun InicioContent(
+    onNavigateToEditProfile: () -> Unit = {},
+    onNavigateToServiceConfig: () -> Unit = {},
+    onLogout: () -> Unit = {}
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFFFF8F3))
+    ) {
+        // Header naranja con avatar y menú
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFFF6B35),
+                            Color(0xFFFF9F66)
+                        )
+                    ),
+                    shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+                )
+                .padding(16.dp)
+        ) {
+            Column {
+                // Fila superior: Avatar + Nombre centrado
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Avatar a la izquierda
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.3f),
+                                    shape = CircleShape
+                                )
+                                .border(2.dp, Color.White.copy(alpha = 0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            IconButton(
+                                onClick = { showMenu = !showMenu }
+                            ) {
+                                Text(
+                                    text = "P", // TODO: Obtener inicial del usuario
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        
+                        // Menú desplegable
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            modifier = Modifier.background(Color.White)
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF6B35),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = "Editar Perfil",
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF1E293B)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigateToEditProfile()
+                                }
+                            )
+                            
+                            HorizontalDivider(color = Color(0xFFE2E8F0))
+                            
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF6B35),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = "Configurar Servicio",
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF1E293B)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigateToServiceConfig()
+                                }
+                            )
+                            
+                            HorizontalDivider(color = Color(0xFFE2E8F0))
+                            
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ExitToApp,
+                                            contentDescription = null,
+                                            tint = Color(0xFFEF4444),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = "Cerrar Sesión",
+                                            fontSize = 14.sp,
+                                            color = Color(0xFFEF4444)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onLogout() //Llamar al callback
+                                    // TODO: Cerrar sesión
+                                }
+                            )
+                        }
+                    }
+                    
+                    // Nombre y estado (CENTRADO)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Hola, Prestador", // TODO: Obtener nombre del usuario
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color(0xFF10B981), shape = CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Disponible para Fast",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                    
+                    // Espaciador derecho para balancear (mismo tamaño que avatar)
+                    Spacer(modifier = Modifier.size(48.dp))
+                }
+            }
+        }
+        
+        // Contenido del dashboard (temporal)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Contenido del Dashboard",
+                fontSize = 16.sp,
+                color = Color(0xFF6B7280)
+            )
+        }
     }
 }
 
