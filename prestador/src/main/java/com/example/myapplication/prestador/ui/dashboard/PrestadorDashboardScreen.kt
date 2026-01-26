@@ -32,7 +32,9 @@ import com.example.myapplication.prestador.ui.calendar.PrestadorCalendarScreen
 fun PreviewDashboard() {
     MaterialTheme {
         PrestadorDashboardScreen(
-            onNavigateToEditProfile = {}
+            onNavigateToEditProfile = {},
+            onNavigateToServiceConfig = {},
+            onLogout = {}
         )
     }
 }
@@ -40,7 +42,9 @@ fun PreviewDashboard() {
 @Composable
 fun PrestadorDashboardScreen(
     onNavigateToEditProfile: () -> Unit = {},
-    onLogout: () -> Unit = {} // Nuevo parametro
+    onNavigateToServiceConfig: () -> Unit = {},
+    onLogout: () -> Unit = {}, // Nuevo parametro
+    onNavigateToPresupuesto: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(2) } // Inicia en Home (2)
     var isInConversation by remember { mutableStateOf(false) }
@@ -79,12 +83,15 @@ fun PrestadorDashboardScreen(
                     1 -> PrestadorCalendarScreen(
                         onBack = { selectedTab = 2 }
                     )
-                    2 -> InicioContent(onNavigateToEditProfile = onNavigateToEditProfile,
-                    onLogout = onLogout
+                    2 -> InicioContent(
+                        onNavigateToEditProfile = onNavigateToEditProfile,
+                        onNavigateToServiceConfig = onNavigateToServiceConfig,
+                        onLogout = onLogout
                     )
                     3 -> PrestadorChatScreen(
                         onBack = { selectedTab = 2 },
-                        onInConversationChange = { isInConversation = it }
+                        onInConversationChange = { isInConversation = it },
+                        onNavigateToPresupuesto = onNavigateToPresupuesto
                     )
                     4 -> NotificacionesContent()
                 }
@@ -304,6 +311,7 @@ fun PresupuestoContent() {
 @Composable
 fun InicioContent(
     onNavigateToEditProfile: () -> Unit = {},
+    onNavigateToServiceConfig: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -407,7 +415,7 @@ fun InicioContent(
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
-                                            text = "Configuración",
+                                            text = "Configurar Servicio",
                                             fontSize = 14.sp,
                                             color = Color(0xFF1E293B)
                                         )
@@ -415,7 +423,7 @@ fun InicioContent(
                                 },
                                 onClick = {
                                     showMenu = false
-                                    // TODO: Navegar a configuración
+                                    onNavigateToServiceConfig()
                                 }
                             )
                             

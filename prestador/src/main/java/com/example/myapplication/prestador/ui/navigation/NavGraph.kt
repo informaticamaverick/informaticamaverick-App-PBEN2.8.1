@@ -8,10 +8,13 @@ import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.example.myapplication.prestador.ui.chat.PrestadorChatScreen
 import com.example.myapplication.prestador.ui.login.PrestadorLoginScreen
 import com.example.myapplication.prestador.ui.register.PrestadorRegisterScreen
 import com.example.myapplication.prestador.ui.success.PrestadorSuccessScreen
 import com.example.myapplication.prestador.ui.dashboard.PrestadorDashboardScreen
+import com.example.myapplication.prestador.ui.config.ServiceConfigScreen
+import com.example.myapplication.prestador.ui.CrearPresupuestoPrestadorScreen
 
 @Composable
 fun PrestadorNavGraph(
@@ -93,18 +96,45 @@ fun PrestadorNavGraph(
                 onNavigateToEditProfile = {
                     navController.navigate(PrestadorRoutes.EditProfile.route)
                 },
+                onNavigateToServiceConfig = {
+                    navController.navigate(PrestadorRoutes.ServiceConfig.route)
+                },
                 onLogout = {
                     navController.navigate(PrestadorRoutes.Login.route) {
                         popUpTo(0) { inclusive = true}
                     } // Limpia toda la pila de navegacion
+                },
+                onNavigateToPresupuesto = {
+                    navController.navigate(PrestadorRoutes.CrearPresupuesto.route)
                 }
 
+            )
+        }
+        
+        composable(PrestadorRoutes.ServiceConfig.route) {
+            ServiceConfigScreen(
+                onBack = { navController.navigateUp() }
             )
         }
         
         composable(PrestadorRoutes.EditProfile.route) {
             // TODO: Implementar PrestadorEditProfileScreen
             Text("Editar Perfil - En construcción")
+        }
+
+        composable("chat") {
+            PrestadorChatScreen(
+                onBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToPresupuesto = {
+                    navController.navigate(PrestadorRoutes.CrearPresupuesto.route)
+                }
+            )
+        }
+        
+        composable(PrestadorRoutes.CrearPresupuesto.route) {
+            CrearPresupuestoPrestadorScreen()
         }
     }
 }

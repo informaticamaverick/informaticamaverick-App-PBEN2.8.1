@@ -1693,3 +1693,17 @@ fun AddressManagerDialog(
         }
     )
 }
+
+// Alias para compatibilidad con AppNavigation.kt
+@Composable
+fun PerfilUsuarioScreen(
+    profileViewModel: ProfileViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit = {},
+    onLogout: () -> Unit = {}
+) {
+    ClientProfileScreen(
+        profileViewModel = profileViewModel,
+        onNavigateBack = onNavigateBack,
+        onLogout = onLogout
+    )
+}

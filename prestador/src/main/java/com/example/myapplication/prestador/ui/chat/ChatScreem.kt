@@ -65,7 +65,8 @@ import kotlin.contracts.contract
 @Composable
 fun PrestadorChatScreen(
     onBack: () -> Unit = {},
-    onInConversationChange: (Boolean) -> Unit = {}
+    onInConversationChange: (Boolean) -> Unit = {},
+    onNavigateToPresupuesto: () -> Unit = {},
 ) {
     // Estado: null = lista de chats, non-null = conversación activa
     var activeChatUserId by remember { mutableStateOf<String?>(null) }
@@ -147,7 +148,8 @@ fun PrestadorChatScreen(
                     onBack = {
                         activeChatUserId = null
                         inputText = ""
-                    }
+                    },
+                    onNavigateToPresupuesto = onNavigateToPresupuesto
                 )
             }
         }
@@ -352,7 +354,8 @@ fun ChatConversationView(
     onInputChange: (String) -> Unit,
     onSendMessage: (String) -> Unit,
     onSendImage: (Uri) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToPresupuesto: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -624,6 +627,7 @@ fun ChatConversationView(
             onBudgetClick = {
                 showAttachMenu = false
                 // abrir presupuesto
+                onNavigateToPresupuesto()
             },
             onLocationClick = {
                 showAttachMenu = false
