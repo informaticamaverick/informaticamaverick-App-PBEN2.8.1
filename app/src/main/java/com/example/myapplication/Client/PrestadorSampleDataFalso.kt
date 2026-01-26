@@ -1,5 +1,6 @@
 package com.example.myapplication.Client
 
+import androidx.compose.runtime.mutableStateListOf
 import com.example.myapplication.R
 import kotlin.random.Random
 
@@ -22,12 +23,13 @@ data class PrestadorProfileFalso(
     val isFavorite: Boolean = false,
     val isVerified: Boolean,
     val isOnline: Boolean,
-    val isSubscribed: Boolean // CAMPO IS_SUBSCRIBED RE-AÑADIDO
+    val isSubscribed: Boolean
 )
 
 object SampleDataFalso {
 
-    val prestadores = listOf(
+    // [MODIFICACIÓN] Se cambia listOf por mutableStateListOf para que la UI reaccione a los cambios
+    val prestadores = mutableStateListOf(
         PrestadorProfileFalso(
             id = "1",
             name = "Maxi",
@@ -455,6 +457,15 @@ object SampleDataFalso {
             isSubscribed = false
         )
     )
+
+    // [NUEVO] Función para alternar el estado de favorito
+    fun toggleFavorite(id: String) {
+        val index = prestadores.indexOfFirst { it.id == id }
+        if (index != -1) {
+            val current = prestadores[index]
+            prestadores[index] = current.copy(isFavorite = !current.isFavorite)
+        }
+    }
 
     fun getPrestadorById(id: String): PrestadorProfileFalso? {
         return prestadores.find { it.id == id }

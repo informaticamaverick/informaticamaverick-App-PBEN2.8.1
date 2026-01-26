@@ -5,96 +5,117 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 
-// 1. DATA CLASS ACTUALIZADA PARA INCLUIR LA LISTA DE IDS
 data class CategoryItem(
     val name: String,
-    val icon: ImageVector,
+    val icon: String, // Cambiado de ImageVector a String para usar Emojis
     val color: Color,
-    val providerIds: List<String> = emptyList() // NUEVO CAMPO (con valor por defecto)
+    val superCategory: String, // [NUEVO] Parámetro para la supercategoría
+    val providerIds: List<String> = emptyList()
 )
 
 object CategorySampleDataFalso {
     val categories = listOf(
-        CategoryItem("Limpieza", Icons.Default.Sanitizer, Color(0xFFFAD2E1), providerIds = listOf("2")),
-        CategoryItem("Jardinería", Icons.Default.Grass, Color(0xFFE2F0CB), providerIds = listOf("2", "13")),
-        CategoryItem("Mudanzas", Icons.Default.ArrowDownward, Color(0xFFB5EAD7), providerIds = listOf("11")),
-        CategoryItem("Reparación", Icons.Default.Build, Color(0xFFFFB7B2), providerIds = listOf("1", "3")),
-        CategoryItem("Tutorías", Icons.Default.School, Color(0xFFFFDAC1), providerIds = listOf("8")),
-        CategoryItem("Mascotas", Icons.Default.Pets, Color(0xFFC7CEEA), providerIds = listOf("18")),
-        CategoryItem("Belleza", Icons.Default.Face, Color(0xFFF1CBFF), providerIds = listOf("12")),
-        CategoryItem("Fotografía", Icons.Default.PhotoCamera, Color(0xFFA2D2FF), providerIds = listOf("7")),
-        CategoryItem("Plomería", Icons.Default.Construction, Color(0xFFD4A5A5), providerIds = listOf("1")),
-        CategoryItem("Electricidad", Icons.Default.Bolt, Color(0xFFFAD2E1), providerIds = listOf("1")),
-        CategoryItem("Carpintería", Icons.Default.Carpenter, Color(0xFFE2F0CB), providerIds = listOf("3")),
-        CategoryItem("Cocina", Icons.Default.Restaurant, Color(0xFFB5EAD7), providerIds = listOf("6")),
-        CategoryItem("Tecnología", Icons.Default.Computer, Color(0xFFFFB7B2), providerIds = listOf("9", "19")),
-        CategoryItem("Eventos", Icons.Default.Event, Color(0xFFFFDAC1), providerIds = listOf("21")),
-        CategoryItem("Cuidado", Icons.Default.LocalHospital, Color(0xFFC7CEEA), providerIds = listOf("8", "22")),
-        CategoryItem("Consultoría", Icons.Default.BusinessCenter, Color(0xFFF1CBFF), providerIds = listOf("20")),
-        CategoryItem("Diseño", Icons.Default.Palette, Color(0xFFA2D2FF), providerIds = listOf("4", "13", "17")),
-        CategoryItem("Traducción", Icons.Default.Translate, Color(0xFFD4A5A5), providerIds = listOf("20")),
-        CategoryItem("Música", Icons.Default.MusicNote, Color(0xFFFAD2E1), providerIds = listOf("16")),
-        CategoryItem("Asesoría Legal", Icons.Default.Gavel, Color(0xFFC4E0F9), providerIds = listOf("14")),
-        CategoryItem("Contabilidad", Icons.Default.Calculate, Color(0xFFFFF6E5), providerIds = listOf("14")),
-        CategoryItem("Desarrollo Web", Icons.Default.Code, Color(0xFFD4F0F0), providerIds = listOf("9", "1")),
-        CategoryItem("Marketing Digital", Icons.Default.Campaign, Color(0xFFF9E2D2), providerIds = listOf("4")),
-        CategoryItem("Redacción", Icons.Default.Create, Color(0xFFE2E2E2), providerIds = listOf("4", "20")),
-        CategoryItem("Edición de Video", Icons.Default.Videocam, Color(0xFFD1E8E2), providerIds = listOf("7")),
-        CategoryItem("Animación", Icons.Default.Movie, Color(0xFFFFD6E0), providerIds = listOf("7")),
-        CategoryItem("Locución", Icons.Default.Mic, Color(0xFFE8D4F1), providerIds = listOf()),
-        CategoryItem("Catering", Icons.Default.FoodBank, Color(0xFFD7F9F1), providerIds = listOf("6")),
-        CategoryItem("Repostería", Icons.Default.Cake, Color(0xFFFDEFD2), providerIds = listOf("6")),
-        CategoryItem("Cuidado de Niños", Icons.Default.ChildCare, Color(0xFFE2F0CB), providerIds = listOf("8")),
-        CategoryItem("Cuidado de Ancianos", Icons.Default.Elderly, Color(0xFFB5EAD7), providerIds = listOf("8")),
-        CategoryItem("Entrenamiento Personal", Icons.Default.FitnessCenter, Color(0xFFFFB7B2), providerIds = listOf("10")),
-        CategoryItem("Nutrición", Icons.Default.RestaurantMenu, Color(0xFFFFDAC1), providerIds = listOf("10")),
-        CategoryItem("Fisioterapia", Icons.Default.Healing, Color(0xFFC7CEEA), providerIds = listOf("22")),
-        CategoryItem("Psicología", Icons.Default.HelpOutline, Color(0xFFF1CBFF), providerIds = listOf()),
-        CategoryItem("Coaching de Vida", Icons.Default.Groups, Color(0xFFA2D2FF), providerIds = listOf()),
-        CategoryItem("DJ", Icons.Default.Album, Color(0xFFD4A5A5), providerIds = listOf("21")),
-        CategoryItem("Bandas en Vivo", Icons.Default.MusicVideo, Color(0xFFFAD2E1), providerIds = listOf("16")),
-        CategoryItem("Magia para Fiestas", Icons.Default.Celebration, Color(0xFFE2F0CB), providerIds = listOf()),
-        CategoryItem("Stand-up Comedy", Icons.Default.TheaterComedy, Color(0xFFB5EAD7), providerIds = listOf()),
-        CategoryItem("Lavado de Autos", Icons.Default.LocalCarWash, Color(0xFFFFB7B2), providerIds = listOf("5")),
-        CategoryItem("Mecánica", Icons.Default.CarRepair, Color(0xFFFFDAC1), providerIds = listOf("5")),
-        CategoryItem("Pintura de Casas", Icons.Default.FormatPaint, Color(0xFFC7CEEA), providerIds = listOf("17")),
-        CategoryItem("Arquitectura", Icons.Default.Architecture, Color(0xFFF1CBFF), providerIds = listOf("17")),
-        CategoryItem("Diseño de Interiores", Icons.Default.Chair, Color(0xFFA2D2FF), providerIds = listOf("13", "17")),
-        CategoryItem("Seguridad", Icons.Default.Security, Color(0xFFD4A5A5), providerIds = listOf("15")),
-        CategoryItem("Investigador Privado", Icons.Default.Search, Color(0xFFFAD2E1), providerIds = listOf()),
-        CategoryItem("Planificación de Bodas", Icons.Default.Favorite, Color(0xFFE2F0CB), providerIds = listOf()),
-        CategoryItem("Floristería", Icons.Default.LocalFlorist, Color(0xFFB5EAD7), providerIds = listOf()),
-        CategoryItem("Guía Turístico", Icons.Default.TravelExplore, Color(0xFFFFB7B2), providerIds = listOf()),
-        CategoryItem("Clases de Baile", Icons.Default.DirectionsWalk, Color(0xFFFFDAC1), providerIds = listOf("16")),
-        CategoryItem("Clases de Yoga", Icons.Default.Spa, Color(0xFFC7CEEA), providerIds = listOf("10")),
-        CategoryItem("Cuidado de Plantas", Icons.Default.Eco, Color(0xFFF1CBFF), providerIds = listOf("2", "13")),
-        CategoryItem("Reparación de Móviles", Icons.Default.PhoneAndroid, Color(0xFFA2D2FF), providerIds = listOf("19")),
-        CategoryItem("Ensamblaje de Muebles", Icons.Default.Hardware, Color(0xFFD4A5A5), providerIds = listOf("3", "11")),
-        CategoryItem("Sastrería", Icons.Default.ContentCut, Color(0xFFFAD2E1), providerIds = listOf("12")),
-        CategoryItem("Zapatería", Icons.Default.Layers, Color(0xFFE2F0CB), providerIds = listOf()),
-        CategoryItem("Fumigación", Icons.Default.PestControl, Color(0xFFB5EAD7), providerIds = listOf()),
-        CategoryItem("Cerrajería", Icons.Default.Lock, Color(0xFFFFB7B2), providerIds = listOf("15")),
-        CategoryItem("Masajes Terapéuticos", Icons.Default.Spa, Color(0xFFFFDAC1), providerIds = listOf("22")),
-        CategoryItem("Acupuntura", Icons.Default.Spa, Color(0xFFC7CEEA), providerIds = listOf("22")),
-        CategoryItem("Astrología", Icons.Default.Star, Color(0xFFF1CBFF), providerIds = listOf()),
-        CategoryItem("Lectura de Tarot", Icons.Default.Help, Color(0xFFA2D2FF), providerIds = listOf()),
-        CategoryItem("Reparación de Bicicletas", Icons.Default.PedalBike, Color(0xFFD4A5A5), providerIds = listOf()),
-        CategoryItem("Alquiler de Equipos", Icons.Default.Chair, Color(0xFFFAD2E1), providerIds = listOf()),
-        CategoryItem("Sonido para Fiestas", Icons.Default.Speaker, Color(0xFFE2F0CB), providerIds = listOf("21")),
-        CategoryItem("Iluminación para Fiestas", Icons.Default.Lightbulb, Color(0xFFB5EAD7), providerIds = listOf("21")),
-        CategoryItem("Bartender", Icons.Default.LocalBar, Color(0xFFFFB7B2), providerIds = listOf("21")),
-        // --- NUEVAS CATEGORÍAS AGREGADAS ---
-        CategoryItem("Informatica", Icons.Default.Computer, Color(0xFFB2EBF2), providerIds = listOf("1", "9", "19")),
-        CategoryItem("Tecnico", Icons.Default.Build, Color(0xFF80DEEA), providerIds = listOf("1", "19")),
-        CategoryItem("Camaras de Seguridad", Icons.Default.Videocam, Color(0xFF4DD0E1), providerIds = listOf("1","15")),
-        CategoryItem("Alarmas", Icons.Default.Warning, Color(0xFF26C6DA), providerIds = listOf("15")),
-        CategoryItem("Redes", Icons.Default.Router, Color(0xFF00BCD4), providerIds = listOf("9", "19")),
-        CategoryItem("Abogado", Icons.Default.Gavel, Color(0xFFB2EBF2), providerIds = listOf("14")),
-        CategoryItem("Contador", Icons.Default.Calculate, Color(0xFFF0F4C3), providerIds = listOf("14")),
-        CategoryItem("Programador", Icons.Default.Code, Color(0xFFD1C4E9), providerIds = listOf("4", "9", "1")),
-        CategoryItem("Cancha Futbol 5", Icons.Default.SportsSoccer, Color(0xFFC8E6C9), providerIds = listOf()),
-        CategoryItem("Cancha Futbol", Icons.Default.Sports, Color(0xFFB9F6CA), providerIds = listOf("9", "9", "9", "9", "9", "2")),
-        CategoryItem("Cancha de Padel", Icons.Default.SportsTennis, Color(0xFFD7CCC8), providerIds = listOf()),
-        CategoryItem("Peluqueria", Icons.Default.ContentCut, Color(0xFFF8BBD0), providerIds = listOf("12"))
+        // SuperCategoría: Hogar
+        CategoryItem("Limpieza", "🧹", Color(0xFFFAD2E1), "Hogar", providerIds = listOf("2")),
+        CategoryItem("Jardinería", "🌿", Color(0xFFE2F0CB), "Hogar", providerIds = listOf("2", "13")),
+        CategoryItem("Mudanzas", "🚚", Color(0xFFB5EAD7), "Hogar", providerIds = listOf("11")),
+        CategoryItem("Reparación", "🛠️", Color(0xFFFFB7B2), "Hogar", providerIds = listOf("1", "3")),
+        CategoryItem("Plomería", "🪠", Color(0xFFD4A5A5), "Hogar", providerIds = listOf("1")),
+        CategoryItem("Electricidad", "⚡", Color(0xFFFAD2E1), "Hogar", providerIds = listOf("1")),
+        CategoryItem("Carpintería", "🪚", Color(0xFFE2F0CB), "Hogar", providerIds = listOf("3")),
+        CategoryItem("Pintura de Casas", "🏘️", Color(0xFFC7CEEA), "Hogar", providerIds = listOf("17")),
+        CategoryItem("Diseño de Interiores", "🛋️", Color(0xFFA2D2FF), "Hogar", providerIds = listOf("13", "17")),
+        CategoryItem("Fumigación", "💨", Color(0xFFB5EAD7), "Hogar", providerIds = listOf()),
+        CategoryItem("Cerrajería", "🔑", Color(0xFFFFB7B2), "Hogar", providerIds = listOf("15")),
+        CategoryItem("Ensamblaje de Muebles", "🔩", Color(0xFFD4A5A5), "Hogar", providerIds = listOf("3", "11")),
+
+        // SuperCategoría: Clases y Tutorías
+        CategoryItem("Tutorías", "📚", Color(0xFFFFDAC1), "Clases y Tutorías", providerIds = listOf("8")),
+        CategoryItem("Clases de Baile", "💃", Color(0xFFFFDAC1), "Clases y Tutorías", providerIds = listOf("16")),
+        CategoryItem("Clases de Yoga", "🧘‍♀️", Color(0xFFC7CEEA), "Clases y Tutorías", providerIds = listOf("10")),
+        CategoryItem("Música", "🎵", Color(0xFFFAD2E1), "Clases y Tutorías", providerIds = listOf("16")),
+
+        // SuperCategoría: Cuidado Personal y Salud
+        CategoryItem("Mascotas", "🐾", Color(0xFFC7CEEA), "Cuidado Personal y Salud", providerIds = listOf("18")),
+        CategoryItem("Belleza", "💅", Color(0xFFF1CBFF), "Cuidado Personal y Salud", providerIds = listOf("12")),
+        CategoryItem("Cuidado", "❤️‍🩹", Color(0xFFC7CEEA), "Cuidado Personal y Salud", providerIds = listOf("8", "22")),
+        CategoryItem("Cuidado de Niños", "👶", Color(0xFFE2F0CB), "Cuidado Personal y Salud", providerIds = listOf("8")),
+        CategoryItem("Cuidado de Ancianos", "🧑‍🦳", Color(0xFFB5EAD7), "Cuidado Personal y Salud", providerIds = listOf("8")),
+        CategoryItem("Entrenamiento Personal", "💪", Color(0xFFFFB7B2), "Cuidado Personal y Salud", providerIds = listOf("10")),
+        CategoryItem("Nutrición", "🍎", Color(0xFFFFDAC1), "Cuidado Personal y Salud", providerIds = listOf("10")),
+        CategoryItem("Fisioterapia", "🏃", Color(0xFFC7CEEA), "Cuidado Personal y Salud", providerIds = listOf("22")),
+        CategoryItem("Psicología", "🧠", Color(0xFFF1CBFF), "Cuidado Personal y Salud", providerIds = listOf()),
+        CategoryItem("Coaching de Vida", "🧘", Color(0xFFA2D2FF), "Cuidado Personal y Salud", providerIds = listOf()),
+        CategoryItem("Peluqueria", "✂️", Color(0xFFF8BBD0), "Cuidado Personal y Salud", providerIds = listOf("12")),
+        CategoryItem("Sastrería", "🧵", Color(0xFFFAD2E1), "Cuidado Personal y Salud", providerIds = listOf("12")),
+        CategoryItem("Masajes Terapéuticos", "💆", Color(0xFFFFDAC1), "Cuidado Personal y Salud", providerIds = listOf("22")),
+        CategoryItem("Acupuntura", "📍", Color(0xFFC7CEEA), "Cuidado Personal y Salud", providerIds = listOf("22")),
+
+        // SuperCategoría: Tecnología y Reparaciones
+        CategoryItem("Tecnología", "💻", Color(0xFFFFB7B2), "Tecnología y Reparaciones", providerIds = listOf("9", "19")),
+        CategoryItem("Desarrollo Web", "👨‍💻", Color(0xFFD4F0F0), "Tecnología y Reparaciones", providerIds = listOf("9", "1")),
+        CategoryItem("Reparación de Móviles", "📱", Color(0xFFA2D2FF), "Tecnología y Reparaciones", providerIds = listOf("19")),
+        CategoryItem("Informatica", "💻", Color(0xFFB2EBF2), "Tecnología y Reparaciones", providerIds = listOf("1", "9", "19")),
+        CategoryItem("Tecnico", "🛠️", Color(0xFF80DEEA), "Tecnología y Reparaciones", providerIds = listOf("1", "19")),
+        CategoryItem("Redes", "🌐", Color(0xFF00BCD4), "Tecnología y Reparaciones", providerIds = listOf("9", "19")),
+        CategoryItem("Programador", "👨‍💻", Color(0xFFD1C4E9), "Tecnología y Reparaciones", providerIds = listOf("4", "9", "1")),
+
+        // SuperCategoría: Eventos y Entretenimiento
+        CategoryItem("Fotografía", "📷", Color(0xFFA2D2FF), "Eventos y Entretenimiento", providerIds = listOf("7")),
+        CategoryItem("Eventos", "🎉", Color(0xFFFFDAC1), "Eventos y Entretenimiento", providerIds = listOf("21")),
+        CategoryItem("Edición de Video", "🎬", Color(0xFFD1E8E2), "Eventos y Entretenimiento", providerIds = listOf("7")),
+        CategoryItem("Animación", "🎞️", Color(0xFFFFD6E0), "Eventos y Entretenimiento", providerIds = listOf("7")),
+        CategoryItem("Locución", "🎤", Color(0xFFE8D4F1), "Eventos y Entretenimiento", providerIds = listOf()),
+        CategoryItem("DJ", "🎧", Color(0xFFD4A5A5), "Eventos y Entretenimiento", providerIds = listOf("21")),
+        CategoryItem("Bandas en Vivo", "🎸", Color(0xFFFAD2E1), "Eventos y Entretenimiento", providerIds = listOf("16")),
+        CategoryItem("Magia para Fiestas", "✨", Color(0xFFE2F0CB), "Eventos y Entretenimiento", providerIds = listOf()),
+        CategoryItem("Stand-up Comedy", "😂", Color(0xFFB5EAD7), "Eventos y Entretenimiento", providerIds = listOf()),
+        CategoryItem("Sonido para Fiestas", "🔊", Color(0xFFE2F0CB), "Eventos y Entretenimiento", providerIds = listOf("21")),
+        CategoryItem("Iluminación para Fiestas", "💡", Color(0xFFB5EAD7), "Eventos y Entretenimiento", providerIds = listOf("21")),
+        CategoryItem("Bartender", "🍸", Color(0xFFFFB7B2), "Eventos y Entretenimiento", providerIds = listOf("21")),
+        CategoryItem("Planificación de Bodas", "💒", Color(0xFFE2F0CB), "Eventos y Entretenimiento", providerIds = listOf()),
+        CategoryItem("Floristería", "💐", Color(0xFFB5EAD7), "Eventos y Entretenimiento", providerIds = listOf()),
+
+        // SuperCategoría: Servicios Profesionales
+        CategoryItem("Consultoría", "💼", Color(0xFFF1CBFF), "Servicios Profesionales", providerIds = listOf("20")),
+        CategoryItem("Diseño", "🎨", Color(0xFFA2D2FF), "Servicios Profesionales", providerIds = listOf("4", "13", "17")),
+        CategoryItem("Traducción", "🌐", Color(0xFFD4A5A5), "Servicios Profesionales", providerIds = listOf("20")),
+        CategoryItem("Asesoría Legal", "⚖️", Color(0xFFC4E0F9), "Servicios Profesionales", providerIds = listOf("14")),
+        CategoryItem("Contabilidad", "🧾", Color(0xFFFFF6E5), "Servicios Profesionales", providerIds = listOf("14")),
+        CategoryItem("Marketing Digital", "📈", Color(0xFFF9E2D2), "Servicios Profesionales", providerIds = listOf("4")),
+        CategoryItem("Redacción", "✍️", Color(0xFFE2E2E2), "Servicios Profesionales", providerIds = listOf("4", "20")),
+        CategoryItem("Arquitectura", "🏛️", Color(0xFFF1CBFF), "Servicios Profesionales", providerIds = listOf("17")),
+        CategoryItem("Investigador Privado", "🕵️", Color(0xFFFAD2E1), "Servicios Profesionales", providerIds = listOf()),
+        CategoryItem("Abogado", "⚖️", Color(0xFFB2EBF2), "Servicios Profesionales", providerIds = listOf("14")),
+        CategoryItem("Contador", "🧾", Color(0xFFF0F4C3), "Servicios Profesionales", providerIds = listOf("14")),
+        
+        // SuperCategoría: Gastronomía
+        CategoryItem("Cocina", "🍳", Color(0xFFB5EAD7), "Gastronomía", providerIds = listOf("6")),
+        CategoryItem("Catering", "🍲", Color(0xFFD7F9F1), "Gastronomía", providerIds = listOf("6")),
+        CategoryItem("Repostería", "🍰", Color(0xFFFDEFD2), "Gastronomía", providerIds = listOf("6")),
+
+        // SuperCategoría: Vehículos
+        CategoryItem("Lavado de Autos", "🚗", Color(0xFFFFB7B2), "Vehículos", providerIds = listOf("5")),
+        CategoryItem("Mecánica", "🔧", Color(0xFFFFDAC1), "Vehículos", providerIds = listOf("5")),
+        CategoryItem("Reparación de Bicicletas", "🚲", Color(0xFFD4A5A5), "Vehículos", providerIds = listOf()),
+
+        // SuperCategoría: Seguridad
+        CategoryItem("Seguridad", "🛡️", Color(0xFFD4A5A5), "Seguridad", providerIds = listOf("15")),
+        CategoryItem("Alarmas", "🚨", Color(0xFF26C6DA), "Seguridad", providerIds = listOf("15")),
+        CategoryItem("Camaras de Seguridad", "📹", Color(0xFF4DD0E1), "Seguridad", providerIds = listOf("1","15")),
+
+        // SuperCategoría: Esotérico
+        CategoryItem("Astrología", "✨", Color(0xFFF1CBFF), "Esotérico", providerIds = listOf()),
+        CategoryItem("Lectura de Tarot", "🔮", Color(0xFFA2D2FF), "Esotérico", providerIds = listOf()),
+
+        // SuperCategoría: Deportes y Recreación
+        CategoryItem("Cancha Futbol 5", "⚽", Color(0xFFC8E6C9), "Deportes y Recreación", providerIds = listOf()),
+        CategoryItem("Cancha Futbol", "🏟️", Color(0xFFB9F6CA), "Deportes y Recreación", providerIds = listOf("9", "9", "9", "9", "9", "2")),
+        CategoryItem("Cancha de Padel", "🎾", Color(0xFFD7CCC8), "Deportes y Recreación", providerIds = listOf()),
+        CategoryItem("Guía Turístico", "🗺️", Color(0xFFFFB7B2), "Deportes y Recreación", providerIds = listOf()),
+
+        // SuperCategoría: Otros
+        CategoryItem("Zapatería", "👟", Color(0xFFE2F0CB), "Otros", providerIds = listOf()),
+        CategoryItem("Alquiler de Equipos", "🪑", Color(0xFFFAD2E1), "Otros", providerIds = listOf())
     )
 }

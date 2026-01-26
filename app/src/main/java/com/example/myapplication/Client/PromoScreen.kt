@@ -1,47 +1,74 @@
 package com.example.myapplication.Client
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import coil.compose.rememberAsyncImagePainter
-import com.example.myapplication.ui.theme.MyApplicationTheme
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.myapplication.R
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
+import coil.compose.rememberAsyncImagePainter
+import com.example.myapplication.R
+import com.example.myapplication.ui.theme.MyApplicationTheme
+import kotlin.random.Random
 
 
-@OptIn(ExperimentalMaterial3Api::class)
 data class Promotion(
     val id: Int,
-    val imageUrl: String,
+    val imageUrls: List<Any?>,
+    val providerImageUrl: Any?,
     val providerName: String,
     val description: String,
     val providerId: String,
+    val categories: List<String>,
     val rating: Float,
     val likes: Int,
-    val isLiked: Boolean
+    var isLiked: Boolean,
+    val discount: Int? = null
 )
 
+data class ProviderPromotions(
+    val provider: PrestadorProfileFalso,
+    val promotions: List<Promotion>
+)
+
+sealed interface PromoListItem {
+    data class ProviderPromoItem(val providerPromotions: ProviderPromotions) : PromoListItem
+    data class AdItem(val id: Int) : PromoListItem
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PromotionCard(
     promotion: Promotion,
@@ -53,23 +80,89 @@ fun PromotionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(380.dp)
             .padding(16.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column {
-            Image(
-                painter = rememberAsyncImagePainter(
-                    model = promotion.imageUrl,
-                    placeholder = painterResource(id = R.drawable.logo_app)
-                ),
-                contentDescription = "Imagen de promoción",
-                contentScale = ContentScale.Crop,
+            val pagerState = rememberPagerState(pageCount = { promotion.imageUrls.size })
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
-                    .clickable { onImageClick(promotion) }
-            )
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    Image(
+                        painter = rememberAsyncImagePainter(
+                            model = promotion.imageUrls[page],
+                            placeholder = painterResource(id = R.drawable.logo_app)
+                        ),
+                        contentDescription = "Imagen de promoción ${page + 1}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { onImageClick(promotion) }
+                    )
+                }
+                if (promotion.discount != null) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "En Promoción",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.error,
+                        ) {
+                            Text(
+                                text = "${promotion.discount}% OFF",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+                // Pager Indicator for Images
+                Row(
+                    Modifier
+                        .height(20.dp)
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    repeat(pagerState.pageCount) { iteration ->
+                        val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else Color.LightGray
+                        Box(
+                            modifier = Modifier
+                                .padding(2.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                                .size(8.dp)
+                        )
+                    }
+                }
+            }
 
             Column(
                 modifier = Modifier
@@ -85,11 +178,6 @@ fun PromotionCard(
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
-
-                // Esta llamada ahora usará la función de FunComunesIUClienteFalso.kt
-               // RatingBar(rating = promotion.rating)
-
-                Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
                     text = promotion.description,
@@ -113,7 +201,9 @@ fun PromotionCard(
                             Icon(
                                 imageVector = if (promotion.isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
                                 contentDescription = "Like",
-                                tint = if (promotion.isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                tint = if (promotion.isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
+                                    alpha = 0.6f
+                                )
                             )
                         }
                         Text(
@@ -123,19 +213,36 @@ fun PromotionCard(
                         )
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { onProfileClick(promotion.providerId) }) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = { onProfileClick(promotion.providerId) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Image(
+                                painter = rememberAsyncImagePainter(
+                                    model = promotion.providerImageUrl,
+                                    placeholder = painterResource(id = R.drawable.logo_app)
+                                ),
                                 contentDescription = "Ver perfil",
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .border(1.dp, Color.Gray, CircleShape)
                             )
                         }
-                        IconButton(onClick = { onMessageClick(promotion.providerId) }) {
+                        IconButton(
+                            onClick = { onMessageClick(promotion.providerId) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Message,
+                                imageVector = Icons.AutoMirrored.Filled.Message,
                                 contentDescription = "Enviar mensaje",
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
@@ -145,6 +252,7 @@ fun PromotionCard(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PromotionCardVertical(
     promotion: Promotion,
@@ -156,55 +264,112 @@ fun PromotionCardVertical(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(300.dp)
             .padding(16.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Row(
-            modifier = Modifier.height(IntrinsicSize.Max) 
-        ) {
-            // Left part: Image
-            Image(
-                painter = rememberAsyncImagePainter(
-                    model = promotion.imageUrl,
-                    placeholder = painterResource(id = R.drawable.ic_google_logo)
-                ),
-                contentDescription = "Imagen de promoción",
-                contentScale = ContentScale.Crop,
+        Row(modifier = Modifier.fillMaxSize()) {
+            val pagerState = rememberPagerState(pageCount = { promotion.imageUrls.size })
+            Box(
                 modifier = Modifier
-                    .weight(1f) 
+                    .weight(1f)
                     .fillMaxHeight()
-                    .clickable { onImageClick(promotion) }
-            )
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    Image(
+                        painter = rememberAsyncImagePainter(
+                            model = promotion.imageUrls[page],
+                            placeholder = painterResource(id = R.drawable.logo_app)
+                        ),
+                        contentDescription = "Imagen de promoción ${page + 1}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { onImageClick(promotion) }
+                    )
+                }
+                if (promotion.discount != null) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "En Promoción",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.error,
+                        ) {
+                            Text(
+                                text = "${promotion.discount}% OFF",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+                Row(
+                    Modifier
+                        .height(20.dp)
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    repeat(pagerState.pageCount) { iteration ->
+                        val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else Color.LightGray
+                        Box(
+                            modifier = Modifier
+                                .padding(2.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                                .size(8.dp)
+                        )
+                    }
+                }
+            }
 
-            // Right part: Descriptions and buttons
             Column(
                 modifier = Modifier
-                    .weight(1f) 
+                    .weight(1f)
+                    .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = promotion.providerName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                //RatingBar(rating = promotion.rating)
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // This Text will take the available space, pushing the buttons to the bottom
-                Text(
-                    text = promotion.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.weight(1f)
-                )
-
+                Column {
+                    Text(
+                        text = promotion.providerName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = promotion.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        maxLines = 3
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -213,12 +378,16 @@ fun PromotionCardVertical(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconToggleButton(
                             checked = promotion.isLiked,
-                            onCheckedChange = { onLikeClick() }
+                            onCheckedChange = { onLikeClick() },
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
                                 imageVector = if (promotion.isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
                                 contentDescription = "Like",
-                                tint = if (promotion.isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                tint = if (promotion.isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(
+                                    alpha = 0.6f
+                                ),
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                         Text(
@@ -228,19 +397,36 @@ fun PromotionCardVertical(
                         )
                     }
 
-                    Row {
-                        IconButton(onClick = { onProfileClick(promotion.providerId) }) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { onProfileClick(promotion.providerId) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Image(
+                                painter = rememberAsyncImagePainter(
+                                    model = promotion.providerImageUrl,
+                                    placeholder = painterResource(id = R.drawable.logo_app)
+                                ),
                                 contentDescription = "Ver perfil",
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(35.dp)
+                                    .clip(CircleShape)
+                                    .border(1.dp, Color.Gray, CircleShape)
                             )
                         }
-                        IconButton(onClick = { onMessageClick(promotion.providerId) }) {
+                        IconButton(
+                            onClick = { onMessageClick(promotion.providerId) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Message,
+                                imageVector = Icons.AutoMirrored.Filled.Message,
                                 contentDescription = "Enviar mensaje",
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -250,121 +436,487 @@ fun PromotionCardVertical(
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun PromotionCardVerticalPreview() {
-    val samplePromotion = Promotion(
-        id = 1,
-        imageUrl = "https://via.placeholder.com/200x400/FF0000/FFFFFF?text=Vertical",
-        providerName = "Electricista Rápido",
-        description = "Reparaciones eléctricas urgentes a domicilio. ¡Descuento del 15% esta semana!",
-        providerId = "provider_123",
-        rating = 4.5f,
-        likes = 120,
-        isLiked = false
-    )
-    MyApplicationTheme {
-        PromotionCardVertical(
-            promotion = samplePromotion,
-            onMessageClick = {},
-            onProfileClick = {},
-            onImageClick = {},
-            onLikeClick = {}
-        )
+fun AdCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+            .padding(16.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Gray.copy(alpha = 0.3f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Anuncio de Google Ads")
+        }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PromoScreen(
     onBack: () -> Unit,
-    onMessageClick: (String) -> Unit = {},
-    onProfileClick: (String) -> Unit = {}
+    navController: NavHostController
 ) {
     var selectedPromotion by remember { mutableStateOf<Promotion?>(null) }
+    var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var providerForDialog by remember { mutableStateOf<ProviderPromotions?>(null) }
+    var viewedFavorites by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    // Estados para el BottomSheet de filtros
+    var showFilterSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+    var tempSelectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    val promotions = remember {
-        mutableStateListOf(
-            Promotion(1, "https://via.placeholder.com/200x400/FF6347/FFFFFF?text=Vertical+1", "Electricista Rápido", "Reparaciones eléctricas urgentes a domicilio. ¡Descuento del 15% esta semana!", "provider_123", 4.8f, 235, false),
-            Promotion(2, "https://via.placeholder.com/400x200/4682B4/FFFFFF?text=Horizontal+2", "Plomería Total", "Soluciones de plomería para tu hogar. Instalaciones y reparaciones garantizadas.", "provider_456", 4.5f, 198, true),
-            Promotion(3, "https://via.placeholder.com/200x400/32CD32/FFFFFF?text=Vertical+3", "Pinturas Brillantes", "Renueva tus espacios con nuestros servicios de pintura profesional.", "provider_789", 4.7f, 312, false),
-            Promotion(4, "https://via.placeholder.com/400x200/FFD700/000000?text=Horizontal+4", "Limpieza Express", "Servicio de limpieza profunda para tu hogar o negocio.", "provider_101", 4.9f, 450, true),
-            Promotion(5, "https://via.placeholder.com/200x400/6A5ACD/FFFFFF?text=Vertical+5", "Jardinería Creativa", "Diseño y mantenimiento de jardines. Dale vida a tus áreas verdes.", "provider_112", 4.6f, 280, false),
-            Promotion(6, "https://via.placeholder.com/400x200/FF4500/FFFFFF?text=Horizontal+6", "Carpintería Moderna", "Muebles a medida y diseños exclusivos en madera. Calidad y estilo.", "provider_113", 4.8f, 321, true),
-            Promotion(7, "https://via.placeholder.com/200x400/20B2AA/FFFFFF?text=Vertical+7", "Aire Acondicionado Polar", "Instalación y mantenimiento de sistemas de climatización. ¡Verano sin calor!", "provider_114", 4.9f, 510, false),
-            Promotion(8, "https://via.placeholder.com/400x200/9932CC/FFFFFF?text=Horizontal+8", "Seguridad Total 24/7", "Instalación de cámaras y sistemas de alarma para tu tranquilidad.", "provider_115", 5.0f, 623, true),
-            Promotion(9, "https://via.placeholder.com/200x400/8A2BE2/FFFFFF?text=Vertical+9", "Mudanzas Fáciles", "Servicio de mudanza completo y sin estrés. Embalaje y transporte.", "provider_116", 4.7f, 150, false),
-            Promotion(10, "https://via.placeholder.com/400x200/5F9EA0/FFFFFF?text=Horizontal+10", "Remodelaciones & Diseño", "Transforma tu casa con nuestro equipo de arquitectos y diseñadores.", "provider_117", 4.9f, 489, true),
-            Promotion(11, "https://via.placeholder.com/200x400/D2691E/FFFFFF?text=Vertical+11", "Tecno Soporte PC", "Reparación y mantenimiento de computadoras y laptops. Soluciones rápidas.", "provider_118", 4.8f, 290, false),
-            Promotion(12, "https://via.placeholder.com/400x200/DC143C/FFFFFF?text=Horizontal+12", "Catering Delicioso", "El mejor sabor para tus eventos. Bodas, cumpleaños y reuniones.", "provider_119", 4.9f, 530, true),
-            Promotion(13, "https://via.placeholder.com/200x400/00FFFF/000000?text=Vertical+13", "Lavado de Autos Premium", "Dejamos tu auto como nuevo. Lavado, pulido y encerado profesional.", "provider_120", 4.7f, 333, false),
-            Promotion(14, "https://via.placeholder.com/400x200/B8860B/FFFFFF?text=Horizontal+14", "Asesoría Legal Confiable", "Abogados expertos a tu servicio. Consultas y representación legal.", "provider_121", 5.0f, 720, true)
-        )
+    val (listItems, allCategories) = remember {
+        val providersWithPromos = mutableListOf<ProviderPromotions>()
+        val categories = mutableSetOf<String>()
+        val subscribedProviders = SampleDataFalso.prestadores.filter { it.isSubscribed }
+
+        subscribedProviders.forEach { provider ->
+            val numPromos = (1..3).random()
+            val providerPromotionsList = (1..numPromos).map { promoIndex ->
+                val imageCount = (1..3).random()
+                val imageUrls = (1..imageCount).map { "https://picsum.photos/seed/${provider.id}_${promoIndex}_$it/400/200" }
+                val hasDiscount = Random.nextBoolean()
+                categories.addAll(provider.services)
+                Promotion(
+                    id = (provider.id.toInt() * 100) + promoIndex,
+                    imageUrls = imageUrls,
+                    providerImageUrl = provider.profileImageUrl,
+                    providerName = "${provider.name} ${provider.lastName}",
+                    description = "Oferta especial #${promoIndex} en ${provider.services.first()}",
+                    providerId = provider.id,
+                    rating = provider.rating,
+                    likes = (100..1000).random(),
+                    isLiked = Random.nextBoolean(),
+                    discount = if (hasDiscount) (10..30).random() else null,
+                    categories = provider.services
+                )
+            }
+            providersWithPromos.add(ProviderPromotions(provider, providerPromotionsList))
+        }
+
+        val finalItems = mutableListOf<PromoListItem>()
+        var adCounter = 0
+        providersWithPromos.forEach { providerPromo ->
+            finalItems.add(PromoListItem.ProviderPromoItem(providerPromo))
+            if ((finalItems.size + 1) % 3 == 0) {
+                finalItems.add(PromoListItem.AdItem(adCounter++))
+            }
+        }
+        finalItems to categories.toList().sorted()
     }
 
-    fun handleLikeClick(promotionId: Int) {
-        val index = promotions.indexOfFirst { it.id == promotionId }
-        if (index != -1) {
-            val oldPromotion = promotions[index]
-            val newLikes = if (oldPromotion.isLiked) oldPromotion.likes - 1 else oldPromotion.likes + 1
-            promotions[index] = oldPromotion.copy(
-                isLiked = !oldPromotion.isLiked,
-                likes = newLikes
-            )
+    val promosState = remember {
+        mutableStateMapOf<Int, Promotion>().apply {
+            listItems.forEach { item ->
+                if (item is PromoListItem.ProviderPromoItem) {
+                    item.providerPromotions.promotions.forEach { promo ->
+                        put(promo.id, promo)
+                    }
+                }
+            }
         }
     }
 
-    MyApplicationTheme {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text("Promociones") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) { // <--- Acción conectada
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Volver")
+    val favoriteProviders = remember(listItems, viewedFavorites) {
+        val favs = listItems.mapNotNull {
+            if (it is PromoListItem.ProviderPromoItem && it.providerPromotions.provider.isFavorite) it.providerPromotions else null
+        }
+        // Ordenar: primero los que NO están vistos (false < true), manteniendo estabilidad
+        favs.sortedBy { it.provider.id in viewedFavorites }
+    }
+
+    fun handleLikeClick(promotionId: Int) {
+        promosState[promotionId]?.let {
+            val updatedLikes = if (it.isLiked) it.likes - 1 else it.likes + 1
+            promosState[promotionId] = it.copy(isLiked = !it.isLiked, likes = updatedLikes)
+        }
+    }
+
+    val filteredListItems = remember(selectedCategories, promosState) {
+        if (selectedCategories.isEmpty()) {
+            listItems
+        } else {
+            listItems.mapNotNull { item ->
+                when (item) {
+                    is PromoListItem.AdItem -> item
+                    is PromoListItem.ProviderPromoItem -> {
+                        val filteredPromos = item.providerPromotions.promotions.filter { promo ->
+                            promo.categories.any { it in selectedCategories }
                         }
-                    }
-                )
-            },
-            content = { paddingValues ->
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                ) {
-                    items(promotions, key = { it.id }) { promotion ->
-                        val onLike = { handleLikeClick(promotion.id) }
-                        if (promotion.id % 2 != 0) {
-                            PromotionCardVertical(
-                                promotion = promotion,
-                                onMessageClick = onMessageClick,
-                                onProfileClick = onProfileClick,
-                                onImageClick = { selectedPromotion = it },
-                                onLikeClick = onLike
-                            )
+                        if (filteredPromos.isNotEmpty()) {
+                            PromoListItem.ProviderPromoItem(item.providerPromotions.copy(promotions = filteredPromos))
                         } else {
-                            PromotionCard(
-                                promotion = promotion,
-                                onMessageClick = onMessageClick,
-                                onProfileClick = onProfileClick,
-                                onImageClick = { selectedPromotion = it },
-                                onLikeClick = onLike
-                            )
+                            null
                         }
                     }
                 }
             }
-        )
+        }
+    }
 
-        selectedPromotion?.let { promotion ->
+    val orderedCategories = remember(selectedCategories) {
+        val selected = selectedCategories.toList().sorted()
+        val unselected = allCategories.filterNot { it in selectedCategories }
+        selected + unselected
+    }
+
+    MyApplicationTheme {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Promociones") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                        }
+                    }
+                )
+            }
+        ) { paddingValues ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                item {
+                    ProviderIconsRow(
+                        providers = favoriteProviders,
+                        viewedProviderIds = viewedFavorites,
+                        onProviderClick = {
+                            // Al hacer click, solo abrimos el dialogo. NO marcamos como visto aun.
+                            providerForDialog = it
+                        }
+                    )
+                }
+                item {
+                    CategoryFiltersRow(
+                        allCategories = orderedCategories,
+                        selectedCategories = selectedCategories,
+                        onOpenSheet = { 
+                            tempSelectedCategories = selectedCategories 
+                            showFilterSheet = true 
+                        },
+                        onClearFilters = { selectedCategories = emptySet() }
+                    )
+                }
+                items(filteredListItems, key = {
+                    when (it) {
+                        is PromoListItem.AdItem -> "ad_${it.id}"
+                        is PromoListItem.ProviderPromoItem -> "provider_${it.providerPromotions.provider.id}"
+                    }
+                }) { item ->
+                    when (item) {
+                        is PromoListItem.AdItem -> AdCard()
+                        is PromoListItem.ProviderPromoItem -> {
+                            val providerPromo = item.providerPromotions
+                            if (providerPromo.promotions.size > 1) {
+                                ProviderPromotionPager(
+                                    providerPromotions = providerPromo,
+                                    promosState = promosState,
+                                    onLikeClick = ::handleLikeClick,
+                                    onMessageClick = { navController.navigate("chat/$it") },
+                                    onProfileClick = { navController.navigate("perfil_prestador/$it") },
+                                    onImageClick = { selectedPromotion = it }
+                                )
+                            } else {
+                                val promotion = providerPromo.promotions.first()
+                                val updatedPromotion = promosState[promotion.id] ?: promotion
+                                val onLike = { handleLikeClick(updatedPromotion.id) }
+
+                                if (promotion.id % 2 != 0) {
+                                    PromotionCardVertical(
+                                        promotion = updatedPromotion,
+                                        onMessageClick = { navController.navigate("chat/$it") },
+                                        onProfileClick = { navController.navigate("perfil_prestador/$it") },
+                                        onImageClick = { selectedPromotion = it },
+                                        onLikeClick = onLike
+                                    )
+                                } else {
+                                    PromotionCard(
+                                        promotion = updatedPromotion,
+                                        onMessageClick = { navController.navigate("chat/$it") },
+                                        onProfileClick = { navController.navigate("perfil_prestador/$it") },
+                                        onImageClick = { selectedPromotion = it },
+                                        onLikeClick = onLike
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Dialogo del prestador favorito
+        providerForDialog?.let { currentProvider ->
+            Dialog(onDismissRequest = { 
+                // Al cerrar el dialogo, marcamos como visto y enviamos al final de la lista
+                viewedFavorites = viewedFavorites + currentProvider.provider.id
+                providerForDialog = null 
+            }) {
+                ProviderPromotionPager(
+                    providerPromotions = currentProvider,
+                    promosState = promosState,
+                    onLikeClick = ::handleLikeClick,
+                    onMessageClick = { navController.navigate("chat/$it") },
+                    onProfileClick = { navController.navigate("perfil_prestador/$it") },
+                    onImageClick = { selectedPromotion = it }
+                )
+            }
+        }
+        
+        selectedPromotion?.let {
             FullScreenPromotionView(
-                promotion = promotion,
+                promotion = it,
                 onDismiss = { selectedPromotion = null },
+                onMessageClick = { navController.navigate("chat/$it") },
+                onProfileClick = { navController.navigate("perfil_prestador/$it") },
+                onLikeClick = { handleLikeClick(it.id) }
+            )
+        }
+
+        // Bottom Sheet para filtros
+        if (showFilterSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showFilterSheet = false },
+                sheetState = sheetState
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        "Filtrar por Categorías",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 120.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        items(allCategories) { category ->
+                            FilterChip(
+                                selected = category in tempSelectedCategories,
+                                onClick = {
+                                    tempSelectedCategories = if (category in tempSelectedCategories) {
+                                        tempSelectedCategories - category
+                                    } else {
+                                        tempSelectedCategories + category
+                                    }
+                                },
+                                label = { Text(category) },
+                                leadingIcon = if (category in tempSelectedCategories) {
+                                    { Icon(Icons.Default.Done, contentDescription = "Selected") }
+                                } else null
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = {
+                            selectedCategories = tempSelectedCategories
+                            showFilterSheet = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Aplicar Filtros")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProviderIconsRow(
+    providers: List<ProviderPromotions>,
+    viewedProviderIds: Set<String>,
+    onProviderClick: (ProviderPromotions) -> Unit
+) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(
+            "Descuentos de Mis Favoritos",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(providers, key = { it.provider.id }) { providerPromo ->
+                Box(modifier = Modifier.clickable { onProviderClick(providerPromo) }) {
+                    Image(
+                        painter = rememberAsyncImagePainter(
+                            model = providerPromo.provider.profileImageUrl,
+                            placeholder = painterResource(id = R.drawable.logo_app)
+                        ),
+                        contentDescription = providerPromo.provider.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    )
+                    // Usamos if en lugar de AnimatedVisibility para evitar problemas de scope en items
+                    if (providerPromo.provider.id !in viewedProviderIds) {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .background(Color.Red)
+                                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                                .align(Alignment.TopEnd)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryFiltersRow(
+    allCategories: List<String>,
+    selectedCategories: Set<String>,
+    onOpenSheet: () -> Unit,
+    onClearFilters: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        LazyRow(
+            contentPadding = PaddingValues(start = 16.dp, end = 100.dp), // Espacio extra para botones
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(allCategories) { category ->
+                FilterChip(
+                    selected = category in selectedCategories,
+                    onClick = { /* Solo visualización aquí, seleccion en sheet */ },
+                    label = { Text(category) },
+                    leadingIcon = if (category in selectedCategories) {
+                        { Icon(Icons.Default.Done, contentDescription = "Selected") }
+                    } else null
+                )
+            }
+        }
+        // Botones flotantes alineados a la derecha
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surface),
+                        startX = 0f,
+                        endX = 20f
+                    )
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (selectedCategories.isNotEmpty()) {
+                Surface(
+                    shape = CircleShape,
+                    shadowElevation = 4.dp,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    IconButton(onClick = onClearFilters) {
+                        Icon(
+                            imageVector = Icons.Default.Clear,
+                            contentDescription = "Limpiar filtros",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+            }
+            
+            Surface(
+                shape = CircleShape,
+                shadowElevation = 4.dp,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                IconButton(onClick = onOpenSheet) {
+                    Icon(
+                        imageVector = Icons.Default.Tune, // Icono de filtros/ajustes
+                        contentDescription = "Filtrar categorías",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun ProviderPromotionPager(
+    providerPromotions: ProviderPromotions,
+    promosState: Map<Int, Promotion>,
+    onLikeClick: (Int) -> Unit,
+    onMessageClick: (String) -> Unit,
+    onProfileClick: (String) -> Unit,
+    onImageClick: (Promotion) -> Unit
+) {
+    val pagerState = rememberPagerState(pageCount = { providerPromotions.promotions.size })
+
+    Column {
+        HorizontalPager(
+            state = pagerState,
+            contentPadding = PaddingValues(0.dp),
+            pageSpacing = 0.dp,
+        ) { pageIndex ->
+            val promotion = providerPromotions.promotions[pageIndex]
+            val updatedPromotion = promosState[promotion.id] ?: promotion
+
+            PromotionCard(
+                promotion = updatedPromotion,
                 onMessageClick = onMessageClick,
                 onProfileClick = onProfileClick,
-                onLikeClick = { handleLikeClick(promotion.id) }
+                onImageClick = onImageClick,
+                onLikeClick = { onLikeClick(updatedPromotion.id) }
             )
+        }
+
+        if (pagerState.pageCount > 1) {
+            Row(
+                Modifier
+                    .height(20.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                repeat(pagerState.pageCount) { iteration ->
+                    val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else Color.LightGray
+                    Box(
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .size(8.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -379,62 +931,49 @@ fun FullScreenPromotionView(
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false) // Usa toda la pantalla
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable { onDismiss() } // Cierra al hacer clic en cualquier lugar
+                .clickable { onDismiss() }
         ) {
-            // Imagen de fondo
             Image(
                 painter = rememberAsyncImagePainter(
-                    model = promotion.imageUrl,
+                    model = promotion.imageUrls.firstOrNull(),
                     placeholder = painterResource(id = R.drawable.ic_launcher_background)
                 ),
                 contentDescription = "Imagen de promoción a pantalla completa",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-
-            // Capa semitransparente para legibilidad
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.5f))
             )
-
-            // Contenido
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 72.dp), // Padding aumentado
+                    .padding(horizontal = 24.dp, vertical = 72.dp),
                 verticalArrangement = Arrangement.Bottom,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = promotion.providerName,
+                    promotion.providerName,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     textAlign = TextAlign.Center
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                //RatingBar(rating = promotion.rating, starColor = Color.White)
-
-                Spacer(modifier = Modifier.height(12.dp))
-
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    text = promotion.description,
+                    promotion.description,
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White.copy(alpha = 0.9f),
                     textAlign = TextAlign.Center
                 )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
+                Spacer(Modifier.height(24.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
@@ -449,41 +988,31 @@ fun FullScreenPromotionView(
                             onCheckedChange = { onLikeClick() }
                         ) {
                             Icon(
-                                imageVector = if (promotion.isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
-                                contentDescription = "Like",
+                                if (promotion.isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                                "Like",
                                 tint = if (promotion.isLiked) Color(0xFFFFD700) else Color.White
                             )
                         }
                         Text(
-                            text = promotion.likes.toString(),
+                            promotion.likes.toString(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White
                         )
                     }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)){
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         FloatingActionButton(
                             onClick = { onProfileClick(promotion.providerId) },
                             shape = CircleShape,
                             containerColor = MaterialTheme.colorScheme.secondary,
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Ver perfil",
-                                tint = MaterialTheme.colorScheme.onSecondary
-                            )
+                            Icon(Icons.Default.Person, "Ver perfil", tint = MaterialTheme.colorScheme.onSecondary)
                         }
-
                         FloatingActionButton(
                             onClick = { onMessageClick(promotion.providerId) },
                             shape = CircleShape,
                             containerColor = MaterialTheme.colorScheme.primary,
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Message,
-                                contentDescription = "Enviar mensaje",
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
+                            Icon(Icons.AutoMirrored.Filled.Message, "Enviar mensaje", tint = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
                 }
@@ -492,8 +1021,10 @@ fun FullScreenPromotionView(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, heightDp = 1200)
 @Composable
 fun PromoScreenPreview() {
-    PromoScreen(onBack = {}) // Llamar con el parámetro onBack
+    MyApplicationTheme {
+        PromoScreen(onBack = {}, navController = rememberNavController())
+    }
 }
