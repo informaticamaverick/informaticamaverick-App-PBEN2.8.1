@@ -18,8 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -30,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.prestador.ui.theme.PrestadorOrange
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import com.example.myapplication.prestador.R
 
 @Composable
@@ -42,20 +45,37 @@ fun PrestadorRegisterScreen(
     val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
     val isGoogleUser = currentUser != null
     
-    // Estados del formulario
+    // Estados del formulario - DATOS BÁSICOS
     var email by remember { mutableStateOf(currentUser?.email ?: "") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var nombre by remember { mutableStateOf("") }
-    var apellido by remember { mutableStateOf("") }
+    var dniCuit by remember { mutableStateOf("") }
+    var telefono by remember { mutableStateOf("") }
+    
+    // Estados del formulario - PERFIL PROFESIONAL
+    var profesion by remember { mutableStateOf("") }
+    var matricula by remember { mutableStateOf("") }
     var direccion by remember { mutableStateOf("") }
     var codigoPostal by remember { mutableStateOf("") }
-    var ciudad by remember { mutableStateOf("") }
     var provincia by remember { mutableStateOf("") }
     var showProvinciaDropdown by remember { mutableStateOf(false) }
     var serviciosSeleccionados by remember { mutableStateOf(listOf<String>()) }
+    
+    // Estados del formulario - CONFIGURACIÓN
+    var tieneNegocio by remember { mutableStateOf(false) }
+    var nombreNegocio by remember { mutableStateOf("") }
+    var razonSocial by remember { mutableStateOf("") }
+    var cuitNegocio by remember { mutableStateOf("") }
+    var direccionNegocio by remember { mutableStateOf("") }
+    var codigoPostalNegocio by remember { mutableStateOf("") }
+    data class Sucursal(val direccion: String = "", val codigoPostal: String = "")
+    var sucursales by remember { mutableStateOf(listOf<Sucursal>()) }
+    var hasPhysicalStore by remember { mutableStateOf(false) }
+    var hasStoreAppointments by remember { mutableStateOf(false) }
     var isHomeService by remember { mutableStateOf(false) }
     var is24Hours by remember { mutableStateOf(false) }
+    
     var showServiceDropdown by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
@@ -152,9 +172,9 @@ fun PrestadorRegisterScreen(
         ) {
             Spacer(modifier = Modifier.height(40.dp))
             
-            // Título
+            // Título Principal
             Text(
-                text = "Registro de Prestador",
+                text = "Alta de Prestador",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -175,24 +195,19 @@ fun PrestadorRegisterScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    Text(
-                        text = "Completa tus datos",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
-                    )
+                    // ========== SECCIÓN: DATOS BÁSICOS ==========
+                    SectionHeader("DATOS BÁSICOS")
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    // Campo Nombre
+                    // Campo Nombre Completo
                     OutlinedTextField(
                         value = nombre,
-                        onValueChange = {
-                            nombre  it },
-                        label = {
-                            Text("Nombre") },
+                        onValueChange = { nombre = it },
+                        label = { Text("Nombre Completo") },
+                        textStyle = TextStyle(fontSize = 14.sp),
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Person,
@@ -209,25 +224,125 @@ fun PrestadorRegisterScreen(
                             unfocusedContainerColor = Color(0xFFF8FAFC),
                             focusedBorderColor = PrestadorOrange,
                             unfocusedBorderColor = Color(0xFFE2E8F0),
-                            focusedLabelColor = PrestadorOrange
-
+                            focusedLabelColor = PrestadorOrange,
+                            cursorColor = PrestadorOrange
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // Campo Apellido
+
+                    // Campo DNI/CUIT/CUIL
                     OutlinedTextField(
-                        value = apellido,
-                        onValueChange = {
-                            apellido = it },
-                        label = {
-                            Text("Apellido") },
+                        value = dniCuit,
+                        onValueChange = { newValue ->
+                            if (newValue.all { it.isDigit()}){
+                                dniCuit = newValue
+                            }
+                        },
+                        label = { Text("DNI / CUIT / CUIL") },
+                        textStyle = TextStyle(fontSize = 14.sp),
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Apellido",
+                                imageVector = Icons.Default.AccountBox,
+                                contentDescription = "DNI / CUIT / CUIL",
+                                tint = Color.Gray
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC),
+                            focusedBorderColor = PrestadorOrange,
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedLabelColor = PrestadorOrange,
+                            cursorColor = PrestadorOrange
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Campo Teléfono
+                    OutlinedTextField(
+                        value = telefono,
+                        onValueChange = { newValue ->
+                            if (newValue.all { it.isDigit() || it == ' ' }) {
+                                telefono = newValue
+                            }
+                        },
+                        label = { Text("Teléfono (con cód. de área)") },
+                        placeholder = { Text("011 15 1234 5678", fontSize = 12.sp) },
+                        textStyle = TextStyle(fontSize = 14.sp),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Phone,
+                                contentDescription = "Teléfono",
+                                tint = Color.Gray
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC),
+                            focusedBorderColor = PrestadorOrange,
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedLabelColor = PrestadorOrange,
+                            cursorColor = PrestadorOrange
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    //Campo Nro de Matricula
+                    OutlinedTextField(
+                        value = matricula,
+                        onValueChange = { matricula = it },
+                        label = { Text("Nro de Matrícula") },
+                        textStyle = TextStyle(fontSize = 14.sp),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Matricula",
+                                tint = Color.Gray
+                            )
+                        },
+
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC),
+                            focusedBorderColor = PrestadorOrange,
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedLabelColor = PrestadorOrange,
+                            cursorColor = PrestadorOrange
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Campo Profesión
+                    OutlinedTextField(
+                        value = profesion,
+                        onValueChange = { profesion = it },
+                        label = { Text("Profesión") },
+                        textStyle = TextStyle(fontSize = 14.sp),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = "Profesión",
                                 tint = Color.Gray
                             )
                         },
@@ -247,66 +362,71 @@ fun PrestadorRegisterScreen(
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Dirección y Código Postal en fila
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Campo Dirección
+                        OutlinedTextField(
+                            value = direccion,
+                            onValueChange = { direccion = it },
+                            label = { Text("Dirección") },
+                            textStyle = TextStyle(fontSize = 14.sp),
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = "Dirección",
+                                    tint = Color.Gray
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(2f)
+                                .height(56.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFFF8FAFC),
+                                unfocusedContainerColor = Color(0xFFF8FAFC),
+                                focusedBorderColor = PrestadorOrange,
+                                unfocusedBorderColor = Color(0xFFE2E8F0),
+                                focusedLabelColor = PrestadorOrange,
+                                cursorColor = PrestadorOrange
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        
+                        // Campo Código Postal
+                        OutlinedTextField(
+                            value = codigoPostal,
+                            onValueChange = { newValue ->
+                                val filtered = newValue.filter {
+                                    it.isLetterOrDigit()
+                                }
+                                if (filtered.length <= 8) {
+                                    codigoPostal = filtered.uppercase()
+                                }
+                            },
+                            label = { Text("CP") },
+                            textStyle = TextStyle(fontSize = 14.sp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text,
+                                capitalization = KeyboardCapitalization.Characters),
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFFF8FAFC),
+                                unfocusedContainerColor = Color(0xFFF8FAFC),
+                                focusedBorderColor = PrestadorOrange,
+                                unfocusedBorderColor = Color(0xFFE2E8F0),
+                                focusedLabelColor = PrestadorOrange,
+                                cursorColor = PrestadorOrange
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
 
-
-                    // Campo DNI/CUIT/CUIL
-                    OutlinedTextField(
-                        value = dniCuit,
-                        onValueChange = {
-                            dniCuit = it },
-                        label = { Text("DNI / CUIT / CUIL")
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Badge,
-                                contentDescription = "DNI / CUIT / CUIL",
-                                tint = Color.Gray
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = True,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                        height(56.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFFF8FAFC),
-                            unfocusedContainerColor = Color(0xFFF8FAFC),
-                            focusedBorderColor = PrestadorOrange,
-                            unfocusedBorderColor = Color(0xFFE2E8F0),
-                            focusedLabelColor = PrestadorOrange,
-                            cursorColor = PrestadorOrange
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    //Campo Nro de Matricula
-                    OutlinedTextField(
-                        value = matricula,
-                        onValueChange = {
-                            matricula = it },
-                        label = { Text("Nro de matrícula")
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.CardMembership,
-                                contentDescription = "Matricula",
-                                tint = Color.Gray
-                            )
-                        },
-
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFFF8FAFC),
-                            unfocusedContainerColor = Color(0xFFF8FAFC),
-                            focusedBorderColor = PrestadorOrange,
-                            unfocusedBorderColor = Color(0xFFE2E8F0),
-                            focusedLabelColor = PrestadorOrange,
-                            cursorColor = PrestadorOrange
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
                     Spacer(modifier = Modifier.height(12.dp))
 
                     
@@ -388,6 +508,7 @@ fun PrestadorRegisterScreen(
                             value = confirmPassword,
                             onValueChange = { confirmPassword = it },
                             label = { Text("Confirmar Contraseña") },
+                            textStyle = TextStyle(fontSize = 14.sp),
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
@@ -430,6 +551,7 @@ fun PrestadorRegisterScreen(
                             value = email,
                             onValueChange = {},
                             label = { Text("Correo electrónico") },
+                            textStyle = TextStyle(fontSize = 14.sp),
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Email,
@@ -453,88 +575,6 @@ fun PrestadorRegisterScreen(
                         
                         Spacer(modifier = Modifier.height(12.dp))
                     }
-                    
-                    // Campo Dirección
-                    OutlinedTextField(
-                        value = direccion,
-                        onValueChange = { direccion = it },
-                        label = { Text("Dirección") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Home,
-                                contentDescription = "Dirección",
-                                tint = Color.Gray
-                            )
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFFF8FAFC),
-                            unfocusedContainerColor = Color(0xFFF8FAFC),
-                            focusedBorderColor = PrestadorOrange,
-                            unfocusedBorderColor = Color(0xFFE2E8F0),
-                            focusedLabelColor = PrestadorOrange,
-                            cursorColor = PrestadorOrange
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Campo Código Postal
-                    OutlinedTextField(
-                        value = codigoPostal,
-                        onValueChange = { codigoPostal = it },
-                        label = { Text("Código Postal") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Código Postal",
-                                tint = Color.Gray
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFFF8FAFC),
-                            unfocusedContainerColor = Color(0xFFF8FAFC),
-                            focusedBorderColor = PrestadorOrange,
-                            unfocusedBorderColor = Color(0xFFE2E8F0),
-                            focusedLabelColor = PrestadorOrange,
-                            cursorColor = PrestadorOrange
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Campo Ciudad
-                    OutlinedTextField(
-                        value = ciudad,
-                        onValueChange = { ciudad = it },
-                        label = { Text("Ciudad") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Ciudad",
-                                tint = Color.Gray
-                            )
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFFF8FAFC),
-                            unfocusedContainerColor = Color(0xFFF8FAFC),
-                            focusedBorderColor = PrestadorOrange,
-                            unfocusedBorderColor = Color(0xFFE2E8F0),
-                            focusedLabelColor = PrestadorOrange,
-                            cursorColor = PrestadorOrange
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
                     
                     // --- CAMPO PROVINCIA (DROPDOWN) ---
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -642,91 +682,438 @@ fun PrestadorRegisterScreen(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // --- BOTONES DE DISPONIBILIDAD (DOMICILIO / 24HS) ---
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    // --- SECCIÓN DE NEGOCIO/EMPRESA ---
+                    SectionHeader("CONFIGURACIÓN DE NEGOCIO")
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Switch ¿Tiene Local/Empresa?
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                     ) {
-                        // ¿Vas a domicilio?
-                        Card(
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(70.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFF8FAFC)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = "¿Vas a\ndomicilio?",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF64748B),
-                                    lineHeight = 14.sp
+                                Icon(
+                                    imageVector = Icons.Default.Build,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                Switch(
-                                    checked = isHomeService,
-                                    onCheckedChange = { isHomeService = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color.White,
-                                        checkedTrackColor = PrestadorOrange,
-                                        uncheckedThumbColor = Color.White,
-                                        uncheckedTrackColor = Color(0xFFCBD5E1)
-                                    )
+                                Text(
+                                    text = "¿Tiene Local / Empresa?",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF334155)
                                 )
                             }
+                            Switch(
+                                checked = tieneNegocio,
+                                onCheckedChange = { tieneNegocio = it },
+                                modifier = Modifier.scale(0.85f),
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = PrestadorOrange,
+                                    uncheckedThumbColor = Color.White,
+                                    uncheckedTrackColor = Color(0xFFCBD5E1)
+                                )
+                            )
                         }
+                    }
+                    
+                    // Campos de negocio (condicional)
+                    if (tieneNegocio) {
+                        Spacer(modifier = Modifier.height(12.dp))
                         
-                        // Servicio 24hs
                         Card(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(70.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFF8FAFC)
-                            ),
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
                             ) {
-                                Column {
+                                // Nombre Fantasía
+                                OutlinedTextField(
+                                    value = nombreNegocio,
+                                    onValueChange = { nombreNegocio = it },
+                                    label = { Text("Nombre Fantasía") },
+                                    placeholder = { Text("Ej. ElectroTotal", fontSize = 12.sp) },
+                                    textStyle = TextStyle(fontSize = 14.sp),
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Home,
+                                            contentDescription = null,
+                                            tint = Color.Gray
+                                        )
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = Color.White,
+                                        unfocusedContainerColor = Color.White,
+                                        focusedBorderColor = PrestadorOrange,
+                                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                                        focusedLabelColor = PrestadorOrange,
+                                        cursorColor = PrestadorOrange
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                // Razón Social
+                                OutlinedTextField(
+                                    value = razonSocial,
+                                    onValueChange = { razonSocial = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    textStyle = TextStyle(fontSize = 14.sp),
+                                    label = { Text("Razón Social") },
+                                    placeholder = { Text("S.A. / S.R.L.", fontSize = 12.sp) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = Color.Gray
+                                        )
+                                    },
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = Color.White,
+                                        unfocusedContainerColor = Color.White,
+                                        focusedBorderColor = PrestadorOrange,
+                                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                                        focusedLabelColor = PrestadorOrange,
+                                        cursorColor = PrestadorOrange
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                // CUIT Empresa
+                                OutlinedTextField(
+                                    value = cuitNegocio,
+                                    onValueChange = { newValue ->
+                                        if (newValue.all { it.isDigit() || it == '-' }) {
+                                            cuitNegocio = newValue
+                                        }
+                                    },
+                                    label = { Text("CUIT Empresa") },
+                                    placeholder = { Text("30-...", fontSize = 12.sp) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.AccountBox,
+                                            contentDescription = null,
+                                            tint = Color.Gray
+                                        )
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = Color.White,
+                                        unfocusedContainerColor = Color.White,
+                                        focusedBorderColor = PrestadorOrange,
+                                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                                        focusedLabelColor = PrestadorOrange,
+                                        cursorColor = PrestadorOrange
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                // Dirección Local y CP
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = direccionNegocio,
+                                        onValueChange = { direccionNegocio = it },
+                                        label = { Text("Dirección Local", fontSize = 13.sp) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.LocationOn,
+                                                contentDescription = null,
+                                                tint = Color.Gray
+                                            )
+                                        },
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(2f)
+                                            .height(56.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = Color.White,
+                                            unfocusedContainerColor = Color.White,
+                                            focusedBorderColor = PrestadorOrange,
+                                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                                            focusedLabelColor = PrestadorOrange,
+                                            cursorColor = PrestadorOrange
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    
+                                    OutlinedTextField(
+                                        value = codigoPostalNegocio,
+                                        onValueChange = { newValue ->
+                                            val filtered = newValue.filter {
+                                                it.isLetterOrDigit()
+                                            }
+                                            if (filtered.length <= 8) {
+                                                codigoPostalNegocio = filtered.uppercase()
+                                            }
+                                        },
+                                        label = { Text("CP") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text,
+                                            capitalization = KeyboardCapitalization.Characters),
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(56.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = Color.White,
+                                            unfocusedContainerColor = Color.White,
+                                            focusedBorderColor = PrestadorOrange,
+                                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                                            focusedLabelColor = PrestadorOrange,
+                                            cursorColor = PrestadorOrange
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                }
+                                
+                                // Sucursales
+                                if (sucursales.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
                                     Text(
-                                        text = "Servicio 24hs",
+                                        text = "SUCURSALES",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF64748B)
+                                        color = Color(0xFF64748B),
+                                        letterSpacing = 0.5.sp
                                     )
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                                
+                                sucursales.forEachIndexed { index, sucursal ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = sucursal.direccion,
+                                            onValueChange = { newValue ->
+                                                sucursales = sucursales.toMutableList().apply {
+                                                    this[index] = sucursal.copy(direccion = newValue)
+                                                }
+                                            },
+                                            placeholder = { Text("Dirección", fontSize = 12.sp) },
+                                            singleLine = true,
+                                            modifier = Modifier
+                                                .weight(2f)
+                                                .height(48.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedContainerColor = Color.White,
+                                                unfocusedContainerColor = Color.White,
+                                                focusedBorderColor = PrestadorOrange,
+                                                unfocusedBorderColor = Color(0xFFE2E8F0),
+                                                cursorColor = PrestadorOrange
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        
+                                        OutlinedTextField(
+                                            value = sucursal.codigoPostal,
+                                            onValueChange = { newValue ->
+                                                val filtered = newValue.filter {
+                                                    it.isLetterOrDigit() }
+                                                if (filtered.length <= 8) {
+                                                    sucursales.toMutableStateList().apply {
+                                                        this[index] = sucursal.copy(codigoPostal = filtered.uppercase())
+                                                    }
+                                                }
+                                            },
+                                            placeholder = { Text("CP", fontSize = 12.sp) },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text,
+                                                capitalization = KeyboardCapitalization.Characters),
+                                            singleLine = true,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(48.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedContainerColor = Color.White,
+                                                unfocusedContainerColor = Color.White,
+                                                focusedBorderColor = PrestadorOrange,
+                                                unfocusedBorderColor = Color(0xFFE2E8F0),
+                                                cursorColor = PrestadorOrange
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        
+                                        IconButton(
+                                            onClick = {
+                                                sucursales = sucursales.toMutableList().apply {
+                                                    removeAt(index)
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Eliminar",
+                                                tint = Color(0xFFEF4444)
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                // Botón agregar sucursal
+                                TextButton(
+                                    onClick = {
+                                        sucursales = sucursales + Sucursal()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = PrestadorOrange
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Activa FAST",
-                                        fontSize = 9.sp,
+                                        text = "Agregar Sucursal",
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = PrestadorOrange
                                     )
                                 }
-                                Switch(
-                                    checked = is24Hours,
-                                    onCheckedChange = { is24Hours = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color.White,
-                                        checkedTrackColor = PrestadorOrange,
-                                        uncheckedThumbColor = Color.White,
-                                        uncheckedTrackColor = Color(0xFFCBD5E1)
-                                    )
-                                )
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                // Switches de Local físico y Turnos
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // Local físico
+                                    Card(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(56.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = Color(0xFFF8FAFC)
+                                        ),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "¿Local\nfísico?",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF64748B),
+                                                lineHeight = 13.sp
+                                            )
+                                            Switch(
+                                                checked = hasPhysicalStore,
+                                                onCheckedChange = { 
+                                                    hasPhysicalStore = it
+                                                    if (!it) hasStoreAppointments = false
+                                                },
+                                                modifier = Modifier.scale(0.8f),
+                                                colors = SwitchDefaults.colors(
+                                                    checkedThumbColor = Color.White,
+                                                    checkedTrackColor = PrestadorOrange,
+                                                    uncheckedThumbColor = Color.White,
+                                                    uncheckedTrackColor = Color(0xFFCBD5E1)
+                                                )
+                                            )
+                                        }
+                                    }
+                                    
+                                    // Turnos en local
+                                    Card(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(56.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (hasPhysicalStore) Color(0xFFF8FAFC) else Color(0xFFF1F5F9)
+                                        ),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "¿Turnos\nen local?",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (hasPhysicalStore) Color(0xFF64748B) else Color(0xFF94A3B8),
+                                                lineHeight = 13.sp
+                                            )
+                                            Switch(
+                                                checked = hasStoreAppointments,
+                                                onCheckedChange = { hasStoreAppointments = it },
+                                                enabled = hasPhysicalStore,
+                                                modifier = Modifier.scale(0.8f),
+                                                colors = SwitchDefaults.colors(
+                                                    checkedThumbColor = Color.White,
+                                                    checkedTrackColor = PrestadorOrange,
+                                                    uncheckedThumbColor = Color.White,
+                                                    uncheckedTrackColor = Color(0xFFCBD5E1),
+                                                    disabledCheckedThumbColor = Color.White,
+                                                    disabledCheckedTrackColor = Color(0xFFCBD5E1),
+                                                    disabledUncheckedThumbColor = Color.White,
+                                                    disabledUncheckedTrackColor = Color(0xFFCBD5E1)
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -845,6 +1232,99 @@ fun PrestadorRegisterScreen(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    // --- BOTONES DE DISPONIBILIDAD (DOMICILIO / 24HS) ---
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // ¿Vas a domicilio?
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF8FAFC)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "¿Vas a\ndomicilio?",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF64748B),
+                                    lineHeight = 13.sp
+                                )
+                                Switch(
+                                    checked = isHomeService,
+                                    onCheckedChange = { isHomeService = it },
+                                    modifier = Modifier.scale(0.8f),
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = PrestadorOrange,
+                                        uncheckedThumbColor = Color.White,
+                                        uncheckedTrackColor = Color(0xFFCBD5E1)
+                                    )
+                                )
+                            }
+                        }
+                        
+                        // Servicio 24hs
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF8FAFC)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Servicio 24hs",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF64748B)
+                                    )
+                                    Text(
+                                        text = "Activa FAST",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrestadorOrange
+                                    )
+                                }
+                                Switch(
+                                    checked = is24Hours,
+                                    onCheckedChange = { is24Hours = it },
+                                    modifier = Modifier.scale(0.8f),
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = PrestadorOrange,
+                                        uncheckedThumbColor = Color.White,
+                                        uncheckedTrackColor = Color(0xFFCBD5E1)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
                     // Campo Servicios (Multi-selección) - COMENTADO PARA REEMPLAZAR
                     /*
                     OutlinedButton(
@@ -904,8 +1384,8 @@ fun PrestadorRegisterScreen(
                     Button(
                         onClick = {
                             when {
-                                nombre.isBlank() || apellido.isBlank() || direccion.isBlank() ||
-                                codigoPostal.isBlank() || ciudad.isBlank() || provincia.isBlank() -> {
+                                nombre.isBlank() || dniCuit.isBlank() ||
+                                matricula.isBlank() || profesion.isBlank() || provincia.isBlank() -> {
                                     errorMessage = "Por favor completa todos los campos"
                                 }
                                 !isGoogleUser && (email.isBlank() || password.isBlank() || confirmPassword.isBlank()) -> {
@@ -921,10 +1401,37 @@ fun PrestadorRegisterScreen(
                                     errorMessage = "Selecciona al menos un servicio"
                                 }
                                 else -> {
+                                    // Convertir sucursales a List<Map<String, String>>
+                                    val sucursalesMap = sucursales.map {
+                                        mapOf(
+                                            "direccion" to it.direccion,
+                                            "codigoPostal" to it.codigoPostal
+                                        )
+                                    }
+                                    
                                     viewModel.register(
-                                        email, password, nombre, apellido, direccion,
-                                        codigoPostal, ciudad, provincia, serviciosSeleccionados,
-                                        isHomeService, is24Hours
+                                        email = email,
+                                        password = password,
+                                        nombre = nombre,
+                                        dniCuit = dniCuit,
+                                        telefono = telefono,
+                                        matricula = matricula,
+                                        profesion = profesion,
+                                        direccion = direccion,
+                                        codigoPostal = codigoPostal,
+                                        provincia = provincia,
+                                        servicios = serviciosSeleccionados,
+                                        tieneNegocio = tieneNegocio,
+                                        nombreNegocio = nombreNegocio,
+                                        razonSocial = razonSocial,
+                                        cuitNegocio = cuitNegocio,
+                                        direccionNegocio = direccionNegocio,
+                                        codigoPostalNegocio = codigoPostalNegocio,
+                                        sucursales = sucursalesMap,
+                                        isHomeService = isHomeService,
+                                        is24Hours = is24Hours,
+                                        hasPhysicalStore = hasPhysicalStore,
+                                        hasStoreAppointments = hasStoreAppointments
                                     )
                                 }
                             }
@@ -1085,7 +1592,7 @@ fun PreviewPrestadorRegisterScreen() {
                     OutlinedTextField(
                         value = "",
                         onValueChange = {},
-                        placeholder = { Text("Nombre") },
+                        placeholder = { Text("Nombre", fontSize = 12.sp) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     
@@ -1094,7 +1601,7 @@ fun PreviewPrestadorRegisterScreen() {
                     OutlinedTextField(
                         value = "",
                         onValueChange = {},
-                        placeholder = { Text("Apellido") },
+                        placeholder = { Text("Apellido", fontSize = 12.sp) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     
@@ -1103,7 +1610,7 @@ fun PreviewPrestadorRegisterScreen() {
                     OutlinedTextField(
                         value = "",
                         onValueChange = {},
-                        placeholder = { Text("Teléfono") },
+                        placeholder = { Text("Teléfono", fontSize = 12.sp) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     
@@ -1112,7 +1619,7 @@ fun PreviewPrestadorRegisterScreen() {
                     OutlinedTextField(
                         value = "",
                         onValueChange = {},
-                        placeholder = { Text("Provincia") },
+                        placeholder = { Text("Provincia", fontSize = 12.sp) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     
@@ -1135,4 +1642,15 @@ fun PreviewPrestadorRegisterScreen() {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+}
+
+@Composable
+fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color(0xFF94A3B8),
+        letterSpacing = 0.1.sp
+    )
 }

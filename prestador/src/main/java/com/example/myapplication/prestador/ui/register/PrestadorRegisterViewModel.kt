@@ -24,14 +24,27 @@ class PrestadorRegisterViewModel @Inject constructor(
         email: String,
         password: String,
         nombre: String,
-        apellido: String,
+        dniCuit: String,
+        telefono: String,
+        matricula: String,
+        profesion: String,
         direccion: String,
         codigoPostal: String,
-        ciudad: String,
         provincia: String,
         servicios: List<String>,
+        // Configuración de Negocio
+        tieneNegocio: Boolean,
+        nombreNegocio: String,
+        razonSocial: String,
+        cuitNegocio: String,
+        direccionNegocio: String,
+        codigoPostalNegocio: String,
+        sucursales: List<Map<String, String>>,
+        // Configuración de Servicio
         isHomeService: Boolean,
-        is24Hours: Boolean
+        is24Hours: Boolean,
+        hasPhysicalStore: Boolean,
+        hasStoreAppointments: Boolean
     ) {
         viewModelScope.launch {
             _registerState.value = RegisterState.Loading
@@ -55,13 +68,26 @@ class PrestadorRegisterViewModel @Inject constructor(
                         // Actualizar con nuevos datos de prestador
                         val updateData = hashMapOf<String, Any>(
                             "roles" to currentRoles,
+                            "nombre" to nombre,
+                            "dniCuit" to dniCuit,
+                            "telefono" to telefono,
+                            "matricula" to matricula,
+                            "profesion" to profesion,
                             "direccion" to direccion,
                             "codigoPostal" to codigoPostal,
-                            "ciudad" to ciudad,
                             "provincia" to provincia,
                             "servicios" to servicios,
+                            "tieneNegocio" to tieneNegocio,
+                            "nombreNegocio" to nombreNegocio,
+                            "razonSocial" to razonSocial,
+                            "cuitNegocio" to cuitNegocio,
+                            "direccionNegocio" to direccionNegocio,
+                            "codigoPostalNegocio" to codigoPostalNegocio,
+                            "sucursales" to sucursales,
                             "isHomeService" to isHomeService,
                             "is24Hours" to is24Hours,
+                            "hasPhysicalStore" to hasPhysicalStore,
+                            "hasStoreAppointments" to hasStoreAppointments,
                             "prestadorCreatedAt" to System.currentTimeMillis()
                         )
                         
@@ -70,15 +96,26 @@ class PrestadorRegisterViewModel @Inject constructor(
                         // Usuario nuevo, crear documento
                         val prestadorData = hashMapOf(
                             "nombre" to nombre,
-                            "apellido" to apellido,
                             "email" to (currentUser.email ?: email),
+                            "dniCuit" to dniCuit,
+                            "telefono" to telefono,
+                            "matricula" to matricula,
+                            "profesion" to profesion,
                             "direccion" to direccion,
                             "codigoPostal" to codigoPostal,
-                            "ciudad" to ciudad,
                             "provincia" to provincia,
                             "servicios" to servicios,
+                            "tieneNegocio" to tieneNegocio,
+                            "nombreNegocio" to nombreNegocio,
+                            "razonSocial" to razonSocial,
+                            "cuitNegocio" to cuitNegocio,
+                            "direccionNegocio" to direccionNegocio,
+                            "codigoPostalNegocio" to codigoPostalNegocio,
+                            "sucursales" to sucursales,
                             "isHomeService" to isHomeService,
                             "is24Hours" to is24Hours,
+                            "hasPhysicalStore" to hasPhysicalStore,
+                            "hasStoreAppointments" to hasStoreAppointments,
                             "roles" to listOf("prestador"),
                             "createdAt" to System.currentTimeMillis()
                         )
@@ -94,15 +131,26 @@ class PrestadorRegisterViewModel @Inject constructor(
 
                     val prestadorData = hashMapOf(
                         "nombre" to nombre,
-                        "apellido" to apellido,
                         "email" to email,
+                        "dniCuit" to dniCuit,
+                        "telefono" to telefono,
+                        "matricula" to matricula,
+                        "profesion" to profesion,
                         "direccion" to direccion,
                         "codigoPostal" to codigoPostal,
-                        "ciudad" to ciudad,
                         "provincia" to provincia,
                         "servicios" to servicios,
+                        "tieneNegocio" to tieneNegocio,
+                        "nombreNegocio" to nombreNegocio,
+                        "razonSocial" to razonSocial,
+                        "cuitNegocio" to cuitNegocio,
+                        "direccionNegocio" to direccionNegocio,
+                        "codigoPostalNegocio" to codigoPostalNegocio,
+                        "sucursales" to sucursales,
                         "isHomeService" to isHomeService,
                         "is24Hours" to is24Hours,
+                        "hasPhysicalStore" to hasPhysicalStore,
+                        "hasStoreAppointments" to hasStoreAppointments,
                         "roles" to listOf("prestador"),
                         "createdAt" to System.currentTimeMillis()
                     )

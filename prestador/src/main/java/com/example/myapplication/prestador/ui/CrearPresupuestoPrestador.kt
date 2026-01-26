@@ -244,7 +244,7 @@ fun CrearPresupuestoPrestadorScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
-                //item { PrestadorHeader(prestador, onFilterClick = { sheetType = SheetType.Sections }) }
+                item { PrestadorHeader(prestador, onFilterClick = { sheetType = SheetType.Sections }) }
                 item { HorizontalDivider() }
 
                 // --- SECTIONS ---
