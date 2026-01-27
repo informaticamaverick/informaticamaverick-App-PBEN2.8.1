@@ -36,6 +36,7 @@ fun AppNavHost(
     pagerState: PagerState,
     navItems: List<Screen>,
     modifier: Modifier = Modifier,
+    onInConversationChange: (Boolean) -> Unit = {}
 ) {
     NavHost(
         navController = navController,
@@ -48,7 +49,11 @@ fun AppNavHost(
                 when (navItems[page]) {
                     Screen.Home -> HomeScreenCliente(navController = navController)
                     Screen.Presupuestos -> PresupuestosScreen(onBack = { navController.popBackStack() })
-                    Screen.Chat -> ChatScreen(onBack = { navController.popBackStack() })
+                    Screen.Chat -> ChatScreen(
+                        onBack = { navController.popBackStack() },
+                        navController = navController,
+                        onInConversationChange = onInConversationChange
+                    )
                     Screen.Calendar -> CalendarScreen(onBack = { navController.popBackStack() })
                     Screen.Promo -> PromoScreen(onBack = { navController.popBackStack() }, navController = navController)
                     else -> {}
@@ -91,7 +96,9 @@ fun AppNavHost(
             val providerId = backStackEntry.arguments?.getString("providerId")
             ChatScreen(
                 onBack = { navController.popBackStack() },
-                initialProviderId = providerId
+                initialProviderId = providerId,
+                navController = navController,
+                onInConversationChange = onInConversationChange
             )
         }
     }

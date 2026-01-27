@@ -1439,44 +1439,28 @@ fun ScheduleAppointmentDialog(
     onDismiss: () -> Unit,
     onConfirm: (date: String, time: String) -> Unit
 ) {
-    val context = LocalContext.current
     val calendar = Calendar.getInstance()
     
     // Fecha por defecto: Mañana
-    var selectedDate by remember {
-        calendar.add(Calendar.DAY_OF_YEAR, 1)
-        val year = calendar.get(Calendar.YEAR)
-        val month = calendar.get(Calendar.MONTH) + 1
-        val day = calendar.get(Calendar.DAY_OF_MONTH)
-        mutableStateOf("$year-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}")
+    calendar.add(Calendar.DAY_OF_YEAR, 1)
+    val defaultYear = calendar.get(Calendar.YEAR)
+    val defaultMonth = calendar.get(Calendar.MONTH)
+    val defaultDay = calendar.get(Calendar.DAY_OF_MONTH)
+    
+    var selectedDateMillis by remember {
+        val cal = Calendar.getInstance()
+        cal.set(defaultYear, defaultMonth, defaultDay)
+        mutableStateOf(cal.timeInMillis)
     }
     
     // Hora por defecto: 09:00
     var selectedTime by remember { mutableStateOf("09:00") }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
     
-    // DatePicker nativo de Android
-    val datePickerDialog = android.app.DatePickerDialog(
-        context,
-        { _, year, month, dayOfMonth ->
-            val formattedMonth = (month + 1).toString().padStart(2, '0')
-            val formattedDay = dayOfMonth.toString().padStart(2, '0')
-            selectedDate = "$year-$formattedMonth-$formattedDay"
-        },
-        calendar.get(Calendar.YEAR),
-        calendar.get(Calendar.MONTH),
-        calendar.get(Calendar.DAY_OF_MONTH)
-    )
-    
-    // TimePicker nativo de Android
-    val timePickerDialog = android.app.TimePickerDialog(
-        context,
-        { _, hourOfDay, minute ->
-            val formattedHour = hourOfDay.toString().padStart(2, '0')
-            val formattedMinute = minute.toString().padStart(2, '0')
-            selectedTime = "$formattedHour:$formattedMinute"
-        },
-        9, 0, true // 24 horas
-    )
+    // Formatear fecha seleccionada
+    val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val selectedDate = dateFormatter.format(Date(selectedDateMillis))
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1528,7 +1512,7 @@ fun ScheduleAppointmentDialog(
                     enabled = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { datePickerDialog.show() },
+                        .clickable { showDatePicker = true },
                     trailingIcon = {
                         Icon(
                             painter = painterResource(com.example.myapplication.prestador.R.drawable.ic_calendar),
@@ -1560,7 +1544,7 @@ fun ScheduleAppointmentDialog(
                     enabled = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { timePickerDialog.show() },
+                        .clickable { showTimePicker = true },
                     trailingIcon = {
                         Icon(
                             painter = painterResource(com.example.myapplication.prestador.R.drawable.ic_calendar),
@@ -1596,6 +1580,125 @@ fun ScheduleAppointmentDialog(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+            }
+        }
+    }
+    
+    // DatePicker personalizado
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDateMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            selectedDateMillis = it
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("Aceptar", color = Color(0xFFFF6B35), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancelar", color = Color(0xFF64748B))
+                }
+            },
+            colors = DatePickerDefaults.colors(
+                containerColor = Color.White
+            )
+        ) {
+            DatePicker(
+                state = datePickerState,
+                colors = DatePickerDefaults.colors(
+                    containerColor = Color.White,
+                    titleContentColor = Color(0xFF1E293B),
+                    headlineContentColor = Color(0xFF1E293B),
+                    weekdayContentColor = Color(0xFF64748B),
+                    subheadContentColor = Color(0xFF64748B),
+                    dayContentColor = Color(0xFF1E293B),
+                    selectedDayContainerColor = Color(0xFFFF6B35),
+                    todayContentColor = Color(0xFFFF6B35),
+                    todayDateBorderColor = Color(0xFFFF6B35),
+                    selectedDayContentColor = Color.White
+                )
+            )
+        }
+    }
+    
+    // TimePicker personalizado
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = selectedTime.split(":")[0].toIntOrNull() ?: 9,
+            initialMinute = selectedTime.split(":")[1].toIntOrNull() ?: 0,
+            is24Hour = true
+        )
+        
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showTimePicker = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = Color.White,
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Seleccionar Hora",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    TimePicker(
+                        state = timePickerState,
+                        colors = TimePickerDefaults.colors(
+                            clockDialColor = Color(0xFFF1F5F9),
+                            clockDialSelectedContentColor = Color.White,
+                            clockDialUnselectedContentColor = Color(0xFF1E293B),
+                            selectorColor = Color(0xFFFF6B35),
+                            containerColor = Color.White,
+                            periodSelectorBorderColor = Color(0xFFE2E8F0),
+                            periodSelectorSelectedContainerColor = Color(0xFFFF6B35),
+                            periodSelectorUnselectedContainerColor = Color.Transparent,
+                            periodSelectorSelectedContentColor = Color.White,
+                            periodSelectorUnselectedContentColor = Color(0xFF64748B),
+                            timeSelectorSelectedContainerColor = Color(0xFFFF6B35).copy(alpha = 0.2f),
+                            timeSelectorUnselectedContainerColor = Color(0xFFF1F5F9),
+                            timeSelectorSelectedContentColor = Color(0xFFFF6B35),
+                            timeSelectorUnselectedContentColor = Color(0xFF1E293B)
+                        )
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { showTimePicker = false }) {
+                            Text("Cancelar", color = Color(0xFF64748B))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(
+                            onClick = {
+                                val hour = timePickerState.hour.toString().padStart(2, '0')
+                                val minute = timePickerState.minute.toString().padStart(2, '0')
+                                selectedTime = "$hour:$minute"
+                                showTimePicker = false
+                            }
+                        ) {
+                            Text("Aceptar", color = Color(0xFFFF6B35), fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
