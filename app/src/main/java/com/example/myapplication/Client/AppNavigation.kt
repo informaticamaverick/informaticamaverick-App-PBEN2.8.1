@@ -2,13 +2,21 @@ package com.example.myapplication.Client
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.compose.ui.Modifier
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 
 // 1. DEFINICIÓN CENTRALIZADA DE TODAS LAS RUTAS
 sealed class Screen(val route: String, val title: String) {
@@ -27,72 +35,87 @@ sealed class Screen(val route: String, val title: String) {
     object ChatConversation : Screen("chat_conversation/{providerId}", "Conversación de Chat")
 }
 
-// 2. CONTENEDOR DE NAVEGACIÓN (NAVHOST)
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun AppNavHost(
-    navController: NavHostController,
-    pagerState: PagerState,
-    navItems: List<Screen>,
-    modifier: Modifier = Modifier,
-) {
-    NavHost(
-        navController = navController,
-        startDestination = Screen.Home.route,
-        modifier = modifier
-    ) {
-        // Ruta para el HorizontalPager que contiene las pantallas principales
-        composable(Screen.Home.route) {
-            HorizontalPager(state = pagerState) { page ->
-                when (navItems[page]) {
-                    Screen.Home -> HomeScreenCliente(navController = navController)
-                    Screen.Presupuestos -> PresupuestosScreen(onBack = { navController.popBackStack() })
-                    Screen.Chat -> ChatScreen(onBack = { navController.popBackStack() })
-                    Screen.Calendar -> CalendarScreen(onBack = { navController.popBackStack() })
-                    Screen.Promo -> PromoScreen(onBack = { navController.popBackStack() }, navController = navController)
-                    else -> {}
+fun AppNavigation() {
+    val navController = rememberNavController()
+    val navItems = listOf(
+        Screen.Home,
+        Screen.Presupuestos,
+        Screen.Chat,
+        Screen.Calendar,
+        Screen.Promo
+    )
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val selectedScreen = navItems.find { it.route == currentRoute } ?: Screen.Home
+    val mainScreenRoutes = navItems.map { it.route }
+
+    Scaffold(
+        bottomBar = {
+            if (currentRoute in mainScreenRoutes) {
+                AppBottomNavigationBar(
+                    navController = navController,
+                    allItems = navItems,
+                    selectedScreen = selectedScreen
+                )
+            }
+        }
+    ) { innerPadding ->
+        Box(modifier = Modifier.padding(innerPadding)) {
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Home.route,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                composable(Screen.Home.route) { HomeScreenCliente(navController = navController) }
+                composable(Screen.Presupuestos.route) { PresupuestosScreen(onBack = { navController.popBackStack() }) }
+                composable(Screen.Chat.route) { ChatScreen(onBack = { navController.popBackStack() }) }
+                composable(Screen.Calendar.route) { CalendarScreen(onBack = { navController.popBackStack() }) }
+                composable(Screen.Promo.route) { PromoScreen(navController = navController, onBack = { navController.popBackStack() }) }
+
+                composable(Screen.CrearLicitacion.route) { CrearLicScreen(onBack = { navController.popBackStack() }) }
+                composable(Screen.PerfilCliente.route) { PerfilUsuarioScreen(onNavigateBack = { navController.popBackStack() }) }
+                composable(
+                    route = Screen.ResultBusqueda.route,
+                    arguments = listOf(navArgument("category") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val category = backStackEntry.arguments?.getString("category") ?: ""
+                    ResultBusquedaCategoriaScreen(
+                        categoryName = category,
+                        onBack = { navController.popBackStack() },
+                        onNavigateToProviderProfile = { providerId ->
+                            navController.navigate("perfil_prestador/$providerId")
+                        },
+                        onNavigateToChat = { providerId ->
+                            navController.navigate("chat_conversation/$providerId")
+                        }
+                    )
+                }
+                composable(
+                    route = Screen.PerfilPrestador.route,
+                    arguments = listOf(navArgument("providerId") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val providerId = backStackEntry.arguments?.getString("providerId") ?: ""
+                    PerfilPrestadorCliente(providerId = providerId, onBack = { navController.popBackStack() })
+                }
+                composable(
+                    route = Screen.ChatConversation.route,
+                    arguments = listOf(navArgument("providerId") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val providerId = backStackEntry.arguments?.getString("providerId")
+                    ChatScreen(onBack = { navController.popBackStack() }, initialProviderId = providerId)
                 }
             }
         }
-
-        // Rutas de las pantallas secundarias
-        composable(Screen.CrearLicitacion.route) { 
-            CrearLicScreen(onBack = { navController.popBackStack() }) 
-        }
-        
-        composable(Screen.PerfilCliente.route) { 
-            PerfilUsuarioScreen(onNavigateBack = { navController.popBackStack() }) 
-        }
-
-        composable(Screen.PerfilPrestador.route) { backStackEntry ->
-            val providerId = backStackEntry.arguments?.getString("providerId") ?: return@composable
-            PerfilPrestadorCliente(
-                providerId = providerId,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.ResultBusqueda.route) { backStackEntry ->
-            val category = backStackEntry.arguments?.getString("category") ?: return@composable
-            ResultBusquedaCategoriaScreen(
-                categoryName = category,
-                onBack = { navController.popBackStack() },
-                onNavigateToProviderProfile = { providerId ->
-                    navController.navigate(Screen.PerfilPrestador.route.replace("{providerId}", providerId))
-                },
-                onNavigateToChat = { providerId ->
-                    navController.navigate(Screen.ChatConversation.route.replace("{providerId}", providerId))
-                }
-            )
-        }
-
-        composable(Screen.ChatConversation.route) { backStackEntry ->
-            val providerId = backStackEntry.arguments?.getString("providerId")
-            ChatScreen(
-                onBack = { navController.popBackStack() },
-                initialProviderId = providerId
-            )
-        }
     }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview
+@Composable
+fun AppNavigationPreview() {
+    AppNavigation()
 }

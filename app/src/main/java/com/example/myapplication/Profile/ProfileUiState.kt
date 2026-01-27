@@ -25,4 +25,10 @@ data class ProfileUiState(
     val error: String? = null,
     val successMessage: String? = null,
     val isComplete: Boolean = false
+
+
+
+
+
+
 )

@@ -611,11 +611,11 @@ fun AddArticleSheetContent(
 ) {
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetItem()) }
-    
+
     val baseAmount = currentItem.quantity * currentItem.unitPrice
     val taxAmountValue = baseAmount * (currentItem.taxPercentage / 100)
     val baseWithTax = baseAmount + taxAmountValue
-    
+
     var taxPercentStr by remember { mutableStateOf(if (currentItem.taxPercentage > 0) currentItem.taxPercentage.toString() else "") }
     var taxAmountStr by remember { mutableStateOf(if (currentItem.taxPercentage > 0) "%.2f".format(taxAmountValue) else "") }
     var discountPercentStr by remember { mutableStateOf(if (currentItem.discountPercentage > 0) currentItem.discountPercentage.toString() else "") }
@@ -625,7 +625,7 @@ fun AddArticleSheetContent(
          if (baseAmount > 0) {
             val taxP = taxPercentStr.toDoubleOrNull() ?: 0.0
             if (taxP > 0) taxAmountStr = "%.2f".format(baseAmount * taxP / 100)
-            
+
             val discP = discountPercentStr.toDoubleOrNull() ?: 0.0
             val currentTaxAmt = baseAmount * (taxP / 100)
             val currentBaseWithTax = baseAmount + currentTaxAmt
@@ -635,17 +635,17 @@ fun AddArticleSheetContent(
 
     Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding()) {
         Text(if (isEditMode) "Editar Artículo" else "Agregar Nuevo Artículo", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
-        
+
         BudgetItemRow(item = currentItem, onUpdate = { currentItem = it })
-        
+
         Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider()
         Text("Impuestos y Descuentos", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
-        
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactTextField(
                 value = taxPercentStr,
-                onValueChange = { 
+                onValueChange = {
                     taxPercentStr = it
                     val p = it.toDoubleOrNull()
                     if (p != null && baseAmount > 0) {
@@ -666,7 +666,7 @@ fun AddArticleSheetContent(
             )
             CompactTextField(
                 value = taxAmountStr,
-                onValueChange = { 
+                onValueChange = {
                     taxAmountStr = it
                     val a = it.toDoubleOrNull()
                     if (a != null && baseAmount > 0) {
@@ -686,13 +686,13 @@ fun AddArticleSheetContent(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next)
             )
         }
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactTextField(
                 value = discountPercentStr,
-                onValueChange = { 
+                onValueChange = {
                     discountPercentStr = it
                     val p = it.toDoubleOrNull()
                     if (p != null && baseWithTax > 0) {
@@ -709,7 +709,7 @@ fun AddArticleSheetContent(
             )
             CompactTextField(
                 value = discountAmountStr,
-                onValueChange = { 
+                onValueChange = {
                     discountAmountStr = it
                     val a = it.toDoubleOrNull()
                     if (a != null && baseWithTax > 0) {
@@ -802,16 +802,16 @@ fun AddMiscExpenseSheetContent(
     } else {
         listOf(TempMiscExpense())
     }
-    
+
     val expenseRows = remember { mutableStateListOf<TempMiscExpense>().apply { addAll(initialList) } }
-    
-    val commonRows = remember { 
+
+    val commonRows = remember {
         mutableStateListOf(
             TempMiscExpense(description = "Gastos de envios"),
             TempMiscExpense(description = "Viáticos"),
             TempMiscExpense(description = "Logística"),
             TempMiscExpense(description = "Movilidad")
-        ) 
+        )
     }
 
     Column(
@@ -833,7 +833,7 @@ fun AddMiscExpenseSheetContent(
                 }
             }
         }
-        
+
         expenseRows.forEachIndexed { index, row ->
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CompactTextField(
@@ -878,9 +878,9 @@ fun AddMiscExpenseSheetContent(
         val totalAmount = (expenseRows + commonRows).sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
         Text(text = "Total Gasto: \$${"%.2f".format(totalAmount)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.End).padding(vertical = 8.dp))
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Button(
-            onClick = { 
+            onClick = {
                 if (itemToEdit != null) {
                     val row = expenseRows.first()
                     onUpdateItem(itemToEdit.copy(description = row.description, amount = row.amount.toDoubleOrNull() ?: 0.0))
@@ -926,7 +926,7 @@ fun AddTaxSheetContent(
                 }
             }
         }
-        
+
         taxRows.forEachIndexed { index, row ->
             var amountStr by remember { mutableStateOf("") }
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1067,7 +1067,7 @@ fun BudgetItemRow(item: BudgetItem, onUpdate: (BudgetItem) -> Unit) {
     val withTax = base + taxAmount
     val discountAmount = withTax * (item.discountPercentage / 100)
     val total = withTax - discountAmount
-    
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CompactTextField(value = item.code, onValueChange = { onUpdate(item.copy(code = it)) }, label = { Text("Cód.") }, modifier = Modifier.weight(0.25f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
