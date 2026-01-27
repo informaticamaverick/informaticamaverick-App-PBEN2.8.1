@@ -119,7 +119,7 @@ fun HomeScreenCliente(navController: NavHostController) {
                             inactiveIcon = Icons.Outlined.Folder
                         )
 
-                        VerticalDivider(modifier = Modifier.height(48.dp).width(1.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                        //VerticalDivider(modifier = Modifier.height(48.dp).width(1.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
 
                         CustomTab(
                             modifier = Modifier.weight(secondTabWeight),
@@ -210,7 +210,7 @@ fun CustomTab(
     activeIcon: String,
     inactiveIcon: ImageVector
 ) {
-    val scale by animateFloatAsState(targetValue = if (selected) 1.2f else 1.0f, label = "scale")
+    val scale by animateFloatAsState(targetValue = if (selected) 1.2f else 1.2f, label = "scale")
     Box(
         modifier = modifier
             .clickable(onClick = onClick)
@@ -228,7 +228,7 @@ fun CustomTab(
                 Icon(inactiveIcon, contentDescription = text, tint = Color.Gray, modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.width(4.dp))
-            Text(text, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, color = if (selected) Color.Unspecified else Color.Gray, fontSize = if(selected) 16.sp else 14.sp)
+            Text(text, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, color = if (selected) Color.Unspecified else Color.Gray, fontSize = if(selected) 16.sp else 0.sp)
         }
     }
 }

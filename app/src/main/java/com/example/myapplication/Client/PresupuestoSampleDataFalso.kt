@@ -1,4 +1,4 @@
-package com.example.myapplication.Client
+/**package com.example.myapplication.Client
 
 import androidx.compose.runtime.mutableStateListOf
 import java.time.LocalDate
@@ -106,3 +106,4 @@ object PresupuestoSampleDataFalso {
         ))
     }
 }
+**/
