@@ -6,11 +6,18 @@ import androidx.compose.ui.graphics.Color
  * Representa un mensaje individual en el chat
  */
 data class Message(
-    val id: Long,
+    val id: String,
     val text: String,
-    val isFromMe: Boolean,  // true = yo envié, false = el otro usuario
-    val time: String,        // Formato: "10:05"
-    val timestamp: Long = System.currentTimeMillis()
+    val senderId: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val status: String = "sent",
+    val imageUri: String? = null,
+    val locationLat: Double? = null,
+    val locationLng: Double? = null,
+    val locationAddress: String? = null,
+    val appointmentDate: String? = null,
+    val appointmentTime: String? = null,
+    val appointmentNotes: String? = null
 )
 
 /**
