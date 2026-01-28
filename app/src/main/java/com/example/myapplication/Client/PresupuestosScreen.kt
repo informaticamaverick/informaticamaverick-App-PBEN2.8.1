@@ -1,11 +1,13 @@
 package com.example.myapplication.Client
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -50,7 +51,6 @@ fun PresupuestosScreen(
     // FIX: Se agrega el estado para el BottomSheet expandible.
     // COMENTARIO: 'skipPartiallyExpanded = false' permite que el sheet tenga un estado intermedio y se pueda expandir completamente.
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-
 
     var selectedImageUrl by remember { mutableStateOf<String?>(null) }
 
@@ -169,13 +169,10 @@ fun LicitacionesTabContent(
     searchQuery: String,
     onLicitacionClick: (List<PresupuestoFalso>) -> Unit
 ) {
-    var statusFilterIndex by remember { mutableIntStateOf(0) }
-    var showCategorySheet by remember { mutableStateOf(false) }
+    var selectedStatus by remember { mutableStateOf<EstadoLicitacion?>(null) }
     var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sortAscending by remember { mutableStateOf(true) }
 
-    val statusCycle = listOf(null) + EstadoLicitacion.values()
-    val selectedStatus = statusCycle[statusFilterIndex]
     val allCategories = licitaciones.values.flatten().map { it.servicioCategoria }.distinct()
 
     // FIX: Se implementó un comparador personalizado para el ordenamiento por defecto.
@@ -200,35 +197,30 @@ fun LicitacionesTabContent(
         compareBy<Map.Entry<String, List<PresupuestoFalso>>> { (_, budgets) ->
             val hasNew = budgets.any { it.isNew }
             val status = budgets.first().estadoLicitacion
-            if (status == EstadoLicitacion.ACTIVA && hasNew) 0 else 1 // Prioridad máxima para nuevos activos
+            if (status == EstadoLicitacion.ACTIVA && hasNew) 0 else 1
         }.thenBy { (_, budgets) ->
-            statusOrder[budgets.first().estadoLicitacion] ?: 5 // Orden por estado
+            statusOrder[budgets.first().estadoLicitacion] ?: 5
         }
     )
 
-    if (showCategorySheet) {
-        CategorySelectionSheet(
-            allCategories = allCategories,
-            selectedCategories = selectedCategories,
-            onDismiss = { showCategorySheet = false },
-            onSelectionChanged = { selectedCategories = it }
-        )
-    }
-
     Column {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CategoryFilterChip(
-                isSelected = selectedCategories.isNotEmpty(),
-                onClick = {
-                    if (selectedCategories.isNotEmpty()) {
-                        selectedCategories = emptySet()
+            CategoryFilterSplitButton(
+                allCategories = allCategories,
+                selectedCategories = selectedCategories,
+                onCategoryToggle = { category ->
+                    val newSelection = selectedCategories.toMutableSet()
+                    if (newSelection.contains(category)) {
+                        newSelection.remove(category)
                     } else {
-                        showCategorySheet = true
+                        newSelection.add(category)
                     }
-                }
+                    selectedCategories = newSelection
+                },
+                onClear = { selectedCategories = emptySet() }
             )
             Spacer(modifier = Modifier.width(8.dp))
             SortFilterChip(
@@ -236,9 +228,9 @@ fun LicitacionesTabContent(
                 onClick = { sortAscending = !sortAscending }
             )
             Spacer(modifier = Modifier.weight(1f))
-            StatusFilterChipCyclical(
+            StatusFilterSplitButton(
                 selectedStatus = selectedStatus,
-                onClick = { statusFilterIndex = (statusFilterIndex + 1) % statusCycle.size }
+                onStatusSelected = { selectedStatus = it }
             )
         }
 
@@ -264,6 +256,237 @@ fun LicitacionesTabContent(
                         onClick = { onLicitacionClick(presupuestos) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryFilterSplitButton(
+    allCategories: List<String>,
+    selectedCategories: Set<String>,
+    onCategoryToggle: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val isSelected = selectedCategories.isNotEmpty()
+    val containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val elevation by animateDpAsState(targetValue = if (expanded) 8.dp else 2.dp, label = "elevation")
+
+    Box {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = containerColor,
+            contentColor = contentColor,
+            tonalElevation = elevation,
+            shadowElevation = elevation,
+            modifier = Modifier.height(44.dp).animateContentSize()
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Parte Izquierda
+                Box(
+                    modifier = Modifier
+                        .clickable(
+                            onClick = { expanded = true },
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple()
+                        )
+                        .padding(start = 12.dp, end = 8.dp)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Category, null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isSelected) "${selectedCategories.size} Categorías" else "Categorías",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Divisor
+                Box(modifier = Modifier.width(1.dp).height(24.dp).background(contentColor.copy(alpha = 0.3f)))
+
+                // Parte Derecha
+                Box(
+                    modifier = Modifier
+                        .clickable(
+                            onClick = { if (isSelected) onClear() else expanded = true },
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple()
+                        )
+                        .padding(horizontal = 10.dp)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedContent(
+                        targetState = isSelected,
+                        transitionSpec = {
+                            (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
+                        },
+                        label = "icon"
+                    ) { selected ->
+                        Icon(
+                            imageVector = if (selected) Icons.Default.Close else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(220.dp)
+        ) {
+            Text(
+                "Filtrar por categoría",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = Color.Gray
+            )
+            allCategories.forEach { category ->
+                val isCategorySelected = selectedCategories.contains(category)
+                DropdownMenuItem(
+                    modifier = if (isCategorySelected) {
+                        Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                    } else Modifier,
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isCategorySelected) Icons.Default.CheckCircle else Icons.Default.Circle,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = if (isCategorySelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.4f)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(category, fontWeight = if (isCategorySelected) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    },
+                    onClick = { onCategoryToggle(category) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusFilterSplitButton(
+    selectedStatus: EstadoLicitacion?,
+    onStatusSelected: (EstadoLicitacion?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val isSelected = selectedStatus != null
+    val containerColor = if (isSelected) selectedStatus.color else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val elevation by animateDpAsState(targetValue = if (expanded) 8.dp else 2.dp, label = "elevation")
+
+    Box {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = containerColor,
+            contentColor = contentColor,
+            tonalElevation = elevation,
+            shadowElevation = elevation,
+            modifier = Modifier.height(44.dp).animateContentSize()
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Parte Izquierda
+                Box(
+                    modifier = Modifier
+                        .clickable(
+                            onClick = { expanded = true },
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple()
+                        )
+                        .padding(start = 12.dp, end = 8.dp)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isSelected) {
+                                when (selectedStatus) {
+                                    EstadoLicitacion.ACTIVA -> Icons.Default.PlayCircle
+                                    EstadoLicitacion.TERMINADA -> Icons.Default.CheckCircle
+                                    EstadoLicitacion.ADJUDICADA -> Icons.Default.WorkspacePremium
+                                    EstadoLicitacion.CANCELADA -> Icons.Default.Cancel
+                                }
+                            } else Icons.Default.FilterList,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = selectedStatus?.displayName ?: "Estado",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Divisor
+                Box(modifier = Modifier.width(1.dp).height(24.dp).background(contentColor.copy(alpha = 0.3f)))
+
+                // Parte Derecha
+                Box(
+                    modifier = Modifier
+                        .clickable(
+                            onClick = { if (isSelected) onStatusSelected(null) else expanded = true },
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple()
+                        )
+                        .padding(horizontal = 10.dp)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedContent(
+                        targetState = isSelected,
+                        transitionSpec = {
+                            (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut())
+                        },
+                        label = "icon"
+                    ) { selected ->
+                        Icon(
+                            imageVector = if (selected) Icons.Default.Close else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(180.dp)
+        ) {
+            Text(
+                "Filtrar por estado",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = Color.Gray
+            )
+            EstadoLicitacion.entries.forEach { status ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(status.color))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(status.displayName)
+                        }
+                    },
+                    onClick = {
+                        onStatusSelected(status)
+                        expanded = false
+                    }
+                )
             }
         }
     }
@@ -320,9 +543,6 @@ fun LicitacionArchiveroCard(
             .border(2.dp, statusColor, RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        // FIX: Se eliminó el 'clickable' de toda la tarjeta para evitar acciones duplicadas.
-        // COMENTARIO: La acción de abrir el detalle ahora está centralizada en el nuevo botón de flecha.
-        // Esto mejora la experiencia de usuario al clarificar la zona de interacción.
     ) {
         Box {
             Column(
@@ -363,9 +583,6 @@ fun LicitacionArchiveroCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    // FIX: Se agregó un IconButton con una flecha hacia arriba para abrir el detalle.
-                    // COMENTARIO: Este botón encapsula la acción de mostrar los presupuestos,
-                    // haciendo la UI más intuitiva. El 'onClick' que antes estaba en la tarjeta ahora está aquí.
                     IconButton(onClick = onClick) {
                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Mostrar Presupuestos")
                     }
@@ -438,7 +655,6 @@ fun PresupuestoGeneralCard(
     }
 }
 
-
 @Composable
 fun EmptyState() {
     Box(
@@ -463,32 +679,6 @@ fun EmptyState() {
 }
 
 @Composable
-fun StatusFilterChipCyclical(selectedStatus: EstadoLicitacion?, onClick: () -> Unit) {
-    val isSelected = selectedStatus != null
-    val label = selectedStatus?.displayName ?: "Todas"
-    val icon = when (selectedStatus) {
-        EstadoLicitacion.ACTIVA -> Icons.Default.PlayCircle
-        EstadoLicitacion.TERMINADA -> Icons.Default.CheckCircle
-        EstadoLicitacion.ADJUDICADA -> Icons.Default.WorkspacePremium
-        EstadoLicitacion.CANCELADA -> Icons.Default.Cancel
-        null -> Icons.Default.FilterList
-    }
-    val containerColor = selectedStatus?.color?.copy(alpha = 0.8f) ?: MaterialTheme.colorScheme.surfaceVariant
-
-    FilterChip(
-        selected = isSelected,
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = { Icon(icon, contentDescription = label) },
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = if(isSelected) containerColor else MaterialTheme.colorScheme.surfaceVariant,
-            labelColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-            iconColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    )
-}
-
-@Composable
 fun LicitacionDetailSheetContent(
     budgets: List<PresupuestoFalso>,
     onProfileClick: (String) -> Unit,
@@ -503,10 +693,6 @@ fun LicitacionDetailSheetContent(
         budgets.sortedByDescending { it.precioTotal }
     }
 
-    // FIX: Se reestructura el contenido para que sea expandible y tenga el control de ordenamiento abajo.
-    // COMENTARIO: Se usa un 'Column' como contenedor principal para que el 'LazyColumn' pueda expandirse
-    // y ocupar el espacio disponible, permitiendo el scroll. El botón de ordenamiento se coloca en
-    // un 'Row' separado en la parte inferior del sheet.
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
             text = budgets.firstOrNull()?.nombre ?: "Detalle de Licitación",
@@ -536,63 +722,6 @@ fun LicitacionDetailSheetContent(
                     modifier = Modifier.size(18.dp)
                 )
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CategorySelectionSheet(
-    allCategories: List<String>,
-    selectedCategories: Set<String>,
-    onDismiss: () -> Unit,
-    onSelectionChanged: (Set<String>) -> Unit
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Seleccionar Categorías", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
-            LazyColumn {
-                items(allCategories) { category ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            val newSelection = selectedCategories.toMutableSet()
-                            if (newSelection.contains(category)) {
-                                newSelection.remove(category)
-                            } else {
-                                newSelection.add(category)
-                            }
-                            onSelectionChanged(newSelection)
-                        }.padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = selectedCategories.contains(category),
-                            onCheckedChange = null
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(category, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CategoryFilterChip(isSelected: Boolean, onClick: () -> Unit) {
-    if (isSelected) {
-        Button(
-            onClick = onClick,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            )
-        ) {
-            Icon(Icons.Default.Clear, contentDescription = "Limpiar Filtro")
-        }
-    } else {
-        OutlinedButton(onClick = onClick) {
-            Text("Categorias")
         }
     }
 }

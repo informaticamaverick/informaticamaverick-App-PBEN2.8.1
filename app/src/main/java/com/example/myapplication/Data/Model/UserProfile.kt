@@ -26,5 +26,26 @@ data class UserProfile(
     val longitudeHome: Double = 0.0,
     val latitudeWork: Double = 0.0,
     val longitudeWork: Double = 0.0,
-    val isProfileComplete: Boolean = false
+    val isProfileComplete: Boolean = false,
+    //********************************************************************************************************************
+//             DATOS DE PRUEBA PERFIL USUARIO DATOS EMPRESA APP CLIENTE
+//********************************************************************************************************************
+    val isEmpresa: Boolean = false,
+    val nameComercialEmpresa: String = "",
+    val nameRazonSocialEmpresa: String = "",
+    val numberCuitEmpresa: String = "",
+    val emailEmpresa: String = "",
+    val phoneNumberEmpresa: String = "",
+    val addressEmpresa: String = "",
+    val cityEmpresa: String = "",
+    val stateEmpresa: String = "",
+    val zipCodeEmpresa: String = "",
+    val addressEmpresaSucursal1: String = "",
+    val cityEmpresaSucursal1: String = "",
+    val stateEmpresaSucursal1: String = "",
+    val zipCodeEmpresaSucursal1: String = "",
+    val addressEmpresaSucursal2: String = "",
+    val cityEmpresaSucursal2: String = "",
+    val stateEmpresaSucursal2: String = "",
+    val zipCodeEmpresaSucursal2: String = ""
 )

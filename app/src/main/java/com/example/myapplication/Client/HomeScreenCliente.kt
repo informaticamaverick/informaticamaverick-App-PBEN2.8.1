@@ -51,21 +51,30 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import com.example.myapplication.Profile.ProfileViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun HomeScreenCliente(navController: NavHostController) {
+fun HomeScreenCliente(
+    navController: NavHostController,
+    profileViewModel: ProfileViewModel = hiltViewModel()
+) {
+    val uiState by profileViewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        profileViewModel.loadUserProfile()
+    }
+
     var isCategoriesFullScreen by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var categorySortMode by remember { mutableStateOf("Random") }
 
-    val userName = "Maximiliano"
-    val userProfileUrl: String? = null
     val hasNotification = true
 
     val randomCategories = remember { CategorySampleDataFalso.categories.shuffled() }
@@ -91,8 +100,8 @@ fun HomeScreenCliente(navController: NavHostController) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             HomeTopSection(
-                userName = userName,
-                photoUrl = userProfileUrl,
+                userName = uiState.displayName,
+                photoUrl = uiState.photoUrl,
                 hasNotification = hasNotification,
                 onProfileClick = { navController.navigate(Screen.PerfilCliente.route) }
             )
@@ -953,6 +962,8 @@ fun HomeTopSection(
 @Composable
 fun HomeScreenClientePreview() {
     val navController = rememberNavController()
+    // Since we can't use hiltViewModel in previews, we pass a default view model.
+    // In a real app, you might want to create a fake view model for previews.
     HomeScreenCliente(navController = navController)
 }
 

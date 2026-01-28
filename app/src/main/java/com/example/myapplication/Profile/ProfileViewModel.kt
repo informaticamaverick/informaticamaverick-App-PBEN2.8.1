@@ -25,23 +25,26 @@ import com.google.firebase.storage.FirebaseStorage
 
 @HiltViewModel
 
-class ProfileViewModel @Inject constructor() : ViewModel() {
+open class ProfileViewModel @Inject constructor() : ViewModel() {
 
 
     private val _uiState = MutableStateFlow(ProfileUiState())
 
-    val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
+    open val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     //Linea de código modificada
     private  var isEmailChangePending = false
 
 
-    private val firestore = Firebase.firestore
+    private val firestore by lazy { Firebase.firestore }
 
-    private val auth = Firebase.auth
+    private val auth by lazy { Firebase.auth }
 
+    open fun onDisplayNameChange(displayName: String) {
+        _uiState.update { it.copy(displayName = displayName, error = null) }
+    }
 
-    fun onPhoneNumberChange(phone: String) {
+    open fun onPhoneNumberChange(phone: String) {
 
         _uiState.update { it.copy(phoneNumber = phone, error = null) }
 
@@ -116,8 +119,92 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
         _uiState.update { it.copy(zipCodeWork = zipCodeWork, error = null) }
     }
 
+    //********************************************************************************************************************
+//             DATOS DE PRUEBA PERFIL USUARIO DATOS EMPRESA APP CLIENTE
+//********************************************************************************************************************
 
-    fun saveProfile() {
+    fun onIsEmpresaChange(isEmpresa: Boolean) {
+        _uiState.update { it.copy(isEmpresa = isEmpresa, error = null) }
+    }
+
+    open fun onNameComercialEmpresaChange(nameComercialEmpresa: String) {
+        _uiState.update { it.copy(nameComercialEmpresa = nameComercialEmpresa, error = null) }
+    }
+
+    open fun onNameRazonSocialEmpresaChange(nameRazonSocialEmpresa: String) {
+        _uiState.update { it.copy(nameRazonSocialEmpresa = nameRazonSocialEmpresa, error = null) }
+    }
+
+    fun onNumberCuitEmpresaChange(numberCuitEmpresa: String) {
+        _uiState.update { it.copy(numberCuitEmpresa = numberCuitEmpresa, error = null) }
+    }
+
+    fun onEmailEmpresaChange(emailEmpresa: String) {
+        _uiState.update { it.copy(emailEmpresa = emailEmpresa, error = null) }
+    }
+
+    fun onPhoneNumberEmpresaChange(phoneNumberEmpresa: String) {
+        _uiState.update { it.copy(phoneNumberEmpresa = phoneNumberEmpresa, error = null) }
+    }
+
+    fun onAddressEmpresaChange(addressEmpresa: String) {
+        _uiState.update { it.copy(addressEmpresa = addressEmpresa, error = null) }
+    }
+
+    fun onCityEmpresaChange(cityEmpresa: String) {
+        _uiState.update { it.copy(cityEmpresa = cityEmpresa, error = null) }
+    }
+
+    fun onStateEmpresaChange(stateEmpresa: String) {
+        _uiState.update { it.copy(stateEmpresa = stateEmpresa, error = null) }
+    }
+
+    fun onZipCodeEmpresaChange(zipCodeEmpresa: String) {
+        _uiState.update { it.copy(zipCodeEmpresa = zipCodeEmpresa, error = null) }
+    }
+
+    fun onAddressEmpresaSucursal1Change(addressEmpresaSucursal1: String) {
+        _uiState.update { it.copy(addressEmpresaSucursal1 = addressEmpresaSucursal1, error = null) }
+    }
+
+    fun onCityEmpresaSucursal1Change(cityEmpresaSucursal1: String) {
+        _uiState.update { it.copy(cityEmpresaSucursal1 = cityEmpresaSucursal1, error = null) }
+    }
+
+    fun onStateEmpresaSucursal1Change(stateEmpresaSucursal1: String) {
+        _uiState.update { it.copy(stateEmpresaSucursal1 = stateEmpresaSucursal1, error = null) }
+    }
+
+    fun onZipCodeEmpresaSucursal1Change(zipCodeEmpresaSucursal1: String) {
+        _uiState.update { it.copy(zipCodeEmpresaSucursal1 = zipCodeEmpresaSucursal1, error = null) }
+    }
+
+    fun onAddressEmpresaSucursal2Change(addressEmpresaSucursal2: String) {
+        _uiState.update { it.copy(addressEmpresaSucursal2 = addressEmpresaSucursal2, error = null) }
+    }
+
+    fun onCityEmpresaSucursal2Change(cityEmpresaSucursal2: String) {
+        _uiState.update { it.copy(cityEmpresaSucursal2 = cityEmpresaSucursal2, error = null) }
+    }
+
+    fun onStateEmpresaSucursal2Change(stateEmpresaSucursal2: String) {
+        _uiState.update { it.copy(stateEmpresaSucursal2 = stateEmpresaSucursal2, error = null) }
+    }
+
+    fun onZipCodeEmpresaSucursal2Change(zipCodeEmpresaSucursal2: String) {
+        _uiState.update { it.copy(zipCodeEmpresaSucursal2 = zipCodeEmpresaSucursal2, error = null) }
+    }
+
+    open fun onNotificationsEnabledChange(enabled: Boolean) {
+        _uiState.update { it.copy(notificationsEnabled = enabled, error = null) }
+    }
+
+    open fun onIsPublicProfileChange(isPublic: Boolean) {
+        _uiState.update { it.copy(isPublicProfile = isPublic, error = null) }
+    }
+
+
+    open fun saveProfile() {
         if (!validateInputs()) return
 
         viewModelScope.launch {
@@ -387,7 +474,26 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
                             stateWork = profile?.stateWork ?: "",
 
-                            zipCodeWork = profile?.zipCodeWork ?: ""
+                            zipCodeWork = profile?.zipCodeWork ?: "",
+
+                            isEmpresa = profile?.isEmpresa ?: false,
+                            nameComercialEmpresa = profile?.nameComercialEmpresa ?: "",
+                            nameRazonSocialEmpresa = profile?.nameRazonSocialEmpresa ?: "",
+                            numberCuitEmpresa = profile?.numberCuitEmpresa ?: "",
+                            emailEmpresa = profile?.emailEmpresa ?: "",
+                            phoneNumberEmpresa = profile?.phoneNumberEmpresa ?: "",
+                            addressEmpresa = profile?.addressEmpresa ?: "",
+                            cityEmpresa = profile?.cityEmpresa ?: "",
+                            stateEmpresa = profile?.stateEmpresa ?: "",
+                            zipCodeEmpresa = profile?.zipCodeEmpresa ?: "",
+                            addressEmpresaSucursal1 = profile?.addressEmpresaSucursal1 ?: "",
+                            cityEmpresaSucursal1 = profile?.cityEmpresaSucursal1 ?: "",
+                            stateEmpresaSucursal1 = profile?.stateEmpresaSucursal1 ?: "",
+                            zipCodeEmpresaSucursal1 = profile?.zipCodeEmpresaSucursal1 ?: "",
+                            addressEmpresaSucursal2 = profile?.addressEmpresaSucursal2 ?: "",
+                            cityEmpresaSucursal2 = profile?.cityEmpresaSucursal2 ?: "",
+                            stateEmpresaSucursal2 = profile?.stateEmpresaSucursal2 ?: "",
+                            zipCodeEmpresaSucursal2 = profile?.zipCodeEmpresaSucursal2 ?: ""
 
 
                         )
@@ -431,7 +537,7 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
                         else -> "✓ Perfil actualizado correctamente"
                     }
 
-                    val updates = mapOf(
+                    val updates = mutableMapOf(
 
                         "displayName" to displayName,
 
@@ -443,12 +549,33 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
 
                     )
 
+                    if (_uiState.value.isEmpresa) {
+                        updates["isEmpresa"] = _uiState.value.isEmpresa
+                        updates["nameComercialEmpresa"] = _uiState.value.nameComercialEmpresa
+                        updates["nameRazonSocialEmpresa"] = _uiState.value.nameRazonSocialEmpresa
+                        updates["numberCuitEmpresa"] = _uiState.value.numberCuitEmpresa
+                        updates["emailEmpresa"] = _uiState.value.emailEmpresa
+                        updates["phoneNumberEmpresa"] = _uiState.value.phoneNumberEmpresa
+                        updates["addressEmpresa"] = _uiState.value.addressEmpresa
+                        updates["cityEmpresa"] = _uiState.value.cityEmpresa
+                        updates["stateEmpresa"] = _uiState.value.stateEmpresa
+                        updates["zipCodeEmpresa"] = _uiState.value.zipCodeEmpresa
+                        updates["addressEmpresaSucursal1"] = _uiState.value.addressEmpresaSucursal1
+                        updates["cityEmpresaSucursal1"] = _uiState.value.cityEmpresaSucursal1
+                        updates["stateEmpresaSucursal1"] = _uiState.value.stateEmpresaSucursal1
+                        updates["zipCodeEmpresaSucursal1"] = _uiState.value.zipCodeEmpresaSucursal1
+                        updates["addressEmpresaSucursal2"] = _uiState.value.addressEmpresaSucursal2
+                        updates["cityEmpresaSucursal2"] = _uiState.value.cityEmpresaSucursal2
+                        updates["stateEmpresaSucursal2"] = _uiState.value.stateEmpresaSucursal2
+                        updates["zipCodeEmpresaSucursal2"] = _uiState.value.zipCodeEmpresaSucursal2
+                    }
+
 
                     firestore.collection("usuarios")
 
                         .document(currentUser.uid)
 
-                        .update(updates)
+                        .update(updates as Map<String, Any>)
 
                         .await()
 

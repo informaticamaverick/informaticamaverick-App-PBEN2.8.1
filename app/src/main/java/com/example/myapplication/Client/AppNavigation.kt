@@ -77,7 +77,15 @@ fun AppNavigation() {
                 composable(Screen.Promo.route) { PromoScreen(navController = navController, onBack = { navController.popBackStack() }) }
 
                 composable(Screen.CrearLicitacion.route) { CrearLicScreen(onBack = { navController.popBackStack() }) }
-                composable(Screen.PerfilCliente.route) { PerfilUsuarioScreen(onNavigateBack = { navController.popBackStack() }) }
+                composable(Screen.PerfilCliente.route) { 
+                    PerfilUsuarioScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onLogout = {
+                            // TODO: Implementar navegación al Login aquí
+                            // Ejemplo: navController.navigate("login") { popUpTo(0) }
+                        }
+                    ) 
+                }
                 composable(
                     route = Screen.ResultBusqueda.route,
                     arguments = listOf(navArgument("category") { type = NavType.StringType })
