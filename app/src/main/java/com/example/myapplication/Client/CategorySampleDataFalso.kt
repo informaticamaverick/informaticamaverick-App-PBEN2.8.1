@@ -10,7 +10,8 @@ data class CategoryItem(
     val icon: String, // Cambiado de ImageVector a String para usar Emojis
     val color: Color,
     val superCategory: String, // [NUEVO] Parámetro para la supercategoría
-    val providerIds: List<String> = emptyList()
+    val providerIds: List<String> = emptyList(),
+    val imageUrl: String? = "https://picsum.photos/200"
 )
 
 object CategorySampleDataFalso {

@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,9 +41,8 @@ import coil.compose.rememberAsyncImagePainter
 import com.example.myapplication.R
 import com.example.myapplication.Profile.ProfileViewModel
 import com.example.myapplication.Profile.ProfileUiState
+import com.example.myapplication.ui.theme.MyApplicationTheme
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PerfilUsuarioScreen(
     profileViewModel: ProfileViewModel = hiltViewModel(),
@@ -50,6 +50,48 @@ fun PerfilUsuarioScreen(
     onLogout: () -> Unit
 ) {
     val uiState by profileViewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        profileViewModel.loadUserProfile()
+    }
+
+    PerfilUsuarioContent(
+        uiState = uiState,
+        onNavigateBack = onNavigateBack,
+        onLogout = onLogout,
+        onUpdateProfile = { name, phone, address ->
+            profileViewModel.updateProfile(name, phone, address)
+        },
+        onUpdateBusinessInfo = { nameCom, razon ->
+            profileViewModel.onNameComercialEmpresaChange(nameCom)
+            profileViewModel.onNameRazonSocialEmpresaChange(razon)
+            profileViewModel.updateProfile(uiState.displayName, uiState.phoneNumber, uiState.address)
+        },
+        onUpdateEmail = { email, pass ->
+            profileViewModel.updateEmail(email, pass)
+        },
+        onUpdatePassword = { old, new ->
+            profileViewModel.updatePassword(old, new)
+        },
+        onClearMessages = {
+            profileViewModel.clearMessages()
+        }
+    )
+}
+
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PerfilUsuarioContent(
+    uiState: ProfileUiState,
+    onNavigateBack: () -> Unit,
+    onLogout: () -> Unit,
+    onUpdateProfile: (String, String, String) -> Unit,
+    onUpdateBusinessInfo: (String, String) -> Unit,
+    onUpdateEmail: (String, String) -> Unit,
+    onUpdatePassword: (String, String) -> Unit,
+    onClearMessages: () -> Unit
+) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     // --- ESTADOS PARA EDICIÓN ---
@@ -67,20 +109,16 @@ fun PerfilUsuarioScreen(
     var showConfirmEmailChangeDialog by remember { mutableStateOf(false) }
     var showConfirmPasswordChangeDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        profileViewModel.loadUserProfile()
-    }
-
     LaunchedEffect(uiState.error) {
         uiState.error?.let {
             snackbarHostState.showSnackbar(message = it, duration = SnackbarDuration.Long)
-            profileViewModel.clearMessages()
+            onClearMessages()
         }
     }
     LaunchedEffect(uiState.successMessage) {
         uiState.successMessage?.let {
             snackbarHostState.showSnackbar(message = it, duration = SnackbarDuration.Short)
-            profileViewModel.clearMessages()
+            onClearMessages()
         }
     }
 
@@ -139,7 +177,6 @@ fun PerfilUsuarioScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item {
-                    // --- CAMBIO: Banner del TopBar con fondo MD3 ---
                     UserInfoHeader(
                         userName = currentTopName,
                         userEmail = if (pagerState.currentPage == 0) uiState.email else uiState.emailEmpresa,
@@ -152,10 +189,9 @@ fun PerfilUsuarioScreen(
                     )
                 }
 
-                item { // -- CUERPO CON CARRUSEL Y ETIQUETAS --
+                item {
                     Column(modifier = Modifier.padding(vertical = 16.dp)) {
                         Box(modifier = Modifier.fillMaxWidth()) {
-                            // --- CAMBIO: Carrusel de tarjetas con HorizontalPager ---
                             HorizontalPager(
                                 state = pagerState,
                                 modifier = Modifier.fillMaxWidth().height(260.dp),
@@ -169,7 +205,6 @@ fun PerfilUsuarioScreen(
                                         textPrimaryColor = textPrimaryColor
                                     ) {
                                         Column {
-                                            // --- CAMBIO: Se esconden nombre y correo (ya en cabecera) ---
                                             DisplayItem(Icons.Default.Phone, "Teléfono", uiState.phoneNumber, textPrimaryColor, textSecondaryColor)
                                             DisplayItem(Icons.Default.LocationOn, "Dirección", uiState.address, textPrimaryColor, textSecondaryColor)
                                         }
@@ -181,7 +216,6 @@ fun PerfilUsuarioScreen(
                                         textPrimaryColor = textPrimaryColor
                                     ) {
                                         Column {
-                                            // --- CAMBIO: Se esconden nombre comercial y email empresa (ya en cabecera) ---
                                             DisplayItem(Icons.Default.Domain, "Razón Social", uiState.nameRazonSocialEmpresa, textPrimaryColor, textSecondaryColor)
                                             DisplayItem(Icons.Default.Badge, "CUIT", uiState.numberCuitEmpresa, textPrimaryColor, textSecondaryColor)
                                         }
@@ -189,7 +223,6 @@ fun PerfilUsuarioScreen(
                                 }
                             }
 
-                            // --- CAMBIO: FAB movido al extremo derecho de las tarjetas (solo icono) ---
                             FloatingActionButton(
                                 onClick = {
                                     editType = if (pagerState.currentPage == 0) "personal" else "empresa"
@@ -207,7 +240,6 @@ fun PerfilUsuarioScreen(
                             }
                         }
 
-                        // Indicador de páginas
                         Row(
                             Modifier.height(32.dp).fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
@@ -219,7 +251,6 @@ fun PerfilUsuarioScreen(
                             }
                         }
 
-                        // --- CAMBIO: Divisor "Datos de Cuenta" y Etiquetas Booleanas ---
                         SectionDivider("Datos de Cuenta")
 
                         Row(
@@ -289,7 +320,7 @@ fun PerfilUsuarioScreen(
                 EditPersonalContent(
                     uiState = uiState,
                     onSave = { name, phone, address ->
-                        profileViewModel.updateProfile(name, phone, address)
+                        onUpdateProfile(name, phone, address)
                         showEditSheet = false
                     }
                 )
@@ -297,9 +328,7 @@ fun PerfilUsuarioScreen(
                 EditBusinessContent(
                     uiState = uiState,
                     onSave = { nameCom, razon ->
-                        profileViewModel.onNameComercialEmpresaChange(nameCom)
-                        profileViewModel.onNameRazonSocialEmpresaChange(razon)
-                        profileViewModel.updateProfile(uiState.displayName, uiState.phoneNumber, uiState.address)
+                        onUpdateBusinessInfo(nameCom, razon)
                         showEditSheet = false
                     }
                 )
@@ -346,7 +375,7 @@ fun PerfilUsuarioScreen(
             newEmail = pendingNewEmail,
             onDismiss = { showConfirmEmailChangeDialog = false },
             onConfirm = {
-                profileViewModel.updateEmail(pendingNewEmail, pendingPassword)
+                onUpdateEmail(pendingNewEmail, pendingPassword)
                 showConfirmEmailChangeDialog = false
             }
         )
@@ -368,7 +397,7 @@ fun PerfilUsuarioScreen(
         ConfirmPasswordChangeDialog(
             onDismiss = { showConfirmPasswordChangeDialog = false },
             onConfirm = {
-                profileViewModel.updatePassword(pendingCurrentPassword, pendingNewPassword)
+                onUpdatePassword(pendingCurrentPassword, pendingNewPassword)
                 showConfirmPasswordChangeDialog = false
             }
         )
@@ -426,7 +455,7 @@ fun InfoCard(
         modifier = Modifier.fillMaxSize(),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = surfaceColor),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = textPrimaryColor)
@@ -550,7 +579,6 @@ fun UserInfoHeader(
     textSecondaryColor: Color,
     isDark: Boolean
 ) {
-    // --- CAMBIO: Header con gradiente MD3 ---
     val gradient = if (isDark) {
         Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant))
     } else {
@@ -608,7 +636,6 @@ fun LogoutButton(onClick: () -> Unit) {
     }
 }
 
-// --- CAMBIO: AnimatedTopBar dinámico ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnimatedTopBar(
@@ -641,7 +668,6 @@ fun AnimatedTopBar(
     }
 }
 
-// Otros diálogos se mantienen iguales...
 @Composable
 fun EditEmailDialog(currentEmail: String, onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
     var email by remember { mutableStateOf(currentEmail) }
@@ -664,4 +690,29 @@ fun ChangePasswordDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> U
 @Composable
 fun ConfirmPasswordChangeDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Confirmar Cambio") }, text = { Text("¿Estás seguro de que deseas cambiar tu contraseña?") }, confirmButton = { TextButton(onClick = onConfirm) { Text("Sí, cambiar") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
+}
+
+@Preview(showBackground = true)
+@Composable
+fun PerfilUsuarioPreview() {
+    MyApplicationTheme {
+        PerfilUsuarioContent(
+            uiState = ProfileUiState(
+                displayName = "Maxi Nanterne",
+                email = "maxi@example.com",
+                phoneNumber = "3811234567",
+                address = "Calle Falsa 123",
+                isEmpresa = true,
+                nameComercialEmpresa = "Maverick Informatica",
+                emailEmpresa = "maverick@example.com"
+            ),
+            onNavigateBack = {},
+            onLogout = {},
+            onUpdateProfile = { _, _, _ -> },
+            onUpdateBusinessInfo = { _, _ -> },
+            onUpdateEmail = { _, _ -> },
+            onUpdatePassword = { _, _ -> },
+            onClearMessages = {}
+        )
+    }
 }

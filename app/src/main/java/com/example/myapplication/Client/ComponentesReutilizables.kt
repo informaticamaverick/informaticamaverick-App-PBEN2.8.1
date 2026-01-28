@@ -1,10 +1,9 @@
 package com.example.myapplication.Client
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,22 +14,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Store
-import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -49,6 +41,357 @@ data class MenuAction(
     val isPrimary: Boolean = false,
     val onClick: () -> Unit
 )
+
+/**
+ * [COMPONENTE REUTILIZABLE]
+ * Botón Dividido Flotante (Split FAB) que permite expansión para búsqueda o herramientas.
+ * Incluye animaciones de rotación y cambio de icono según el estado.
+ */
+@Composable
+fun SplitFloatingActionButton(
+    modifier: Modifier = Modifier,
+    onStateChange: (isExpanded: Boolean, activeMode: String) -> Unit = { _, _ -> },
+    onSearchClick: (Boolean) -> Unit,
+    onToolsClick: () -> Unit,
+    searchContent: @Composable RowScope.() -> Unit,
+    toolsContent: @Composable RowScope.() -> Unit
+) {
+    var searchExpanded by remember { mutableStateOf(false) }
+    var toolsExpanded by remember { mutableStateOf(false) }
+
+    // Notifica al padre si alguna de las secciones está expandida
+    LaunchedEffect(searchExpanded, toolsExpanded) {
+        onStateChange(searchExpanded || toolsExpanded, if (searchExpanded) "search" else if (toolsExpanded) "tools" else "none")
+    }
+
+    val fabHeight = 56.dp
+
+    // Animación de ancho para cada sección
+    val searchWidth by animateDpAsState(
+        targetValue = if (searchExpanded) 280.dp else 56.dp,
+        label = "searchWidth"
+    )
+    val toolsWidth by animateDpAsState(
+        targetValue = if (toolsExpanded) 280.dp else 56.dp,
+        label = "toolsWidth"
+    )
+
+    // Animación de rotación para la transformación de los iconos
+    val leftIconRotation by animateFloatAsState(targetValue = if (toolsExpanded) 180f else 0f, label = "leftRotation")
+    val rightIconRotation by animateFloatAsState(targetValue = if (searchExpanded) 180f else 0f, label = "rightRotation")
+
+    Surface(
+        modifier = modifier.height(fabHeight),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp
+    ) {
+        Row(
+            modifier = Modifier.wrapContentWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // --- SECCIÓN IZQUIERDA: BÚSQUEDA / CERRAR ---
+            Row(
+                modifier = Modifier
+                    .width(searchWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp))
+                    .clickable {
+                        if (toolsExpanded) {
+                            toolsExpanded = false
+                            onToolsClick()
+                        } else {
+                            searchExpanded = !searchExpanded
+                            onSearchClick(searchExpanded)
+                        }
+                    }
+                    .background(if (searchExpanded) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (searchExpanded) Arrangement.Start else Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = if (toolsExpanded) Icons.Default.Close else Icons.Default.Search,
+                    contentDescription = "Buscar",
+                    modifier = Modifier.rotate(leftIconRotation),
+                    tint = if (searchExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                if (searchExpanded) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    searchContent()
+                }
+            }
+
+            // --- DIVISOR ---
+            if (!searchExpanded && !toolsExpanded) {
+                VerticalDivider(
+                    modifier = Modifier.height(24.dp).width(1.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            }
+
+            // --- SECCIÓN DERECHA: HERRAMIENTAS / CERRAR ---
+            Row(
+                modifier = Modifier
+                    .width(toolsWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp))
+                    .clickable {
+                        if (searchExpanded) {
+                            searchExpanded = false
+                            onSearchClick(false)
+                        } else {
+                            toolsExpanded = !toolsExpanded
+                            onToolsClick()
+                        }
+                    }
+                    .background(if (toolsExpanded) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (toolsExpanded) Arrangement.End else Arrangement.Center
+            ) {
+                if (toolsExpanded) {
+                    toolsContent()
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Icon(
+                    imageVector = if (searchExpanded) Icons.Default.Close else Icons.Default.Settings,
+                    contentDescription = "Herramientas",
+                    modifier = Modifier.rotate(rightIconRotation),
+                    tint = if (toolsExpanded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+
+/** @Composable
+fun SplitFloatingActionButton(
+    modifier: Modifier = Modifier,
+    onSearchClick: (Boolean) -> Unit,
+    onToolsClick: (Boolean) -> Unit,
+    searchContent: @Composable (RowScope.() -> Unit)? = null,
+    toolsContent: @Composable (RowScope.() -> Unit)? = null
+) {
+    var searchExpanded by remember { mutableStateOf(false) }
+    var toolsExpanded by remember { mutableStateOf(false) }
+
+    // El ancho total del componente crece según qué sección se expanda
+    val totalWidth by animateDpAsState(
+        targetValue = if (searchExpanded || toolsExpanded) 320.dp else 120.dp,
+        label = "totalWidth"
+    )
+
+    Surface(
+        modifier = modifier
+            .width(totalWidth) // Controla la expansión hacia la izquierda
+            .height(56.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = Color(0xFFF3F0F5), // Color grisáceo/blanco de la imagen
+        shadowElevation = 8.dp
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            // SECCIÓN IZQUIERDA: BUSCADOR
+            Row(
+                modifier = Modifier
+                    .weight(if (searchExpanded) 1f else 0.5f)
+                    .fillMaxHeight()
+                    .clickable {
+                        if (toolsExpanded) toolsExpanded = false
+                        searchExpanded = !searchExpanded
+                        onSearchClick(searchExpanded)
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = if (searchExpanded) Icons.Default.Close else Icons.Default.Search,
+                    contentDescription = null,
+                    tint = Color(0xFF6750A4)
+                )
+                if (searchExpanded && searchContent != null) {
+                    searchContent()
+                }
+            }
+
+            // DIVISOR (Como el de tu imagen)
+            VerticalDivider(
+                modifier = Modifier.padding(vertical = 14.dp).width(1.dp),
+                color = Color.LightGray.copy(alpha = 0.5f)
+            )
+
+            // SECCIÓN DERECHA: HERRAMIENTAS
+            Row(
+                modifier = Modifier
+                    .weight(if (toolsExpanded) 1f else 0.5f)
+                    .fillMaxHeight()
+                    .clickable {
+                        if (searchExpanded) searchExpanded = false
+                        toolsExpanded = !toolsExpanded
+                        onToolsClick(toolsExpanded)
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                if (toolsExpanded && toolsContent != null) {
+                    toolsContent()
+                }
+                Icon(
+                    imageVector = if (toolsExpanded) Icons.Default.Close else Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = Color(0xFF6750A4)
+                )
+            }
+        }
+    }
+}
+
+**/
+
+/** @Composable
+fun SplitFloatingActionButton(
+    modifier: Modifier = Modifier,
+    onSearchClick: (Boolean) -> Unit,
+    onToolsClick: (Boolean) -> Unit,
+    searchContent: @Composable (RowScope.() -> Unit)? = null,
+    toolsContent: @Composable (RowScope.() -> Unit)? = null
+) {
+
+    var searchExpanded by remember { mutableStateOf(false) }
+    var toolsExpanded by remember { mutableStateOf(false) }
+
+    val fabHeight = 56.dp
+    
+    // Animación de ancho para cada sección
+    val searchWidth by animateDpAsState(
+        targetValue = when {
+            searchExpanded -> 280.dp 
+            toolsExpanded -> 56.dp   
+            else -> 60.dp            
+        },
+        label = "searchWidth"
+    )
+
+    val toolsWidth by animateDpAsState(
+        targetValue = when {
+            toolsExpanded -> 280.dp
+            searchExpanded -> 56.dp
+            else -> 60.dp
+        },
+        label = "toolsWidth"
+    )
+
+    // Animación de rotación para los iconos al transformarse
+    val leftIconRotation by animateFloatAsState(
+        targetValue = if (toolsExpanded) 180f else 0f,
+        label = "leftRotation"
+    )
+    val rightIconRotation by animateFloatAsState(
+        targetValue = if (searchExpanded) 180f else 0f,
+        label = "rightRotation"
+    )
+
+    Surface(
+        modifier = modifier
+            .height(fabHeight)
+            .padding(horizontal = 4.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp
+    ) {
+        Row(
+            modifier = Modifier.wrapContentWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // --- SECCIÓN IZQUIERDA: BÚSQUEDA / CERRAR ---
+            Row(
+                modifier = Modifier
+                    .width(searchWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp))
+                    .clickable {
+                        if (toolsExpanded) {
+                            // Si las herramientas estaban abiertas, el icono izquierdo es "Cerrar"
+                            toolsExpanded = false
+                            onToolsClick(false)
+                        } else {
+                            searchExpanded = !searchExpanded
+                            onSearchClick(searchExpanded)
+                        }
+                    }
+                    .background(
+                        if (searchExpanded) MaterialTheme.colorScheme.primaryContainer 
+                        else Color.Transparent
+                    )
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (searchExpanded) Arrangement.Start else Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = if (toolsExpanded) Icons.Default.Close else Icons.Default.Search,
+                    contentDescription = "Buscar",
+                    modifier = Modifier.rotate(leftIconRotation),
+                    tint = if (searchExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                if (searchExpanded && searchContent != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    searchContent()
+                }
+            }
+
+            // --- DIVISOR ---
+            VerticalDivider(
+                modifier = Modifier
+                    .height(24.dp)
+                    .width(1.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
+
+            // --- SECCIÓN DERECHA: HERRAMIENTAS / CERRAR ---
+            Row(
+                modifier = Modifier
+                    //.width(toolsWidth)
+                    .fillMaxHeight()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp))
+                    .clickable {
+                        if (searchExpanded) {
+                            // Si la búsqueda estaba abierta, el icono derecho es "Cerrar"
+                            searchExpanded = false
+                            onSearchClick(false)
+                        } else {
+                            toolsExpanded = !toolsExpanded
+                            onToolsClick(toolsExpanded)
+                        }
+                    }
+                    .background(
+                        if (toolsExpanded) MaterialTheme.colorScheme.secondaryContainer 
+                        else Color.Transparent
+                    )
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (toolsExpanded) Arrangement.End else Arrangement.Center
+            ) {
+                if (toolsExpanded && toolsContent != null) {
+                    toolsContent()
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Icon(
+                    imageVector = if (searchExpanded) Icons.Default.Close else Icons.Default.Settings,
+                    contentDescription = "Herramientas",
+                    modifier = Modifier.rotate(rightIconRotation),
+                    tint = if (toolsExpanded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+**/
 
 /**
  * [COMPONENTE REUTILIZABLE]
