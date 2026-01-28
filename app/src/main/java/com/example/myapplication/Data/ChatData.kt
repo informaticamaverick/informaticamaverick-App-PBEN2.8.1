@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.example.myapplication.Models.ChatConversation
 import com.example.myapplication.Models.Message
 import java.util.Calendar
+import java.util.UUID
 
 /**
  * Datos de prueba para el sistema de chat
@@ -70,110 +71,96 @@ object ChatData {
     // Mensajes de ejemplo para cada conversación
     private val messagesForMario = listOf(
         Message(
-            id = 1L,
+            id = UUID.randomUUID().toString(),
             text = "Hola, ¿estás disponible para una reparación?",
-            isFromMe = true,
-            time = "10:00",
+            senderId = "currentUser",
             timestamp = getTimestamp(1, 10, 0)
         ),
         Message(
-            id = 2L,
+            id = UUID.randomUUID().toString(),
             text = "¡Hola! Sí, claro. ¿Qué necesitas?",
-            isFromMe = false,
-            time = "10:05",
+            senderId = "user_1",
             timestamp = getTimestamp(1, 10, 5)
         ),
         Message(
-            id = 3L,
+            id = UUID.randomUUID().toString(),
             text = "Necesito reparar mi lavadora, no está centrifugando bien",
-            isFromMe = true,
-            time = "10:07",
+            senderId = "currentUser",
             timestamp = getTimestamp(0, 10, 7)
         ),
         Message(
-            id = 4L,
+            id = UUID.randomUUID().toString(),
             text = "Entendido. ¿Cuándo te vendría bien que pase a revisarla?",
-            isFromMe = false,
-            time = "10:10",
+            senderId = "user_1",
             timestamp = getTimestamp(0, 10, 10)
         )
     )
     
     private val messagesForAna = listOf(
         Message(
-            id = 1L,
+            id = UUID.randomUUID().toString(),
             text = "Hola Ana, ya terminé el servicio",
-            isFromMe = false,
-            time = "14:30",
+            senderId = "user_2",
             timestamp = getTimestamp(2, 14, 30)
         ),
         Message(
-            id = 2L,
+            id = UUID.randomUUID().toString(),
             text = "Servicio finalizado con éxito.",
-            isFromMe = false,
-            time = "14:35",
+            senderId = "user_2",
             timestamp = getTimestamp(2, 14, 35)
         ),
         Message(
-            id = 3L,
+            id = UUID.randomUUID().toString(),
             text = "Muchas gracias! Todo quedó perfecto",
-            isFromMe = true,
-            time = "14:40",
+            senderId = "currentUser",
             timestamp = getTimestamp(1, 14, 40)
         )
     )
     
     private val messagesForCarlos = listOf(
         Message(
-            id = 1L,
+            id = UUID.randomUUID().toString(),
             text = "¿Puedes venir mañana?",
-            isFromMe = true,
-            time = "09:15",
+            senderId = "currentUser",
             timestamp = getTimestamp(1, 9, 15)
         ),
         Message(
-            id = 2L,
+            id = UUID.randomUUID().toString(),
             text = "Sí, ¿a qué hora te viene bien?",
-            isFromMe = false,
-            time = "09:20",
+            senderId = "user_3",
             timestamp = getTimestamp(1, 9, 20)
         ),
         Message(
-            id = 3L,
+            id = UUID.randomUUID().toString(),
             text = "A las 3pm estaría genial",
-            isFromMe = true,
-            time = "09:22",
+            senderId = "currentUser",
             timestamp = getTimestamp(0, 9, 22)
         ),
         Message(
-            id = 4L,
+            id = UUID.randomUUID().toString(),
             text = "Perfecto, entonces mañana a las 3pm",
-            isFromMe = false,
-            time = "09:25",
+            senderId = "user_3",
             timestamp = getTimestamp(0, 9, 25)
         )
     )
     
     private val messagesForLaura = listOf(
         Message(
-            id = 1L,
+            id = UUID.randomUUID().toString(),
             text = "El trabajo quedó excelente",
-            isFromMe = true,
-            time = "16:00",
+            senderId = "currentUser",
             timestamp = getTimestamp(3, 16, 0)
         ),
         Message(
-            id = 2L,
+            id = UUID.randomUUID().toString(),
             text = "Muchas gracias por el servicio",
-            isFromMe = true,
-            time = "16:01",
+            senderId = "currentUser",
             timestamp = getTimestamp(3, 16, 1)
         ),
         Message(
-            id = 3L,
+            id = UUID.randomUUID().toString(),
             text = "¡Gracias a ti! Cualquier cosa me avisas",
-            isFromMe = false,
-            time = "16:05",
+            senderId = "user_4",
             timestamp = getTimestamp(2, 16, 5)
         )
     )

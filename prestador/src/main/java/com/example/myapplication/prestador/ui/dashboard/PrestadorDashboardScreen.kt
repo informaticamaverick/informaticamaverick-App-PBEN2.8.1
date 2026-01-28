@@ -334,16 +334,43 @@ fun InicioContent(
                     ),
                     shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
                 )
-                .padding(16.dp)
+                .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 48.dp)
         ) {
             Column {
-                // Fila superior: Avatar + Nombre centrado
+                // Fila superior: Avatar + Nombre a la izquierda
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Avatar a la izquierda
+                    // Nombre y estado (IZQUIERDA)
+                    Column(
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "Hola, Prestador", // TODO: Obtener nombre del usuario
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color(0xFF10B981), shape = CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Disponible para Fast",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                    
+                    // Avatar a la derecha
                     Box {
                         Box(
                             modifier = Modifier
@@ -457,37 +484,6 @@ fun InicioContent(
                             )
                         }
                     }
-                    
-                    // Nombre y estado (CENTRADO)
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Hola, Prestador", // TODO: Obtener nombre del usuario
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(Color(0xFF10B981), shape = CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Disponible para Fast",
-                                fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                    }
-                    
-                    // Espaciador derecho para balancear (mismo tamaño que avatar)
-                    Spacer(modifier = Modifier.size(48.dp))
                 }
             }
         }

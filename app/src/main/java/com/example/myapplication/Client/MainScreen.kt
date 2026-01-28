@@ -63,10 +63,18 @@ fun MainScreen() {
     )
     val pagerState = rememberPagerState(pageCount = { navItems.size })
     val coroutineScope = rememberCoroutineScope()
+    var isInConversation by remember { mutableStateOf(false) }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val showBottomBar = navItems.any { it.route == currentRoute }
+    
+    // Ocultar barra cuando está en conversación de chat o en pantallas secundarias
+    val showBottomBar = when {
+        currentRoute?.startsWith("chat_conversation") == true -> false
+        currentRoute == "chat" && isInConversation -> false
+        navItems.any { it.route == currentRoute } -> true
+        else -> false
+    }
 
     Scaffold(
         bottomBar = {
@@ -89,19 +97,49 @@ fun MainScreen() {
             // Contenedor para el HorizontalPager
             // Esto permite que el swipe funcione, pero la navegación real la controla el NavController
             composable(Screen.Home.route) { 
-                MainPagerScreen(navController = navController, pagerState = pagerState, navItems = navItems) 
+                MainPagerScreen(
+                    navController = navController,
+                    pagerState = pagerState,
+                    navItems = navItems,
+                    onInConversationChange = { isInConversation = it },
+                    isInConversation = isInConversation
+                ) 
             }
             composable(Screen.Presupuestos.route) {
-                 MainPagerScreen(navController = navController, pagerState = pagerState, navItems = navItems) 
+                 MainPagerScreen(
+                    navController = navController,
+                    pagerState = pagerState,
+                    navItems = navItems,
+                    onInConversationChange = { isInConversation = it },
+                    isInConversation = isInConversation
+                ) 
             }
-            composable(Screen.Chat.route) { 
-                 MainPagerScreen(navController = navController, pagerState = pagerState, navItems = navItems) 
+            composable(Screen.Chat.route) {
+                 MainPagerScreen(
+                    navController = navController,
+                    pagerState = pagerState,
+                    navItems = navItems,
+                    onInConversationChange = { isInConversation = it },
+                    isInConversation = isInConversation
+                ) 
             }
             composable(Screen.Calendar.route) { 
-                 MainPagerScreen(navController = navController, pagerState = pagerState, navItems = navItems) 
+                 MainPagerScreen(
+                    navController = navController,
+                    pagerState = pagerState,
+                    navItems = navItems,
+                    onInConversationChange = { isInConversation = it },
+                    isInConversation = isInConversation
+                ) 
             }
             composable(Screen.Promo.route) { 
-                 MainPagerScreen(navController = navController, pagerState = pagerState, navItems = navItems) 
+                 MainPagerScreen(
+                    navController = navController,
+                    pagerState = pagerState,
+                    navItems = navItems,
+                    onInConversationChange = { isInConversation = it },
+                    isInConversation = isInConversation
+                ) 
             }
 
             // [MODIFICACIÓN] La ruta CrearLicitacion ahora abre CreaLicScreen.
@@ -141,7 +179,11 @@ fun MainScreen() {
                 arguments = listOf(navArgument("providerId") { type = NavType.StringType })
             ) { backStackEntry ->
                 val providerId = backStackEntry.arguments?.getString("providerId")
-                ChatScreen(onBack = { navController.popBackStack() }, initialProviderId = providerId)
+                ChatScreen(
+                    onBack = { navController.popBackStack() }, 
+                    initialProviderId = providerId,
+                    onInConversationChange = { isInConversation = it }
+                )
             }
         }
     }
@@ -175,12 +217,25 @@ fun MainScreen() {
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun MainPagerScreen(navController: NavHostController, pagerState: PagerState, navItems: List<Screen>) {
-    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+fun MainPagerScreen(
+    navController: NavHostController, 
+    pagerState: PagerState, 
+    navItems: List<Screen>,
+    onInConversationChange: (Boolean) -> Unit = {},
+    isInConversation: Boolean = false
+) {
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        userScrollEnabled = !isInConversation // Deshabilitar swipe cuando está en conversación
+    ) { page ->
         when (navItems[page]) {
             Screen.Home -> HomeScreenCliente(navController = navController)
             Screen.Presupuestos -> PresupuestosScreen(onBack = { navController.popBackStack() })
-            Screen.Chat -> ChatScreen(onBack = { navController.popBackStack() })
+            Screen.Chat -> ChatScreen(
+                onBack = { navController.popBackStack() },
+                onInConversationChange = onInConversationChange
+            )
             Screen.Calendar -> CalendarScreen(onBack = { navController.popBackStack() })
             Screen.Promo -> PromoScreen(navController = navController, onBack = { navController.popBackStack() })
             else -> {}

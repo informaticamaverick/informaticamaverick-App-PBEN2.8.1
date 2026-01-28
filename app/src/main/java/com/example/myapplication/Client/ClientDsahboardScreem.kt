@@ -646,28 +646,6 @@ fun ClientDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box {
-                                IconButton(
-                                    onClick = { },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Notifications,
-                                        contentDescription = "Notificaciones",
-                                        tint = textSecondaryColor,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = (-6).dp, y = 6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFEF4444))
-                                )
-                            }
-
                             var showMenu by remember { mutableStateOf(false) }
                             val displayName = when {
                                 userName.isNotEmpty() -> userName
@@ -1126,6 +1104,28 @@ fun ClientDashboardScreen(
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = textPrimaryColor
+                                )
+                            }
+                            
+                            Box {
+                                IconButton(
+                                    onClick = { },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Notifications,
+                                        contentDescription = "Notificaciones",
+                                        tint = textSecondaryColor,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = (-6).dp, y = 6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFEF4444))
                                 )
                             }
                         }
