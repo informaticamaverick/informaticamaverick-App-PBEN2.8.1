@@ -36,7 +36,8 @@ fun AppNavHost(
     pagerState: PagerState,
     navItems: List<Screen>,
     modifier: Modifier = Modifier,
-    onInConversationChange: (Boolean) -> Unit = {}
+    onInConversationChange: (Boolean) -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
     NavHost(
         navController = navController,
@@ -67,7 +68,10 @@ fun AppNavHost(
         }
         
         composable(Screen.PerfilCliente.route) { 
-            PerfilUsuarioScreen(onNavigateBack = { navController.popBackStack() }) 
+            PerfilUsuarioScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onLogout = { onLogout() }
+            ) 
         }
 
         composable(Screen.PerfilPrestador.route) { backStackEntry ->

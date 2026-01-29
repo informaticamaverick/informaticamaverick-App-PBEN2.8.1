@@ -52,7 +52,7 @@ import kotlinx.coroutines.launch
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(onLogout: () -> Unit = {}) {
     val navController = rememberNavController()
     val navItems = listOf(
         Screen.Home,
@@ -145,7 +145,12 @@ fun MainScreen() {
             // [MODIFICACIÓN] La ruta CrearLicitacion ahora abre CreaLicScreen.
             // Se elimina la referencia a BiddingScreen.
             composable(Screen.CrearLicitacion.route) { CrearLicScreen(onBack = { navController.popBackStack() }) }
-            composable(Screen.PerfilCliente.route) { PerfilUsuarioScreen(onNavigateBack = { navController.popBackStack() }) }
+            composable(Screen.PerfilCliente.route) { 
+                PerfilUsuarioScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onLogout = { onLogout() }
+                ) 
+            }
             
             // [MODIFICACIÓN] La ruta result_busqueda ahora abre ResultBusquedaCategoriaScreen.
             // Se elimina la referencia a SearchResultsScreen.

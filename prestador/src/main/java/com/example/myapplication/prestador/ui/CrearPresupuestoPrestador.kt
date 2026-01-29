@@ -1211,7 +1211,189 @@ fun BudgetPreviewDialog(
             }
         ) { padding ->
             Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).background(Color.White)) {
-                // Header, Client Data, Detail, Footer Sections
+                // Header con título
+                Text(
+                    text = "Vista Previa del Presupuesto",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+                
+                // Información del prestador
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Prestador", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1976D2))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(prestador.name, fontWeight = FontWeight.SemiBold)
+                        Text(prestador.email, fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+                
+                // Artículos
+                if (items.isNotEmpty()) {
+                    Text(
+                        "Artículos",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                    items.forEachIndexed { index, item ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("${index + 1}. ${item.description}", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Cantidad: ${item.quantity}", fontSize = 12.sp, color = Color.Gray)
+                                    Text("Precio: $${String.format("%.2f", item.unitPrice)}", fontSize = 12.sp, color = Color.Gray)
+                                }
+                                if (item.taxPercentage > 0 || item.discountPercentage > 0) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        if (item.taxPercentage > 0) Text("IVA: ${item.taxPercentage}%", fontSize = 12.sp, color = Color.Gray)
+                                        if (item.discountPercentage > 0) Text("Desc: ${item.discountPercentage}%", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                }
+                                val itemTotal = item.unitPrice * item.quantity * (1 + item.taxPercentage / 100) * (1 - item.discountPercentage / 100)
+                                Text("Total: $${String.format("%.2f", itemTotal)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
+                            }
+                        }
+                    }
+                }
+                
+                // Servicios
+                if (services.isNotEmpty()) {
+                    Text(
+                        "Servicios",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                    services.forEach { service ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(service.description, fontWeight = FontWeight.Medium)
+                                    if (service.code.isNotEmpty()) {
+                                        Text("Código: ${service.code}", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                }
+                                Text("$${String.format("%.2f", service.total)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
+                            }
+                        }
+                    }
+                }
+                
+                // Honorarios profesionales
+                if (professionalFees.isNotEmpty()) {
+                    Text(
+                        "Honorarios Profesionales",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                    professionalFees.forEach { fee ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(fee.description, fontWeight = FontWeight.Medium)
+                                    if (fee.code.isNotEmpty()) {
+                                        Text("Código: ${fee.code}", fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                }
+                                Text("$${String.format("%.2f", fee.total)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
+                            }
+                        }
+                    }
+                }
+                
+                // Gastos varios
+                if (miscExpenses.isNotEmpty()) {
+                    Text(
+                        "Gastos Varios",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                    miscExpenses.forEach { expense ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(expense.description, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Text("$${String.format("%.2f", expense.amount)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
+                            }
+                        }
+                    }
+                }
+                
+                // Impuestos
+                if (taxes.isNotEmpty()) {
+                    Text(
+                        "Impuestos",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                    taxes.forEach { tax ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(tax.description, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Text("$${String.format("%.2f", tax.amount)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
+                            }
+                        }
+                    }
+                }
+                
+                // Total final
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("TOTAL GENERAL", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("$${String.format("%.2f", grandTotal)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(80.dp)) // Space for FAB
             }
         }
     }
