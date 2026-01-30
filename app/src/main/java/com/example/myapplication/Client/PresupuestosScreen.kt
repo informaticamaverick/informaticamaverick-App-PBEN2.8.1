@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import androidx.compose.material.icons.filled.Description
 import coil.compose.rememberAsyncImagePainter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -552,7 +553,8 @@ fun GeneralesTabContent(
                     presupuesto = presupuesto,
                     onClick = { onPresupuestoClick(presupuesto) },
                     onProfileClick = { onProfileClick(presupuesto.prestadorId) },
-                    onChatClick = { onChatClick(presupuesto.prestadorId) }
+                    onChatClick = { onChatClick(presupuesto.prestadorId) },
+                    onPreviewClick = { onPresupuestoClick(presupuesto) }
                 )
             }
         }
@@ -1211,7 +1213,8 @@ fun PresupuestoGeneralCard(
     presupuesto: PresupuestoFalso,
     onClick: () -> Unit,
     onProfileClick: () -> Unit,
-    onChatClick: () -> Unit
+    onChatClick: () -> Unit,
+    onPreviewClick: () -> Unit   // nuevo parametro
 ) {
     val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
 
@@ -1223,26 +1226,77 @@ fun PresupuestoGeneralCard(
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-            Image(
-                painter = rememberAsyncImagePainter(model = provider?.profileImageUrl),
-                contentDescription = "Logo de ${presupuesto.prestadorNombre}",
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onProfileClick),
-                contentScale = ContentScale.Crop
-            )
+            Box {
+                Image(
+                    painter = rememberAsyncImagePainter(model = provider?.profileImageUrl),
+                    contentDescription = "Logo de ${presupuesto.prestadorNombre}",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onProfileClick),
+                    contentScale = ContentScale.Crop
+                )
+                // Indicador de conectado
+                if (provider?.isOnline == true) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .align(Alignment.BottomEnd)
+                            .background(Color(0xFF10B981), CircleShape)
+                            .border(2.dp, Color.White, CircleShape)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(presupuesto.nombre, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text("De: ${presupuesto.prestadorNombre}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("S/ ${presupuesto.precioTotal}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("De: ${presupuesto.prestadorNombre}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    if (provider?.isVerified == true) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            Icons.Filled.Verified,
+                            "Perfil Verificado",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
-            IconButton(onClick = onChatClick) {
-                Icon(Icons.AutoMirrored.Filled.Message, "Chat", tint = MaterialTheme.colorScheme.primary)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "S/ ${presupuesto.precioTotal}", 
+                    fontWeight = FontWeight.Bold, 
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.offset(x = (-18).dp),
+                        verticalArrangement = Arrangement.spacedBy((-4).dp)
+                    ) {
+                        IconButton(onClick = onPreviewClick) {
+                            Icon(Icons.Default.Description, "Vista previa",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Text(
+                            "Enviado: ${formatDateShort(presupuesto.fechaRecepcion)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray,
+                            fontSize = 10.sp
+                        )
+                    }
+                    IconButton(onClick = onChatClick) {
+                        Icon(Icons.AutoMirrored.Filled.Message, "Chat", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
         }
     }
@@ -1298,7 +1352,8 @@ fun LicitacionDetailSheetContent(
                     presupuesto = budget,
                     onClick = { onBudgetClick(budget) },
                     onProfileClick = { onProfileClick(budget.prestadorId) },
-                    onChatClick = { onChatClick(budget.prestadorId) }
+                    onChatClick = { onChatClick(budget.prestadorId) },
+                    onPreviewClick = { onBudgetClick(budget) }
                 )
             }
         }
@@ -1541,6 +1596,20 @@ fun BudgetPreviewPDFDialog(
                 }
             }
         }
+    }
+}
+
+// Función para formatear fecha de dd/MM/yyyy a dd/MM/yy
+fun formatDateShort(date: String): String {
+    return try {
+        if (date.length == 10 && date.contains("/")) {
+            val parts = date.split("/")
+            "${parts[0]}/${parts[1]}/${parts[2].takeLast(2)}"
+        } else {
+            date
+        }
+    } catch (e: Exception) {
+        date
     }
 }
 
