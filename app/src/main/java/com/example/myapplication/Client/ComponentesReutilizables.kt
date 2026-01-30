@@ -1,9 +1,8 @@
 package com.example.myapplication.Client
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,27 +12,191 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.myapplication.R
 import com.example.myapplication.ui.theme.getAppColors
 
-// [NUEVO] Clase de datos para las acciones del menú moderno
+// =================================================================================
+// --- COMPONENTES REUTILIZABLES PARA EL FAB Y SUS HERRAMIENTAS ---
+// =================================================================================
+
+@Composable
+fun ToolItem(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        FloatingActionButton(
+            onClick = onClick,
+            containerColor = color,
+            modifier = Modifier.size(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp, pressedElevation = 4.dp)
+        ) {
+            Icon(icon, null, tint = Color.Black)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun SplitFloatingActionButton(
+    modifier: Modifier = Modifier,
+    isSearchExpanded: Boolean,
+    isToolsExpanded: Boolean,
+    onSearchClick: (Boolean) -> Unit,
+    onToolsClick: (Boolean) -> Unit,
+    searchContent: @Composable () -> Unit,
+    horizontalTools: @Composable RowScope.() -> Unit,
+    verticalTools: @Composable ColumnScope.() -> Unit
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.BottomEnd) {
+        AnimatedVisibility(
+            visible = isToolsExpanded && !isSearchExpanded,
+            enter = fadeIn() + slideInVertically { it / 2 } + scaleIn(transformOrigin = TransformOrigin(0.5f, 1f)),
+            exit = fadeOut() + slideOutVertically { it / 2 } + scaleOut(transformOrigin = TransformOrigin(0.5f, 1f)),
+            modifier = Modifier.padding(bottom = 72.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.End) { verticalTools() }
+        }
+        
+        AnimatedVisibility(
+            visible = isToolsExpanded && !isSearchExpanded,
+            enter = fadeIn() + slideInHorizontally { it / 2 } + scaleIn(transformOrigin = TransformOrigin(1f, 0.5f)),
+            exit = fadeOut() + slideOutHorizontally { it / 2 } + scaleOut(transformOrigin = TransformOrigin(1f, 0.5f)),
+            modifier = Modifier.padding(end = 72.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) { horizontalTools() }
+        }
+
+        Surface(
+            modifier = Modifier
+                .height(56.dp)
+                .width(animateDpAsState(if (isSearchExpanded) 340.dp else 180.dp, label = "fabWidth").value),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight().clickable { onSearchClick(!isSearchExpanded) }.padding(start = 16.dp, end = 8.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    AnimatedContent(
+                        targetState = isSearchExpanded, label = "SearchContent",
+                        transitionSpec = { fadeIn(animationSpec = tween(200, 150)) togetherWith fadeOut(animationSpec = tween(150)) }
+                    ) { searchActive ->
+                        if (searchActive) {
+                            searchContent()
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Search, contentDescription = "Buscar")
+                                Spacer(Modifier.width(8.dp))
+                                Text("Buscar", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                VerticalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                Box(
+                    modifier = Modifier.size(56.dp).clickable { 
+                        if (isSearchExpanded) onSearchClick(false) else onToolsClick(!isToolsExpanded)
+                    },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Crossfade(targetState = isSearchExpanded || isToolsExpanded, label = "ToolsIcon") { isExpanded ->
+                         Icon(
+                            imageVector = if (isExpanded) Icons.Default.Close else Icons.Default.Tune,
+                            contentDescription = if(isExpanded) "Cerrar" else "Herramientas"
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =================================================================================
+// --- NUEVO COMPONENTE REUTILIZABLE ---
+// =================================================================================
+
+@Composable
+fun FavoriteCardItem(
+    provider: PrestadorProfileFalso,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    val cardColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = isSelectionMode, onClick = onSelect),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        border = border
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isSelectionMode) {
+                Checkbox(checked = isSelected, onCheckedChange = { onSelect() }, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+            AsyncImage(
+                model = provider.profileImageUrl,
+                contentDescription = "Foto de perfil",
+                fallback = painterResource(id = R.drawable.iconapp),
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "${provider.name} ${provider.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(text = provider.services.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, "Rating", tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                    Text(text = "${provider.rating}", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            if (!isSelectionMode) {
+                Icon(imageVector = Icons.Default.Favorite, contentDescription = "Favorito", tint = Color.Red)
+            }
+        }
+    }
+}
+
+
+// =================================================================================
+// --- OTROS COMPONENTES REUTILIZABLES ---
+// =================================================================================
+
 data class MenuAction(
     val text: String,
     val icon: ImageVector,
@@ -42,899 +205,388 @@ data class MenuAction(
     val onClick: () -> Unit
 )
 
-/**
- * [COMPONENTE REUTILIZABLE]
- * Botón Dividido Flotante (Split FAB) que permite expansión para búsqueda o herramientas.
- * Incluye animaciones de rotación y cambio de icono según el estado.
- */
 @Composable
-fun SplitFloatingActionButton(
-    modifier: Modifier = Modifier,
-    onStateChange: (isExpanded: Boolean, activeMode: String) -> Unit = { _, _ -> },
-    onSearchClick: (Boolean) -> Unit,
-    onToolsClick: () -> Unit,
-    searchContent: @Composable RowScope.() -> Unit,
-    toolsContent: @Composable RowScope.() -> Unit
-) {
-    var searchExpanded by remember { mutableStateOf(false) }
-    var toolsExpanded by remember { mutableStateOf(false) }
-
-    // Notifica al padre si alguna de las secciones está expandida
-    LaunchedEffect(searchExpanded, toolsExpanded) {
-        onStateChange(searchExpanded || toolsExpanded, if (searchExpanded) "search" else if (toolsExpanded) "tools" else "none")
-    }
-
-    val fabHeight = 56.dp
-
-    // Animación de ancho para cada sección
-    val searchWidth by animateDpAsState(
-        targetValue = if (searchExpanded) 280.dp else 56.dp,
-        label = "searchWidth"
-    )
-    val toolsWidth by animateDpAsState(
-        targetValue = if (toolsExpanded) 280.dp else 56.dp,
-        label = "toolsWidth"
-    )
-
-    // Animación de rotación para la transformación de los iconos
-    val leftIconRotation by animateFloatAsState(targetValue = if (toolsExpanded) 180f else 0f, label = "leftRotation")
-    val rightIconRotation by animateFloatAsState(targetValue = if (searchExpanded) 180f else 0f, label = "rightRotation")
-
+fun ServiceTag(text: String, color: Color) {
     Surface(
-        modifier = modifier.height(fabHeight),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp,
-        shadowElevation = 6.dp
+        color = color,
+        shape = RoundedCornerShape(4.dp)
     ) {
-        Row(
-            modifier = Modifier.wrapContentWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // --- SECCIÓN IZQUIERDA: BÚSQUEDA / CERRAR ---
-            Row(
-                modifier = Modifier
-                    .width(searchWidth)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp))
-                    .clickable {
-                        if (toolsExpanded) {
-                            toolsExpanded = false
-                            onToolsClick()
-                        } else {
-                            searchExpanded = !searchExpanded
-                            onSearchClick(searchExpanded)
-                        }
-                    }
-                    .background(if (searchExpanded) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = if (searchExpanded) Arrangement.Start else Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = if (toolsExpanded) Icons.Default.Close else Icons.Default.Search,
-                    contentDescription = "Buscar",
-                    modifier = Modifier.rotate(leftIconRotation),
-                    tint = if (searchExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                )
-                if (searchExpanded) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    searchContent()
-                }
-            }
-
-            // --- DIVISOR ---
-            if (!searchExpanded && !toolsExpanded) {
-                VerticalDivider(
-                    modifier = Modifier.height(24.dp).width(1.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
-            }
-
-            // --- SECCIÓN DERECHA: HERRAMIENTAS / CERRAR ---
-            Row(
-                modifier = Modifier
-                    .width(toolsWidth)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp))
-                    .clickable {
-                        if (searchExpanded) {
-                            searchExpanded = false
-                            onSearchClick(false)
-                        } else {
-                            toolsExpanded = !toolsExpanded
-                            onToolsClick()
-                        }
-                    }
-                    .background(if (toolsExpanded) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = if (toolsExpanded) Arrangement.End else Arrangement.Center
-            ) {
-                if (toolsExpanded) {
-                    toolsContent()
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Icon(
-                    imageVector = if (searchExpanded) Icons.Default.Close else Icons.Default.Settings,
-                    contentDescription = "Herramientas",
-                    modifier = Modifier.rotate(rightIconRotation),
-                    tint = if (toolsExpanded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.Black
+        )
     }
 }
 
-
-/** @Composable
-fun SplitFloatingActionButton(
-    modifier: Modifier = Modifier,
-    onSearchClick: (Boolean) -> Unit,
-    onToolsClick: (Boolean) -> Unit,
-    searchContent: @Composable (RowScope.() -> Unit)? = null,
-    toolsContent: @Composable (RowScope.() -> Unit)? = null
-) {
-    var searchExpanded by remember { mutableStateOf(false) }
-    var toolsExpanded by remember { mutableStateOf(false) }
-
-    // El ancho total del componente crece según qué sección se expanda
-    val totalWidth by animateDpAsState(
-        targetValue = if (searchExpanded || toolsExpanded) 320.dp else 120.dp,
-        label = "totalWidth"
-    )
-
-    Surface(
-        modifier = modifier
-            .width(totalWidth) // Controla la expansión hacia la izquierda
-            .height(56.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = Color(0xFFF3F0F5), // Color grisáceo/blanco de la imagen
-        shadowElevation = 8.dp
-    ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            // SECCIÓN IZQUIERDA: BUSCADOR
-            Row(
-                modifier = Modifier
-                    .weight(if (searchExpanded) 1f else 0.5f)
-                    .fillMaxHeight()
-                    .clickable {
-                        if (toolsExpanded) toolsExpanded = false
-                        searchExpanded = !searchExpanded
-                        onSearchClick(searchExpanded)
-                    }
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = if (searchExpanded) Icons.Default.Close else Icons.Default.Search,
-                    contentDescription = null,
-                    tint = Color(0xFF6750A4)
-                )
-                if (searchExpanded && searchContent != null) {
-                    searchContent()
-                }
-            }
-
-            // DIVISOR (Como el de tu imagen)
-            VerticalDivider(
-                modifier = Modifier.padding(vertical = 14.dp).width(1.dp),
-                color = Color.LightGray.copy(alpha = 0.5f)
-            )
-
-            // SECCIÓN DERECHA: HERRAMIENTAS
-            Row(
-                modifier = Modifier
-                    .weight(if (toolsExpanded) 1f else 0.5f)
-                    .fillMaxHeight()
-                    .clickable {
-                        if (searchExpanded) searchExpanded = false
-                        toolsExpanded = !toolsExpanded
-                        onToolsClick(toolsExpanded)
-                    }
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                if (toolsExpanded && toolsContent != null) {
-                    toolsContent()
-                }
-                Icon(
-                    imageVector = if (toolsExpanded) Icons.Default.Close else Icons.Default.Settings,
-                    contentDescription = null,
-                    tint = Color(0xFF6750A4)
-                )
-            }
-        }
-    }
-}
-
-**/
-
-/** @Composable
-fun SplitFloatingActionButton(
-    modifier: Modifier = Modifier,
-    onSearchClick: (Boolean) -> Unit,
-    onToolsClick: (Boolean) -> Unit,
-    searchContent: @Composable (RowScope.() -> Unit)? = null,
-    toolsContent: @Composable (RowScope.() -> Unit)? = null
-) {
-
-    var searchExpanded by remember { mutableStateOf(false) }
-    var toolsExpanded by remember { mutableStateOf(false) }
-
-    val fabHeight = 56.dp
-    
-    // Animación de ancho para cada sección
-    val searchWidth by animateDpAsState(
-        targetValue = when {
-            searchExpanded -> 280.dp 
-            toolsExpanded -> 56.dp   
-            else -> 60.dp            
-        },
-        label = "searchWidth"
-    )
-
-    val toolsWidth by animateDpAsState(
-        targetValue = when {
-            toolsExpanded -> 280.dp
-            searchExpanded -> 56.dp
-            else -> 60.dp
-        },
-        label = "toolsWidth"
-    )
-
-    // Animación de rotación para los iconos al transformarse
-    val leftIconRotation by animateFloatAsState(
-        targetValue = if (toolsExpanded) 180f else 0f,
-        label = "leftRotation"
-    )
-    val rightIconRotation by animateFloatAsState(
-        targetValue = if (searchExpanded) 180f else 0f,
-        label = "rightRotation"
-    )
-
-    Surface(
-        modifier = modifier
-            .height(fabHeight)
-            .padding(horizontal = 4.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp,
-        shadowElevation = 6.dp
-    ) {
-        Row(
-            modifier = Modifier.wrapContentWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // --- SECCIÓN IZQUIERDA: BÚSQUEDA / CERRAR ---
-            Row(
-                modifier = Modifier
-                    .width(searchWidth)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp))
-                    .clickable {
-                        if (toolsExpanded) {
-                            // Si las herramientas estaban abiertas, el icono izquierdo es "Cerrar"
-                            toolsExpanded = false
-                            onToolsClick(false)
-                        } else {
-                            searchExpanded = !searchExpanded
-                            onSearchClick(searchExpanded)
-                        }
-                    }
-                    .background(
-                        if (searchExpanded) MaterialTheme.colorScheme.primaryContainer 
-                        else Color.Transparent
-                    )
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = if (searchExpanded) Arrangement.Start else Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = if (toolsExpanded) Icons.Default.Close else Icons.Default.Search,
-                    contentDescription = "Buscar",
-                    modifier = Modifier.rotate(leftIconRotation),
-                    tint = if (searchExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                )
-                if (searchExpanded && searchContent != null) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    searchContent()
-                }
-            }
-
-            // --- DIVISOR ---
-            VerticalDivider(
-                modifier = Modifier
-                    .height(24.dp)
-                    .width(1.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            )
-
-            // --- SECCIÓN DERECHA: HERRAMIENTAS / CERRAR ---
-            Row(
-                modifier = Modifier
-                    //.width(toolsWidth)
-                    .fillMaxHeight()
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp))
-                    .clickable {
-                        if (searchExpanded) {
-                            // Si la búsqueda estaba abierta, el icono derecho es "Cerrar"
-                            searchExpanded = false
-                            onSearchClick(false)
-                        } else {
-                            toolsExpanded = !toolsExpanded
-                            onToolsClick(toolsExpanded)
-                        }
-                    }
-                    .background(
-                        if (toolsExpanded) MaterialTheme.colorScheme.secondaryContainer 
-                        else Color.Transparent
-                    )
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = if (toolsExpanded) Arrangement.End else Arrangement.Center
-            ) {
-                if (toolsExpanded && toolsContent != null) {
-                    toolsContent()
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Icon(
-                    imageVector = if (searchExpanded) Icons.Default.Close else Icons.Default.Settings,
-                    contentDescription = "Herramientas",
-                    modifier = Modifier.rotate(rightIconRotation),
-                    tint = if (toolsExpanded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-    }
-}
-**/
-
-/**
- * [COMPONENTE REUTILIZABLE]
- * Tarjeta unificada para mostrar la información de un prestador.
- */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class,
+    ExperimentalLayoutApi::class
+)
 @Composable
 fun PrestadorCard(
     provider: PrestadorProfileFalso,
-    onClick: () -> Unit,
+    onClick: () -> Unit, // Navegar al perfil
     onChat: (() -> Unit)? = null,
     onDeleteRequest: (() -> Unit)? = null,
     actionContent: @Composable (() -> Unit)? = null
 ) {
     val appColors = getAppColors()
-    var showBottomSheet by remember { mutableStateOf(false) }
-    var showConfirmationDialog by remember { mutableStateOf(false) }
-    var pendingAction by remember { mutableStateOf<() -> Unit>({}) }
-    var confirmationTitle by remember { mutableStateOf("") }
-    var confirmationMessage by remember { mutableStateOf("") }
-    var confirmButtonText by remember { mutableStateOf("") }
-    var isDestructiveAction by remember { mutableStateOf(false) }
+    var showDetailSheet by remember { mutableStateOf(false) } // Sheet para mostrar detalle expandido
+    var showContextMenu by remember { mutableStateOf(false) }
+    var showFavoriteDialog by remember { mutableStateOf(false) }
+    
+    // Estado local para favoritos (solo para visualización inmediata)
+    var isFavoriteLocal by remember { mutableStateOf(provider.isFavorite) }
 
-    val fallbackCategoryColor = MaterialTheme.colorScheme.secondaryContainer
-    val othersCategoryColor = MaterialTheme.colorScheme.surfaceVariant
-    val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-    val activeAttributeColor = Color(0xFF388E3C)
+    val activeColor = Color(0xFF10B981) // Verde
+    val inactiveColor = appColors.textSecondaryColor
 
-    // Función auxiliar para obtener el color de la categoría
-    fun getCategoryColor(categoryName: String): Color {
-        return CategorySampleDataFalso.categories.find { it.name == categoryName }?.color
-            ?: fallbackCategoryColor
-    }
-
+    // Menú Contextual (Long Press)
     Box {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, outlineColor, MaterialTheme.shapes.large)
                 .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = {
-                        showBottomSheet = true
-                    }
+                    onClick = { showDetailSheet = true }, // Click simple abre detalle
+                    onLongClick = { showContextMenu = true } // Long click abre menú
                 ),
             shape = MaterialTheme.shapes.large,
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             colors = CardDefaults.cardColors(containerColor = appColors.surfaceColor)
         ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-
-                    if (provider.services.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 3.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val maxTagsToShow = 3
-                            val displayTags = provider.services.take(maxTagsToShow)
-                            val showOthers = provider.services.size > maxTagsToShow
-
-                            displayTags.forEachIndexed { index, service ->
-                                if (index == maxTagsToShow - 1 && showOthers) {
-                                    ServiceTag(text = "Otros", color = othersCategoryColor)
-                                } else {
-                                    ServiceTag(text = service, color = getCategoryColor(service))
-                                }
-                            }
-                        }
-                        Divider(color = outlineColor, thickness = 1.dp)
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = 16.dp,
-                                top = if (provider.services.isNotEmpty()) 12.dp else 16.dp
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Box(
-                             modifier = Modifier.clickable(onClick = onClick) // Acción de perfil en la imagen
-                        ) {
-                            AsyncImage(
-                                model = provider.profileImageUrl,
-                                contentDescription = "Foto de perfil de ${provider.name}",
-                                fallback = painterResource(id = R.drawable.iconapp),
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                            // [MODIFICACIÓN] El indicador de online se mueve arriba a la izquierda
-                            if (provider.isOnline) {
-                                Badge(
-                                    modifier = Modifier
-                                        // TopStart = Arriba Izquierda
-                                        .align(Alignment.TopStart)
-                                        .size(16.dp)
-                                        .border(2.dp, appColors.surfaceColor, CircleShape),
-                                    containerColor = Color(0xFF10B981)
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable(onClick = onClick) // Acción de perfil en el texto
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "${provider.name} ${provider.lastName}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = appColors.textPrimaryColor
-                                )
-                                if (provider.isVerified) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.Filled.Verified,
-                                        contentDescription = "Perfil Verificado",
-                                        tint = appColors.accentBlue,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-
-                            provider.companyName?.let {
-                                if (it.isNotEmpty()) {
-                                    Text(
-                                        text = it,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = appColors.textSecondaryColor
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                }
-                            }
-                            
-                            if (provider.companyName.isNullOrEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Icon(
-                                        imageVector = Icons.Default.Schedule,
-                                        contentDescription = "24hs",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (provider.works24h) activeAttributeColor else appColors.textSecondaryColor.copy(alpha = 0.3f)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.Home,
-                                        contentDescription = "Domicilio",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (provider.doesHomeVisits) activeAttributeColor else appColors.textSecondaryColor.copy(alpha = 0.3f)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.Store,
-                                        contentDescription = "Local",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (provider.hasPhysicalLocation) activeAttributeColor else appColors.textSecondaryColor.copy(alpha = 0.3f)
-                                    )
-                                    
-                                    Icon(
-                                        imageVector = if (provider.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                        contentDescription = "Favorito",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (provider.isFavorite) activeAttributeColor else appColors.textSecondaryColor.copy(alpha = 0.3f)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Star,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                    Text(
-                                        text = "${provider.rating}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = appColors.textPrimaryColor
-                                    )
-                                }
-                            }
-                        }
-
-                        // El actionContent ahora está envuelto en un Box con un clickable
-                        if (actionContent != null && onChat != null) {
-                            Box(modifier = Modifier.clickable(onClick = onChat)) {
-                                actionContent()
-                            }
-                        } else if (actionContent != null){
-                            actionContent()
-                        }
-                    }
-                }
-            }
-        }
-        
-        // [NUEVO] Bottom Sheet para opciones (Menú inferior)
-        if (showBottomSheet) {
-            val actions = mutableListOf<MenuAction>()
-            
-            actions.add(MenuAction("Ver Perfil", Icons.Default.Person) {
-                showBottomSheet = false
-                onClick()
-            })
-            
-            if (onChat != null) {
-                actions.add(MenuAction("Enviar Mensaje", Icons.Default.Chat) {
-                    showBottomSheet = false
-                    onChat()
-                })
-            }
-
-            // Lógica de Favoritos (Alternar)
-            if (provider.isFavorite) {
-                actions.add(MenuAction(
-                    text = "Eliminar de Favoritos",
-                    icon = Icons.Default.Delete, // O Icons.Default.FavoriteBorder
-                    isDestructive = true,
-                    onClick = {
-                        showBottomSheet = false
-                        // Preparar diálogo de confirmación para eliminar
-                        confirmationTitle = "Eliminar de Favoritos"
-                        confirmationMessage = "¿Estás seguro de que deseas eliminar a ${provider.name} de tus favoritos?"
-                        confirmButtonText = "Eliminar"
-                        isDestructiveAction = true
-                        pendingAction = { 
-                            SampleDataFalso.toggleFavorite(provider.id)
-                            // Si se pasó un onDeleteRequest (ej: desde pantalla Favoritos), ejecutarlo también si es necesario, 
-                            // pero toggleFavorite ya actualiza la lista global.
-                            onDeleteRequest?.invoke()
-                        }
-                        showConfirmationDialog = true
-                    }
-                ))
-            } else {
-                actions.add(MenuAction(
-                    text = "Agregar a Favoritos",
-                    icon = Icons.Default.Favorite, // O Icons.Default.Add
-                    isPrimary = true,
-                    onClick = {
-                        showBottomSheet = false
-                        // Preparar diálogo de confirmación para agregar
-                        confirmationTitle = "Agregar a Favoritos"
-                        confirmationMessage = "¿Deseas agregar a ${provider.name} a tus favoritos?"
-                        confirmButtonText = "Agregar"
-                        isDestructiveAction = false
-                        pendingAction = { 
-                            SampleDataFalso.toggleFavorite(provider.id)
-                        }
-                        showConfirmationDialog = true
-                    }
-                ))
-            }
-
-            // Si se pasa onDeleteRequest explícitamente y NO es un favorito (ej: eliminar chat), se añade opción genérica de eliminar
-            if (onDeleteRequest != null && !provider.isFavorite) {
-                 actions.add(MenuAction("Eliminar", Icons.Default.Delete, isDestructive = true) {
-                    showBottomSheet = false
-                    confirmationTitle = "Eliminar Elemento"
-                    confirmationMessage = "¿Estás seguro de realizar esta acción?"
-                    confirmButtonText = "Eliminar"
-                    isDestructiveAction = true
-                    pendingAction = { onDeleteRequest() }
-                    showConfirmationDialog = true
-                })
-            }
-
-            GenericBottomSheet(
-                onDismiss = { showBottomSheet = false },
-                actions = actions
-            )
-        }
-
-        // [NUEVO] Bottom Sheet de Confirmación
-        if (showConfirmationDialog) {
-            ConfirmationBottomSheet(
-                title = confirmationTitle,
-                message = confirmationMessage,
-                confirmText = confirmButtonText,
-                isDestructive = isDestructiveAction,
-                onConfirm = {
-                    pendingAction()
-                    showConfirmationDialog = false
-                },
-                onCancel = { showConfirmationDialog = false }
-            )
-        }
-    }
-}
-
-// [NUEVO] Menú Bottom Sheet Genérico
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun GenericBottomSheet(
-    onDismiss: () -> Unit,
-    actions: List<MenuAction>
-) {
-    val sheetState = rememberModalBottomSheetState()
-    
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(bottom = 32.dp, start = 16.dp, end = 16.dp)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Barra pequeña superior indicadora (handle)
-            Box(
-                modifier = Modifier
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                    .align(Alignment.CenterHorizontally)
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-
-            actions.forEach { action ->
-                BottomSheetItem(action)
-            }
-        }
-    }
-}
-
-// [NUEVO] Item del menú Bottom Sheet
-@Composable
-fun BottomSheetItem(action: MenuAction) {
-    Surface(
-        onClick = action.onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), // Fondo sutil
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = action.icon,
-                contentDescription = null,
-                tint = when {
-                    action.isDestructive -> Color.Red
-                    action.isPrimary -> MaterialTheme.colorScheme.primary // O verde: Color(0xFF388E3C)
-                    else -> MaterialTheme.colorScheme.onSurface
-                },
-                modifier = Modifier.size(24.dp)
-            )
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Text(
-                text = action.text,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = when {
-                    action.isDestructive -> Color.Red
-                    action.isPrimary -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
-            )
-        }
-    }
-}
-
-// [NUEVO] Diálogo de confirmación estilo Bottom Sheet
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ConfirmationBottomSheet(
-    title: String,
-    message: String,
-    confirmText: String,
-    isDestructive: Boolean,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState()
-
-    ModalBottomSheet(
-        onDismissRequest = onCancel,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(24.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(
-                    onClick = onCancel,
-                    modifier = Modifier.weight(1f),
+                // Sección de Perfil (Foto) - ÚNICO lugar que lleva al perfil completo
+                Box(
+                    modifier = Modifier
+                        .clickable(onClick = onClick) 
+                        .padding(end = 16.dp)
+                ) {
+                    AsyncImage(
+                        model = provider.profileImageUrl,
+                        contentDescription = "Foto de perfil",
+                        fallback = painterResource(id = R.drawable.iconapp),
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    if (provider.isOnline) {
+                        Badge(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .size(16.dp)
+                                .border(2.dp, appColors.surfaceColor, CircleShape),
+                            containerColor = Color(0xFF10B981)
+                        )
+                    }
+                }
+
+                // Cuerpo de la tarjeta (Datos) - Click aquí abre el Sheet (heredado del card)
+                Column(modifier = Modifier.weight(1f)) {
+                    // Nombre y Verificación (Ya no llevan al perfil al hacer click)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${provider.name} ${provider.lastName}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = appColors.textPrimaryColor
+                        )
+                        if (provider.isVerified) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                Icons.Filled.Verified,
+                                "Perfil Verificado",
+                                tint = appColors.accentBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // Nombre de empresa
+                    provider.companyName?.takeIf { it.isNotEmpty() }?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = appColors.textSecondaryColor
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // [MODIFICADO] Fila inferior con Iconos Booleanos y Rating y favorito
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Rating
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(text = "${provider.rating}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        VerticalDivider(modifier = Modifier.height(12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+                        // Iconos Booleanos (Más compactos)
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = "24hs",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (provider.works24h) activeColor else inactiveColor
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Home, 
+                            contentDescription = "Visita a Domicilio",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (provider.doesHomeVisits) activeColor else inactiveColor
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Storefront,
+                            contentDescription = "Local Físico",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (provider.hasPhysicalLocation) activeColor else inactiveColor
+                        )
+
+                        // [MODIFICADO] Icono de Favorito Visible
+                        //Spacer(modifier = Modifier.weight(1f)) // Empuja el favorito a la derecha
+                        IconButton(
+                            onClick = { showFavoriteDialog = true },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isFavoriteLocal) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (isFavoriteLocal) "Quitar favorito" else "Añadir favorito",
+                                tint = if (isFavoriteLocal) Color.Red else appColors.textSecondaryColor
+                            )
+                        }
+                    }
+                }
+
+                // Botón de Mensaje (Abre Chat)
+                IconButton(
+                    onClick = { onChat?.invoke() },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .padding(start = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send, 
+                        contentDescription = "Enviar Mensaje",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
+        // Menú Dropdown (Contextual)
+        DropdownMenu(
+            expanded = showContextMenu,
+            onDismissRequest = { showContextMenu = false },
+            offset = DpOffset(x = 16.dp, y = 0.dp)
+        ) {
+            DropdownMenuItem(
+                text = { Text("Ver Perfil Completo") },
+                leadingIcon = { Icon(Icons.Default.Person, null) },
+                onClick = { 
+                    showContextMenu = false
+                    onClick() // Navegar al perfil
+                }
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(if (isFavoriteLocal) "Quitar de Favoritos" else "Añadir a Favoritos") },
+                leadingIcon = { 
+                    Icon(
+                        imageVector = if (isFavoriteLocal) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, 
+                        contentDescription = null,
+                        tint = if (isFavoriteLocal) Color.Red else LocalContentColor.current
+                    ) 
+                },
+                onClick = { 
+                    showContextMenu = false
+                    showFavoriteDialog = true
+                }
+            )
+        }
+    }
+
+    // Detalle Expandido (BottomSheet Moderno)
+    if (showDetailSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showDetailSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 32.dp) // Espacio extra abajo
+            ) {
+                // Encabezado Detalle
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = provider.profileImageUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        // [MODIFICADO] Nombre con icono de verificación en BottomSheet
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${provider.name} ${provider.lastName}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (provider.isVerified) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(
+                                    Icons.Filled.Verified,
+                                    "Perfil Verificado",
+                                    tint = appColors.accentBlue,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = provider.email,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = appColors.textSecondaryColor
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Categorías / Servicios (Texto)
+                Text("Servicios Ofrecidos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(12.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    provider.services.forEach { service ->
+                        ServiceTag(text = service, color = MaterialTheme.colorScheme.surfaceVariant)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Detalles Booleanos
+                Text("Disponibilidad y Modalidad", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                RowItemDetail(icon = Icons.Default.Schedule, text = "Disponible 24hs", isActive = provider.works24h)
+                RowItemDetail(icon = Icons.Default.Home, text = "Visitas a Domicilio", isActive = provider.doesHomeVisits)
+                RowItemDetail(icon = Icons.Default.Storefront, text = "Local Físico", isActive = provider.hasPhysicalLocation)
+
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                // Botón Acción Principal en Detalle
+                Button(
+                    onClick = { 
+                        showDetailSheet = false
+                        onClick() // Ir a perfil completo
+                    },
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Cancelar")
-                }
-                
-                Button(
-                    onClick = onConfirm,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isDestructive) Color.Red else MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text(confirmText)
+                    Text("Ver Perfil Completo")
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
-}
 
-@Composable
-fun ServiceTag(text: String, color: Color) {
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = color,
-        contentColor = Color.Black
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            fontWeight = FontWeight.Medium
+    // Alerta de Favoritos
+    if (showFavoriteDialog) {
+        AlertDialog(
+            onDismissRequest = { showFavoriteDialog = false },
+            icon = { Icon(Icons.Default.Favorite, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text(if (isFavoriteLocal) "Quitar de Favoritos" else "Añadir a Favoritos") },
+            text = { Text(if (isFavoriteLocal) "¿Estás seguro de que quieres eliminar a este prestador de tus favoritos?" else "¿Quieres añadir a este prestador a tu lista de favoritos?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    // TODO: Lógica real para actualizar favorito en ViewModel/BD
+                    isFavoriteLocal = !isFavoriteLocal
+                    SampleDataFalso.toggleFavorite(provider.id) // Actualizar dato falso
+                    showFavoriteDialog = false
+                }) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFavoriteDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
         )
     }
 }
 
 @Composable
-fun ActionContent(
-    inDeleteMode: Boolean,
-    onMessageClick: () -> Unit,
-    onDeleteRequest: () -> Unit
-) {
-    Box(contentAlignment = Alignment.Center) {
-        AnimatedVisibility(
-            visible = !inDeleteMode,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut()
-        ) {
-            IconButton(onClick = onMessageClick) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                    contentDescription = "Ir al chat",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        AnimatedVisibility(
-            visible = inDeleteMode,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut()
-        ) {
-            IconButton(onClick = onDeleteRequest) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Eliminar",
-                    tint = Color.Red,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
+fun RowItemDetail(icon: ImageVector, text: String, isActive: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (isActive) Color(0xFF10B981) else Color.Gray.copy(alpha = 0.5f),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (isActive) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.5f),
+            textDecoration = if (!isActive) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+        )
     }
 }
 
+/**
+ * Un menú flotante genérico que muestra un FAB y despliega un menú desplegable al hacer clic.
+ *
+ * @param icon El icono para mostrar en el FAB.
+ * @param options Una lista de pares donde el primero es el texto de la opción y el segundo es la acción a ejecutar.
+ */
 @Composable
 fun GenericFloatingMenu(
     icon: ImageVector,
-    options: List<Pair<String, () -> Unit>>,
-    containerColor: Color = MaterialTheme.colorScheme.primary
+    options: List<Pair<String, () -> Unit>>
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Box {
-        FloatingActionButton(
-            onClick = { expanded = !expanded },
-            containerColor = containerColor,
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        ) {
-            Icon(imageVector = icon, contentDescription = "Opciones")
+        FloatingActionButton(onClick = { expanded = !expanded }) {
+            Icon(icon, contentDescription = null)
         }
-
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            options.forEach { (title, action) ->
+            options.forEach { (label, action) ->
                 DropdownMenuItem(
-                    text = { Text(title) },
+                    text = { Text(label) },
                     onClick = {
-                        expanded = false
                         action()
+                        expanded = false
                     }
                 )
             }

@@ -1,4 +1,9 @@
-package com.example.myapplication.Client
+
+//-------------------------------------MAINSCREEN CONTROLA LOS GESTOS --------------------------------------
+
+
+
+/**  package com.example.myapplication.Client
 
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -256,3 +261,4 @@ fun AppBottomNavigationBarPreview() {
         }
     }
 }
+**/

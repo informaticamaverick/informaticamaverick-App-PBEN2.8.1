@@ -11,8 +11,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
@@ -32,7 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-
+import androidx.compose.ui.graphics.R
 @Composable
 fun ChatScreen(
     onBack: () -> Unit,
@@ -587,5 +589,34 @@ fun ChatConversationViewPreview() {
             onBack = {},
             appColors = getAppColors()
         )
+    }
+}
+
+@Composable
+fun ActionContent(
+    inDeleteMode: Boolean,
+    onMessageClick: () -> Unit,
+    onDeleteRequest: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (!inDeleteMode) {
+            IconButton(onClick = onMessageClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Chat,
+                    contentDescription = "Enviar mensaje",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        IconButton(onClick = onDeleteRequest) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Eliminar",
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
