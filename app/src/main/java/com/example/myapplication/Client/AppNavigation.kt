@@ -1,23 +1,63 @@
 package com.example.myapplication.Client
 
+
+//APPNAVIGATION CONTROLA LAS RUTAS Y LO QUE SUCEDE CON LA NAVIGATIONBAR
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Scaffold
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.compose.ui.Modifier
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.example.myapplication.ui.screens.HomeScreenComplete
 
 // 1. DEFINICIÓN CENTRALIZADA DE TODAS LAS RUTAS
 sealed class Screen(val route: String, val title: String) {
     // Pantallas Principales
-    object Home : Screen("home", "Inicio")
-    object Presupuestos : Screen("presupuestos", "Presupuestos")
-    object Chat : Screen("chat", "Chat")
-    object Calendar : Screen("calendar", "Calendario")
-    object Promo : Screen("promo", "Promociones")
+    object Home : Screen("home", "Inicio") 
+    object Presupuestos : Screen("presupuestos", "Presupuestos") 
+    object Chat : Screen("chat", "Chat") 
+    object Calendar : Screen("calendar", "Calendario") 
+    object Promo : Screen("promo", "Promociones") 
 
     // Pantallas Secundarias
     object CrearLicitacion : Screen("crear_licitacion", "Crear Licitación")
@@ -27,83 +67,327 @@ sealed class Screen(val route: String, val title: String) {
     object ChatConversation : Screen("chat_conversation/{providerId}", "Conversación de Chat")
 }
 
-// 2. CONTENEDOR DE NAVEGACIÓN (NAVHOST)
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun AppNavHost(
-    navController: NavHostController,
-    pagerState: PagerState,
-    navItems: List<Screen>,
-    modifier: Modifier = Modifier,
-    onInConversationChange: (Boolean) -> Unit = {},
-    onLogout: () -> Unit = {}
-) {
-    NavHost(
-        navController = navController,
-        startDestination = Screen.Home.route,
-        modifier = modifier
-    ) {
-        // Ruta para el HorizontalPager que contiene las pantallas principales
-        composable(Screen.Home.route) {
-            HorizontalPager(state = pagerState) { page ->
-                when (navItems[page]) {
-                    Screen.Home -> HomeScreenCliente(navController = navController)
-                    Screen.Presupuestos -> PresupuestosScreen(onBack = { navController.popBackStack() })
-                    Screen.Chat -> ChatScreen(
-                        onBack = { navController.popBackStack() },
-                        navController = navController,
-                        onInConversationChange = onInConversationChange
-                    )
-                    Screen.Calendar -> CalendarScreen(onBack = { navController.popBackStack() })
-                    Screen.Promo -> PromoScreen(onBack = { navController.popBackStack() }, navController = navController)
-                    else -> {}
-                }
+fun AppNavigation() {
+    val navController = rememberNavController()
+    
+    val navItems = listOf(
+        Screen.Home,
+        Screen.Presupuestos,
+        Screen.Chat,
+        Screen.Calendar,
+        Screen.Promo
+    )
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    
+    val mainScreenRoutes = navItems.map { it.route }
+    val shouldShowBottomBar = currentRoute in mainScreenRoutes
+
+    // --- NUEVO: Lógica para determinar el índice de la pantalla y la dirección de la animación ---
+    fun getRouteIndex(route: String?): Int {
+        return navItems.indexOfFirst { it.route == route }
+    }
+    
+    Scaffold(
+        bottomBar = {
+            if (shouldShowBottomBar) {
+                AppBottomNavigationBar(
+                    navController = navController,
+                    allItems = navItems,
+                    currentRoute = currentRoute
+                )
             }
         }
+    ) { innerPadding ->
+        // Contenedor del NavHost
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Home.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
 
-        // Rutas de las pantallas secundarias
-        composable(Screen.CrearLicitacion.route) { 
-            CrearLicScreen(onBack = { navController.popBackStack() }) 
-        }
-        
-        composable(Screen.PerfilCliente.route) { 
-            PerfilUsuarioScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onLogout = { onLogout() }
-            ) 
-        }
+            // --- NUEVO: Animaciones de desplazamiento lateral (Left <-> Right) ---
+            // Se compara el índice de destino con el inicial para saber si deslizar a izq o der.
 
-        composable(Screen.PerfilPrestador.route) { backStackEntry ->
-            val providerId = backStackEntry.arguments?.getString("providerId") ?: return@composable
-            PerfilPrestadorCliente(
-                providerId = providerId,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.ResultBusqueda.route) { backStackEntry ->
-            val category = backStackEntry.arguments?.getString("category") ?: return@composable
-            ResultBusquedaCategoriaScreen(
-                categoryName = category,
-                onBack = { navController.popBackStack() },
-                onNavigateToProviderProfile = { providerId ->
-                    navController.navigate(Screen.PerfilPrestador.route.replace("{providerId}", providerId))
+            // 1. PANTALLA PRINCIPAL (HOME)
+            composable(
+                route = Screen.Home.route,
+                enterTransition = {
+                    val initialIndex = getRouteIndex(initialState.destination.route)
+                    val targetIndex = getRouteIndex(targetState.destination.route)
+                    if (initialIndex != -1 && targetIndex > initialIndex) {
+                        slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
+                    } else {
+                        slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
+                    }
                 },
-                onNavigateToChat = { providerId ->
-                    navController.navigate(Screen.ChatConversation.route.replace("{providerId}", providerId))
+                exitTransition = {
+                    val initialIndex = getRouteIndex(initialState.destination.route)
+                    val targetIndex = getRouteIndex(targetState.destination.route)
+                    if (targetIndex != -1 && targetIndex > initialIndex) {
+                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
+                    } else {
+                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
+                    }
                 }
-            )
-        }
+            ) { 
+                HomeScreenComplete(navController = navController)
+            }
+            
+            // 2. PANTALLA PRESUPUESTOS
+            composable(
+                route = Screen.Presupuestos.route,
+                enterTransition = {
+                    val initialIndex = getRouteIndex(initialState.destination.route)
+                    val targetIndex = getRouteIndex(targetState.destination.route)
+                    if (initialIndex < targetIndex) slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                    else slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                },
+                exitTransition = {
+                     val initialIndex = getRouteIndex(initialState.destination.route)
+                     val targetIndex = getRouteIndex(targetState.destination.route)
+                     if (initialIndex < targetIndex) slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                     else slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                }
+            ) { 
+                PresupuestosScreen(onBack = { navController.popBackStack() }) 
+            }
+            
+            // 3. PANTALLA CHAT
+            composable(
+                route = Screen.Chat.route,
+                enterTransition = {
+                    val initialIndex = getRouteIndex(initialState.destination.route)
+                    val targetIndex = getRouteIndex(targetState.destination.route)
+                    if (initialIndex < targetIndex) slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                    else slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                },
+                exitTransition = {
+                     val initialIndex = getRouteIndex(initialState.destination.route)
+                     val targetIndex = getRouteIndex(targetState.destination.route)
+                     if (initialIndex < targetIndex) slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                     else slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                }
+            ) { 
+                ChatScreen(onBack = { navController.popBackStack() }) 
+            }
+            
+            // 4. PANTALLA CALENDARIO
+            composable(
+                route = Screen.Calendar.route,
+                enterTransition = {
+                    val initialIndex = getRouteIndex(initialState.destination.route)
+                    val targetIndex = getRouteIndex(targetState.destination.route)
+                    if (initialIndex < targetIndex) slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                    else slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                },
+                exitTransition = {
+                     val initialIndex = getRouteIndex(initialState.destination.route)
+                     val targetIndex = getRouteIndex(targetState.destination.route)
+                     if (initialIndex < targetIndex) slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                     else slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                }
+            ) { 
+                CalendarScreen(onBack = { navController.popBackStack() }) 
+            }
+            
+            // 5. PANTALLA PROMOCIONES
+            composable(
+                route = Screen.Promo.route,
+                enterTransition = {
+                    val initialIndex = getRouteIndex(initialState.destination.route)
+                    val targetIndex = getRouteIndex(targetState.destination.route)
+                    // Como es la última, generalmente entra desde la derecha si vienes de una anterior
+                    if (initialIndex < targetIndex) slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                    else slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                },
+                exitTransition = {
+                     val initialIndex = getRouteIndex(initialState.destination.route)
+                     val targetIndex = getRouteIndex(targetState.destination.route)
+                     if (initialIndex < targetIndex) slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
+                     else slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
+                }
+            ) { 
+                PromoScreen(navController = navController, onBack = { navController.popBackStack() }) 
+            }
+            
+            // --- PANTALLAS SECUNDARIAS ---
 
-        composable(Screen.ChatConversation.route) { backStackEntry ->
-            val providerId = backStackEntry.arguments?.getString("providerId")
-            ChatScreen(
-                onBack = { navController.popBackStack() },
-                initialProviderId = providerId,
-                navController = navController,
-                onInConversationChange = onInConversationChange
+            composable(Screen.CrearLicitacion.route) { CrearLicScreen(onBack = { navController.popBackStack() }) }
+            
+            composable(Screen.PerfilCliente.route) {
+                PerfilUsuarioScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onLogout = { }
+                )
+            }
+            
+            composable(
+                route = Screen.ResultBusqueda.route,
+                arguments = listOf(navArgument("category") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val category = backStackEntry.arguments?.getString("category") ?: ""
+                ResultBusquedaCategoriaScreen(
+                    categoryName = category,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToProviderProfile = { providerId -> navController.navigate("perfil_prestador/$providerId") },
+                    onNavigateToChat = { providerId -> navController.navigate("chat_conversation/$providerId") }
+                )
+            }
+            
+            composable(
+                route = Screen.PerfilPrestador.route,
+                arguments = listOf(navArgument("providerId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val providerId = backStackEntry.arguments?.getString("providerId") ?: ""
+                PerfilPrestadorCliente(providerId = providerId, onBack = { navController.popBackStack() })
+            }
+            
+            composable(
+                route = Screen.ChatConversation.route,
+                arguments = listOf(navArgument("providerId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val providerId = backStackEntry.arguments?.getString("providerId")
+                ChatScreen(onBack = { navController.popBackStack() }, initialProviderId = providerId)
+            }
+        }
+    }
+}
+
+@Composable
+fun AppBottomNavigationBar(
+    navController: NavHostController,
+    allItems: List<Screen>,
+    currentRoute: String?
+) {
+    NavigationBar(
+        modifier = Modifier
+            .height(80.dp) 
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) 
+            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)), 
+        containerColor = MaterialTheme.colorScheme.surface, 
+        tonalElevation = 8.dp 
+    ) {
+        allItems.forEach { screen ->
+            // Determinamos si este item está seleccionado
+            val isSelected = currentRoute == screen.route
+
+            // --- ANIMACIÓN POP (Resorte) ---
+            val scale by animateFloatAsState(
+                targetValue = if (isSelected) 1.25f else 1.0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                ),
+                label = "iconScale"
+            )
+
+            // --- ANIMACIÓN DE ROTACIÓN (Borde de Carga) ---
+            val infiniteTransition = rememberInfiniteTransition(label = "borderRotation")
+            val rotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(3000, easing = LinearEasing), // 3 segundos por vuelta (lento/tenue)
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "rotation"
+            )
+
+            // Colores para el borde giratorio
+            val primaryColor = MaterialTheme.colorScheme.primary
+            val secondaryColor = MaterialTheme.colorScheme.secondaryContainer
+
+            NavigationBarItem(
+                // Desactivamos el indicador por defecto (óvalo) para dibujar el nuestro circular
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = Color.Transparent
+                ),
+                icon = {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(50.dp) // Tamaño del área del indicador circular
+                            .drawBehind {
+                                if (isSelected) {
+                                    // 1. DIBUJAR FONDO CIRCULAR (Reemplazo del óvalo)
+                                    drawCircle(
+                                        color = secondaryColor,
+                                        radius = size.minDimension / 2
+                                    )
+
+                                    // 2. DIBUJAR BORDE GIRATORIO (Efecto barra de carga tenue)
+                                    rotate(rotation) {
+                                        drawCircle(
+                                            brush = Brush.sweepGradient(
+                                                colors = listOf(
+                                                    primaryColor.copy(alpha = 0.0f), // Inicio transparente
+                                                    primaryColor.copy(alpha = 0.1f), 
+                                                    primaryColor.copy(alpha = 0.5f)  // Final tenue (50% opacidad)
+                                                )
+                                            ),
+                                            radius = (size.minDimension / 2) - 1.dp.toPx(), // Un poco más adentro del borde
+                                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                                        )
+                                    }
+                                }
+                            }
+                            // Aplicamos la escala POP al contenido (Icono/Emoji)
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                    ) {
+                        if (isSelected) {
+                            Text(text = getEmojiForScreen(screen), fontSize = 24.sp)
+                        } else {
+                            val icon = when (screen) {
+                                Screen.Home -> Icons.Filled.Home
+                                Screen.Presupuestos -> Icons.Filled.AttachMoney
+                                Screen.Chat -> Icons.Filled.Chat
+                                Screen.Calendar -> Icons.Filled.CalendarToday
+                                Screen.Promo -> Icons.Filled.LocalFireDepartment
+                                else -> Icons.Filled.Home 
+                            }
+                            Icon(icon, contentDescription = screen.title)
+                        }
+                    }
+                },
+                selected = isSelected,
+                alwaysShowLabel = false, // Asegura que no se reserve espacio extra para el label
+                onClick = {
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
             )
         }
     }
+}
+
+// Función auxiliar para obtener el emoji de cada pantalla
+fun getEmojiForScreen(screen: Screen): String {
+    return when (screen) {
+        Screen.Home -> "🏠"
+        Screen.Presupuestos -> "💰"
+        Screen.Chat -> "💬"
+        Screen.Calendar -> "📅"
+        Screen.Promo -> "🔥"
+        else -> ""
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview
+@Composable
+fun AppNavigationPreview() {
+    AppNavigation()
 }

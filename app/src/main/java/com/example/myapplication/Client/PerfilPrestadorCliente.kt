@@ -1,8 +1,11 @@
 package com.example.myapplication.Client
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -16,14 +19,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -32,263 +36,182 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 // ============================================
-// PANTALLA PRINCIPAL
+// PANTALLA DE PERFIL DE PRESTADOR (Modo Visualización Cliente)
 // ============================================
 
+/**
+ * Muestra el perfil de un prestador a un cliente.
+ * 
+ * TODO: INTEGRACIÓN CON FIREBASE / VIEWMODEL
+ * Actualmente esta pantalla obtiene los datos de 'SampleDataFalso.getPrestadorById(providerId)'.
+ * En el futuro, se debería:
+ * 1. Inyectar un ViewModel (ej: PrestadorProfileViewModel).
+ * 2. El ViewModel debería llamar a un repositorio que obtenga los datos de Firestore usando el 'providerId'.
+ * 3. Observar un StateFlow<PrestadorUiState> en lugar de llamar directamente al objeto estático.
+ * 4. Manejar estados de carga (Loading) y error (Error) adecuadamente.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PerfilPrestadorCliente(providerId: String, onBack: () -> Unit) {
-    // LOS DATOS AHORA SE OBTIENEN BASADO EN EL ID PROPORCIONADO
+    // [TODO]: Reemplazar con llamada a ViewModel
     val profile = SampleDataFalso.getPrestadorById(providerId)
 
     // SI EL PERFIL NO SE ENCUENTRA, MOSTRAMOS UN MENSAJE
     if (profile == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Proveedor no encontrado")
+            Text("Proveedor no encontrado", style = MaterialTheme.typography.titleLarge)
         }
         return
     }
 
+    // Estilos coherentes con PerfilUsuarioScreen
+    val isDarkTheme = isSystemInDarkTheme()
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF9F9F9)
+    val textPrimaryColor = if (isDarkTheme) Color.White.copy(alpha = 0.87f) else Color.Black.copy(alpha = 0.87f)
+    
+    // FAB Expandido y animado (Moderno)
+    // Usamos Box para superponer el FAB personalizado
     Scaffold(
+        containerColor = backgroundColor,
         topBar = {
+            // TopBar transparente que se mezcla con el header
             TopAppBar(
-                title = { Text("Perfil del Prestador") },
+                title = {},
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.4f),
+                            contentColor = Color.White
+                        )
+                    ) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
         floatingActionButton = {
-            LargeFloatingActionButton(
-                onClick = { /* TODO: Lógica para navegar al chat */ },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Email,
-                    contentDescription = "Enviar Mensaje",
-                    modifier = Modifier.size(36.dp),
-                    tint = Color.White
-                )
-            }
+            ExtendedFloatingActionButton(
+                onClick = { /* TODO: Implementar navegación a pantalla de chat con este providerId */ },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(8.dp),
+                icon = { Icon(Icons.Filled.Chat, contentDescription = null) },
+                text = { Text("Contactar", fontWeight = FontWeight.Bold) }
+            )
         },
         floatingActionButtonPosition = FabPosition.End
     ) { paddingValues ->
+        // Contenido principal Scrollable
         Column(
             modifier = Modifier
-                .padding(paddingValues)
                 .fillMaxSize()
+                .padding(bottom = paddingValues.calculateBottomPadding()) // Respetar FAB
                 .verticalScroll(rememberScrollState())
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         ) {
-            ProfileHeader(profile = profile)
-            ProviderDetailsPager(profile = profile)
-            Spacer(modifier = Modifier.height(16.dp))
-            ProviderGallerySection(galleryImages = profile.galleryImages)
-            Spacer(modifier = Modifier.height(80.dp))
+            // 1. HEADER (Banner + Foto + Verificación)
+            ProviderHeaderModern(profile = profile)
+
+            // 2. CUERPO PRINCIPAL
+            Column(modifier = Modifier.padding(top = 16.dp)) {
+                
+                // Paginador de Información (Similar a PerfilUsuario)
+                ProviderDetailsPagerModern(profile = profile, isDarkTheme = isDarkTheme)
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // 3. GALERÍA DE TRABAJOS
+                ProviderGallerySectionModern(galleryImages = profile.galleryImages)
+                
+                Spacer(modifier = Modifier.height(80.dp)) // Espacio final para el FAB
+            }
         }
     }
 }
 
 // ============================================
-// COMPONENTES DE LA PANTALLA
+// COMPONENTES MODERNIZADOS
 // ============================================
 
 @Composable
-fun ProfileHeader(profile: PrestadorProfileFalso) {
+fun ProviderHeaderModern(profile: PrestadorProfileFalso) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
+            .height(300.dp) // Más alto para mejor impacto visual
     ) {
+        // Banner con gradiente
         AsyncImage(
             model = profile.bannerImageUrl,
-            contentDescription = "Banner del prestador",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-        Box(
+            contentDescription = "Banner",
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
+                .height(220.dp), // El banner ocupa parte del box
+            contentScale = ContentScale.Crop
         )
-        Card(
+        
+        // Gradiente oscuro para legibilidad superior
+        Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.5f))
-        ) {
-            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                // Esta llamada ahora usa la versión de FunComunesIUClienteFalso.kt
-                //RatingBar(rating = profile.rating)
-            }
-        }
+                .fillMaxWidth()
+                .height(100.dp)
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(0.6f), Color.Transparent)))
+        )
+
+        // Contenedor de la Foto de Perfil (Centrado y superpuesto)
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = 60.dp)
-                .size(120.dp)
+                .offset(y = (-40).dp) // Subir un poco
         ) {
-            AsyncImage(
-                model = profile.profileImageUrl,
-                contentDescription = "Foto de perfil",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .border(4.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                contentScale = ContentScale.Crop
-            )
-            if (profile.isVerified) {
-                Icon(
-                    imageVector = Icons.Filled.Verified,
-                    contentDescription = "Perfil Verificado",
-                    tint = Color(0xFF3B82F6),
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(4.dp)
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun ProviderDetailsPager(profile: PrestadorProfileFalso) {
-    val tabTitles = listOf("Datos Personales", "Servicios y Empresa")
-    val pagerState = rememberPagerState { tabTitles.size }
-    val scope = rememberCoroutineScope()
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 80.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${profile.name} ${profile.lastName}",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            if (profile.isVerified) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.Filled.Verified,
-                    contentDescription = "Perfil Verificado",
-                    tint = Color(0xFF3B82F6),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        TabRow(selectedTabIndex = pagerState.currentPage) {
-            tabTitles.forEachIndexed { index, title ->
-                Tab(
-                    selected = pagerState.currentPage == index,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                    text = { Text(title, fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal) }
-                )
-            }
-        }
-
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth()
-        ) { page ->
-            Card(
-                modifier = Modifier.padding(16.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                when (page) {
-                    0 -> PersonalInfoContent(profile = profile)
-                    1 -> ServicesInfoContent(profile = profile)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PersonalInfoContent(profile: PrestadorProfileFalso) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        InfoRow(icon = Icons.Filled.LocationOn, text = profile.address)
-        InfoRow(icon = Icons.Filled.Email, text = profile.email)
-        InfoRow(icon = if (profile.doesHomeVisits) Icons.Filled.CheckCircle else Icons.Filled.Cancel, text = "Realiza visitas a domicilio", tint = if (profile.doesHomeVisits) Color(0xFF10B981) else Color.Red)
-        InfoRow(icon = if (profile.hasPhysicalLocation) Icons.Filled.CheckCircle else Icons.Filled.Cancel, text = "Tiene local físico", tint = if (profile.hasPhysicalLocation) Color(0xFF10B981) else Color.Red)
-        InfoRow(icon = if (profile.works24h) Icons.Filled.CheckCircle else Icons.Filled.Cancel, text = "Trabaja 24hs", tint = if (profile.works24h) Color(0xFF10B981) else Color.Red)
-    }
-}
-
-@Composable
-fun ServicesInfoContent(profile: PrestadorProfileFalso) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        profile.companyName?.let {
-            InfoRow(icon = Icons.Filled.Business, text = it)
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
-        }
-
-        Text(
-            text = "Servicios Ofrecidos",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        profile.services.forEach { service ->
-            InfoRow(icon = Icons.Filled.Construction, text = service)
-        }
-    }
-}
-
-
-@Composable
-fun InfoRow(icon: ImageVector, text: String, tint: Color = LocalContentColor.current) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(text = text, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-@Composable
-fun ProviderGallerySection(galleryImages: List<String>) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Text(
-            text = "Galería de Trabajos",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            modifier = Modifier.height(300.dp), 
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(galleryImages) { imageUrl ->
-                Card(shape = RoundedCornerShape(12.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(contentAlignment = Alignment.BottomEnd) {
                     AsyncImage(
-                        model = imageUrl,
-                        contentDescription = "Imagen de trabajo",
+                        model = profile.profileImageUrl,
+                        contentDescription = "Foto de perfil",
                         modifier = Modifier
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(12.dp)),
+                            .size(130.dp)
+                            .clip(CircleShape)
+                            .border(4.dp, MaterialTheme.colorScheme.background, CircleShape),
                         contentScale = ContentScale.Crop
+                    )
+                    // Badge de Verificación Premium
+                    if (profile.isVerified) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            border = BorderStroke(2.dp, MaterialTheme.colorScheme.background),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.VerifiedUser,
+                                contentDescription = "Verificado",
+                                tint = Color.White,
+                                modifier = Modifier.padding(6.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Nombre y Rating
+                Text(
+                    text = "${profile.name} ${profile.lastName}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                
+                // Rating Bar Visual
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
+                    Text(
+                        text = "${profile.rating} (50 reseñas)", // TODO: Obtener número real de reseñas desde la BD
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 }
             }
@@ -296,15 +219,230 @@ fun ProviderGallerySection(galleryImages: List<String>) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ProviderDetailsPagerModern(profile: PrestadorProfileFalso, isDarkTheme: Boolean) {
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val scope = rememberCoroutineScope()
+    
+    // Colores basados en PerfilUsuarioScreen
+    val textPrimaryColor = if (isDarkTheme) Color.White.copy(alpha = 0.87f) else Color.Black.copy(alpha = 0.87f)
+    val textSecondaryColor = if (isDarkTheme) Color.White.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.6f)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Indicador de Tabs
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            val items = listOf("Información", "Servicios")
+            items.forEachIndexed { index, title ->
+                val isSelected = pagerState.currentPage == index
+                val color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(color)
+                        .clickable { scope.launch { pagerState.animateScrollToPage(index) } }
+                )
+            }
+        }
+
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(350.dp), // Altura fija ajustada
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            pageSpacing = 16.dp,
+            verticalAlignment = Alignment.Top
+        ) { page ->
+            if (page == 0) {
+                // TARJETA DE INFORMACIÓN (Estilo PerfilUsuarioScreen)
+                InfoCardModern(
+                    title = "Sobre el Profesional",
+                    icon = Icons.Filled.Person,
+                    containerColor = if (isDarkTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE3F2FD)
+                ) {
+                    Column {
+                        DisplayItemModern(Icons.Filled.LocationOn, "Ubicación", profile.address, textPrimaryColor, textSecondaryColor)
+                        
+                        // Lógica para mostrar disponibilidad basada en los datos falsos
+                        val availabilityText = if (profile.works24h) "Disponible 24hs" else "Horario Comercial"
+                        DisplayItemModern(Icons.Filled.AccessTime, "Disponibilidad", availabilityText, textPrimaryColor, textSecondaryColor)
+                        
+                        // Lógica para mostrar modalidad
+                        DisplayItemModern(Icons.Filled.HomeWork, "Modalidad", buildString {
+                            if (profile.doesHomeVisits) append("• A Domicilio\n")
+                            if (profile.hasPhysicalLocation) append("• Local Físico")
+                            if (!profile.doesHomeVisits && !profile.hasPhysicalLocation) append("• Remoto / Consultar")
+                        }.trim(), textPrimaryColor, textSecondaryColor)
+                    }
+                }
+            } else {
+                // TARJETA DE SERVICIOS (Estilo PerfilUsuarioScreen)
+                InfoCardModern(
+                    title = "Servicios y Empresa",
+                    icon = Icons.Filled.BusinessCenter,
+                    containerColor = if (isDarkTheme) MaterialTheme.colorScheme.secondaryContainer else Color(0xFFF1F8E9)
+                ) {
+                    Column {
+                        profile.companyName?.let {
+                            DisplayItemModern(Icons.Filled.Domain, "Empresa", it, textPrimaryColor, textSecondaryColor)
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                        
+                        Text(
+                            "Especialidades:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = textSecondaryColor,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        // Lista de Servicios como Chips o Items
+                        profile.services.forEach { service ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+                                Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(service, style = MaterialTheme.typography.bodyMedium, color = textPrimaryColor, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoCardModern(
+    title: String,
+    icon: ImageVector,
+    containerColor: Color,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxSize(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+fun DisplayItemModern(icon: ImageVector, label: String, value: String, textPrimary: Color, textSecondary: Color) {
+    Row(modifier = Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.Top) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = textSecondary)
+            Text(value.ifEmpty { "No especificado" }, style = MaterialTheme.typography.bodyLarge, color = textPrimary, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+
+@Composable
+fun ProviderGallerySectionModern(galleryImages: List<String>) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Galería de Trabajos",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            // TODO: Implementar navegación a una pantalla de galería completa
+            TextButton(onClick = { /* Ver todas */ }) {
+                Text("Ver todo")
+            }
+        }
+
+        // Diseño moderno de galería (Staggered-ish o Grid limpia)
+        if (galleryImages.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Sin imágenes disponibles", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            // Usamos un layout manual simple para evitar complejidad de LazyGrid anidado
+            // Mostramos hasta 6 imágenes en una cuadrícula
+            val displayImages = galleryImages.take(6)
+            
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Filas de 3 imágenes
+                displayImages.chunked(3).forEach { rowImages ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowImages.forEach { imageUrl ->
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f), // Cuadrados
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(4.dp)
+                            ) {
+                                AsyncImage(
+                                    model = imageUrl,
+                                    contentDescription = "Trabajo realizado",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+                        // Rellenar espacio si la fila no está completa
+                        repeat(3 - rowImages.size) {
+                             Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ============================================
-// 4. VISTA PREVIA
+// PREVIEW CON DATOS FALSOS
 // ============================================
 
 @Preview(showBackground = true)
 @Composable
 fun PerfilPrestadorScreenPreview() {
     MaterialTheme {
-        // AHORA LA VISTA PREVIA USA DATOS DE MUESTRA
+        // Usamos el ID "1" que corresponde a "Maxi Nanterne" en SampleDataFalso
         PerfilPrestadorCliente(providerId = "1", onBack = {})
     }
 }
