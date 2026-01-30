@@ -55,9 +55,9 @@ sealed class Screen(val route: String, val title: String) {
     // Pantallas Principales
     object Home : Screen("home", "Inicio") 
     object Presupuestos : Screen("presupuestos", "Presupuestos") 
-    object Chat : Screen("chat", "Chat") 
+    object Chat : Screen("chat?providerId={providerId}", "Chat") 
     object Calendar : Screen("calendar", "Calendario") 
-    object Promo : Screen("promo", "Promociones") 
+    object Promo : Screen("promo", "Promociones")
 
     // Pantallas Secundarias
     object CrearLicitacion : Screen("crear_licitacion", "Crear Licitación")
@@ -84,8 +84,8 @@ fun AppNavigation() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     
-    val mainScreenRoutes = navItems.map { it.route }
-    val shouldShowBottomBar = currentRoute in mainScreenRoutes
+    val mainScreenRoutes = navItems.map { it.route.split("?").first() }
+    val shouldShowBottomBar = currentRoute?.split("?")?.first() in mainScreenRoutes
 
     // --- NUEVO: Lógica para determinar el índice de la pantalla y la dirección de la animación ---
     fun getRouteIndex(route: String?): Int {
@@ -154,12 +154,25 @@ fun AppNavigation() {
                      else slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
                 }
             ) { 
-                PresupuestosScreen(onBack = { navController.popBackStack() }) 
+                PresupuestosScreen(
+                    onBack = { navController.popBackStack() },
+                    onChatClick = { prestadorId ->
+                        navController.navigate("chat?providerId=$prestadorId")
+                    },
+                    onProfileClick = { prestadorId ->
+                        navController.navigate("perfil_prestador/$prestadorId")
+                    }
+                )
             }
             
             // 3. PANTALLA CHAT
             composable(
                 route = Screen.Chat.route,
+                arguments = listOf(navArgument("providerId") { 
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }),
                 enterTransition = {
                     val initialIndex = getRouteIndex(initialState.destination.route)
                     val targetIndex = getRouteIndex(targetState.destination.route)
@@ -172,8 +185,12 @@ fun AppNavigation() {
                      if (initialIndex < targetIndex) slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300))
                      else slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300))
                 }
-            ) { 
-                ChatScreen(onBack = { navController.popBackStack() }) 
+            ) { backStackEntry ->
+                val providerId = backStackEntry.arguments?.getString("providerId")
+                ChatScreen(
+                    onBack = { navController.popBackStack() },
+                    initialProviderId = providerId
+                )
             }
             
             // 4. PANTALLA CALENDARIO
@@ -274,7 +291,7 @@ fun AppBottomNavigationBar(
     ) {
         allItems.forEach { screen ->
             // Determinamos si este item está seleccionado
-            val isSelected = currentRoute == screen.route
+            val isSelected = currentRoute?.startsWith(screen.route.split("?").first()) == true
 
             // --- ANIMACIÓN POP (Resorte) ---
             val scale by animateFloatAsState(
@@ -360,7 +377,8 @@ fun AppBottomNavigationBar(
                 selected = isSelected,
                 alwaysShowLabel = false, // Asegura que no se reserve espacio extra para el label
                 onClick = {
-                    navController.navigate(screen.route) {
+                    val route = screen.route.split("?").first()
+                    navController.navigate(route) {
                         popUpTo(navController.graph.startDestinationId) {
                             saveState = true
                         }

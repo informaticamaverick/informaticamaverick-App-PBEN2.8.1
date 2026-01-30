@@ -1,5 +1,6 @@
 package com.example.myapplication.Client
 
+import android.hardware.lights.Light
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -18,7 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -36,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -1219,9 +1223,7 @@ fun PresupuestoGeneralCard(
     val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(
@@ -1279,7 +1281,7 @@ fun PresupuestoGeneralCard(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.offset(x = (-18).dp),
-                        verticalArrangement = Arrangement.spacedBy((-4).dp)
+                        verticalArrangement = Arrangement.spacedBy((-12).dp)
                     ) {
                         IconButton(onClick = onPreviewClick) {
                             Icon(Icons.Default.Description, "Vista previa",
@@ -1294,7 +1296,11 @@ fun PresupuestoGeneralCard(
                         )
                     }
                     IconButton(onClick = onChatClick) {
-                        Icon(Icons.AutoMirrored.Filled.Message, "Chat", tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Enviar mensaje",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -1387,7 +1393,8 @@ fun SortFilterChip(isAscending: Boolean, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+//@OptIn(ExperimentalMaterial3Api::class)
+/*
 @Composable
 fun BudgetPreviewPDFDialog(
     presupuesto: PresupuestoFalso,
@@ -1598,6 +1605,466 @@ fun BudgetPreviewPDFDialog(
         }
     }
 }
+*/
+
+// --- NUEVA VISTA PREVIA DE PRESUPUESTO ---
+
+// Colores Personalizados (Basados en Tailwind Slate)
+private val Slate50 = Color(0xFFF8FAFC)
+private val Slate100 = Color(0xFFF1F5F9)
+private val Slate200 = Color(0xFFE2E8F0)
+private val Slate300 = Color(0xFFCBD5E1)
+private val Slate400 = Color(0xFF94A3B8)
+private val Slate500 = Color(0xFF64748B)
+private val Slate600 = Color(0xFF475569)
+private val Slate700 = Color(0xFF334155)
+private val Slate800 = Color(0xFF1E293B)
+private val MaverickBlueStart = Color(0xFF2563EB)
+private val MaverickBlueEnd = Color(0xFF1E40AF)
+
+private val MaverickGradient = Brush.linearGradient(
+    colors = listOf(MaverickBlueStart, MaverickBlueEnd)
+)
+
+data class PresupuestoItemDisplay(
+    val cantidad: String,
+    val descripcion: String,
+    val unitario: String,
+    val total: String,
+    val isHeader: Boolean = false,
+    val isSpecial: Boolean = false
+)
+
+@Composable
+fun BudgetPreviewPDFDialog(
+    presupuesto: PresupuestoFalso,
+    onDismiss: () -> Unit
+) {
+    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
+    
+    // Datos de ejemplo - TEMPORAL (después se conectarán con los datos reales del prestador)
+    val items = listOf(
+        PresupuestoItemDisplay("1", "Fuente 12v", "$ 18.000,00", "$ 18.000,00"),
+        PresupuestoItemDisplay("1", "Balun TVI", "$ 3.000,00", "$ 3.000,00"),
+        PresupuestoItemDisplay("1", "Ficha dc", "$ 480,00", "$ 480,00"),
+        PresupuestoItemDisplay("-", "Mano de obra Instalación", "$ 130.000,00", "$ 130.000,00", isSpecial = true),
+        PresupuestoItemDisplay("-", "Movilidad", "$ 45.000,00", "$ 45.000,00")
+    )
+    
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        // Fondo general de la app (gris claro)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Slate200),
+            contentAlignment = Alignment.Center
+        ) {
+            // La "Hoja" del presupuesto
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Botón cerrar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.align(Alignment.TopEnd)
+                        ) {
+                            Icon(Icons.Default.Close, "Cerrar", tint = Slate600)
+                        }
+                    }
+                    
+                    // Contenido scrolleable
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // 1. Franja Decorativa
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .background(MaverickGradient)
+                        )
+
+                        // 2. Header
+                        BudgetHeaderSection(provider, presupuesto)
+                        
+                        HorizontalDivider(color = Slate200, modifier = Modifier.padding(horizontal = 24.dp))
+
+                        // 3. Información (Emisor y Cliente)
+                        BudgetInfoSection(provider, presupuesto)
+
+                        // 4. Tabla de Items
+                        BudgetItemsTableSection(items)
+
+                        // 5. Footer y Totales
+                        BudgetFooterSection(presupuesto.precioTotal)
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BudgetHeaderSection(provider: PrestadorProfileFalso?, presupuesto: PresupuestoFalso) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Izquierda: Logo/Info del Prestador
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(MaverickGradient, shape = RoundedCornerShape(4.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Home,
+                    contentDescription = "Logo",
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                provider?.let {
+                    Text(
+                        text = "${it.name} ${it.lastName}".uppercase(),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 16.sp,
+                        color = Slate800
+                    )
+                    Text(
+                        text = it.services.firstOrNull() ?: "SERVICIOS",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 10.sp,
+                        color = Slate500,
+                        letterSpacing = 1.sp
+                    )
+                } ?: run {
+                    Text(text = "PRESTADOR", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Slate800)
+                    Text(text = "SERVICIOS", fontWeight = FontWeight.Medium, fontSize = 10.sp, color = Slate500, letterSpacing = 1.sp)
+                }
+            }
+        }
+
+        // Derecha: Datos Documento
+        Column(horizontalAlignment = Alignment.End) {
+            Text(text = "PRESUPUESTO", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Slate700)
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .border(1.dp, Slate300, RoundedCornerShape(4.dp))
+                    .background(Slate50, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "N° ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate500)
+                Text(text = presupuesto.id.takeLast(8), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Slate800)
+            }
+            Text(text = "Fecha: ${presupuesto.fechaRecepcion}", fontSize = 11.sp, color = Slate500, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+@Composable
+fun BudgetInfoSection(provider: PrestadorProfileFalso?, presupuesto: PresupuestoFalso) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Columna Izquierda - Emisor (Prestador)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "DE:",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Slate800,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
+            provider?.let {
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        "Dirección: ",
+                        fontSize = 11.sp,
+                        color = Slate500,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        it.address,
+                        fontSize = 12.sp,
+                        color = Slate700,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        "Email: ",
+                        fontSize = 11.sp,
+                        color = Slate500,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        it.email,
+                        fontSize = 12.sp,
+                        color = Slate700,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                it.companyName?.let { company ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            "Empresa: ",
+                            fontSize = 11.sp,
+                            color = Slate500,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            company,
+                            fontSize = 12.sp,
+                            color = Slate700,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(32.dp))
+
+        // Columna Derecha - Cliente
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "PARA:",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Slate800,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    "Cliente: ",
+                    fontSize = 11.sp,
+                    color = Slate500,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    presupuesto.nombre,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = Slate800,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    "Dirección: ",
+                    fontSize = 11.sp,
+                    color = Slate500,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "A definir",
+                    fontSize = 12.sp,
+                    color = Slate700,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BudgetItemsTableSection(items: List<PresupuestoItemDisplay>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+    ) {
+        // Table Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Slate100)
+                .border(1.dp, Slate300)
+        ) {
+            TableCell(text = "CANT.", weight = 0.15f, isHeader = true, align = TextAlign.Center)
+            TableCell(text = "DESCRIPCIÓN", weight = 0.45f, isHeader = true)
+            TableCell(text = "UNITARIO", weight = 0.2f, isHeader = true, align = TextAlign.End)
+            TableCell(text = "TOTAL", weight = 0.2f, isHeader = true, align = TextAlign.End)
+        }
+
+        // Table Rows
+        items.forEach { item ->
+            val bg = if (item.isSpecial) Color(0xFFEFF6FF) else Color.White
+            val textColor = if (item.isSpecial) Color(0xFF1E3A8A) else Slate700
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(bg)
+                    .border(0.5.dp, Slate300)
+            ) {
+                TableCell(text = item.cantidad, weight = 0.15f, color = if(item.cantidad == "-") Slate400 else Slate700, align = TextAlign.Center)
+                TableCell(text = item.descripcion, weight = 0.45f, color = textColor, isBold = item.isSpecial)
+                TableCell(text = item.unitario, weight = 0.2f, color = Slate700, align = TextAlign.End, isMono = true)
+                TableCell(text = item.total, weight = 0.2f, color = Slate700, align = TextAlign.End, isMono = true, isBold = true)
+            }
+        }
+    }
+}
+
+@Composable
+fun RowScope.TableCell(
+    text: String,
+    weight: Float,
+    isHeader: Boolean = false,
+    align: TextAlign = TextAlign.Start,
+    color: Color = Slate600,
+    isBold: Boolean = false,
+    isMono: Boolean = false
+) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .weight(weight)
+            .padding(8.dp),
+        fontWeight = if (isHeader || isBold) FontWeight.Bold else FontWeight.Normal,
+        fontSize = if (isHeader) 10.sp else 12.sp,
+        color = color,
+        textAlign = align,
+        fontFamily = if (isMono) androidx.compose.ui.text.font.FontFamily.Monospace else androidx.compose.ui.text.font.FontFamily.Default
+    )
+}
+
+@Composable
+fun BudgetFooterSection(total: Double) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Slate50)
+            .padding(24.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            // Nota
+            Text(
+                text = "Nota: Los precios están expresados en Pesos Argentinos.\nVálido por 15 días.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate500,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                modifier = Modifier.weight(0.5f),
+                lineHeight = 16.sp
+            )
+
+            Spacer(modifier = Modifier.width(24.dp))
+
+            // Cuadro de Totales
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Slate300),
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.weight(0.5f)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Subtotal:", color = Slate600, fontSize = 13.sp)
+                        Text(
+                            "$ ${String.format("%,.0f", total)}",
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            color = Slate600,
+                            fontSize = 13.sp
+                        )
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Slate200)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("TOTAL", fontWeight = FontWeight.Bold, color = Slate800, fontSize = 16.sp)
+                        Text(
+                            "$ ${String.format("%,.0f", total)}",
+                            fontWeight = FontWeight.Black,
+                            color = MaverickBlueStart,
+                            fontSize = 18.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        
+        // Botones de Acción
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = { /* Descargar PDF */ },
+                shape = RoundedCornerShape(4.dp),
+                border = BorderStroke(1.dp, Slate300),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Slate600)
+            ) {
+                Text("Descargar PDF", fontSize = 13.sp)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Button(
+                onClick = { /* Enviar */ },
+                shape = RoundedCornerShape(4.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaverickBlueStart)
+            ) {
+                Text("Enviar Presupuesto", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+    }
+}
 
 // Función para formatear fecha de dd/MM/yyyy a dd/MM/yy
 fun formatDateShort(date: String): String {
@@ -1610,47 +2077,6 @@ fun formatDateShort(date: String): String {
         }
     } catch (e: Exception) {
         date
-    }
-}
-
-@Composable
-fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            label,
-            fontSize = 13.sp,
-            color = Color.Gray,
-            fontWeight = FontWeight.Medium
-        )
-        Text(
-            value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-@Composable
-fun CostItemRow(description: String, amount: Double) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            description,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Text(
-            "S/ ${String.format("%.2f", amount)}",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF1976D2)
-        )
     }
 }
 
