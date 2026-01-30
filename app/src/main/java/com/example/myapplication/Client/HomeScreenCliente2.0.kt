@@ -107,7 +107,7 @@ fun HomeScreenComplete(navController: NavHostController) { // Recibe el NavContr
         ) {
             // Contenido principal de la pantalla
             Column(modifier = Modifier.fillMaxSize()) {
-                TopHeaderSection()
+                TopHeaderSection(navController)
                 
                 // Sección de Novedades
                 if (novedades != null) {
@@ -340,7 +340,7 @@ fun FavoritesPanel(
 }
 
 @Composable
-fun TopHeaderSection() {
+fun TopHeaderSection(navController: NavHostController) {
     var locationExpanded by remember { mutableStateOf(false) }
     var profileExpanded by remember { mutableStateOf(false) }
     var currentLocation by remember { mutableStateOf("Tucumán, AR") }
@@ -388,7 +388,19 @@ fun TopHeaderSection() {
                     }
                 }
                 DropdownMenu(expanded = profileExpanded, onDismissRequest = { profileExpanded = false }, modifier = Modifier.width(200.dp)) {
-                    DropdownMenuItem(leadingIcon = { Icon(Icons.Default.Settings, null) }, text = { Text("Configuración") }, onClick = { profileExpanded = false })
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(Icons.Default.Person, null) }, 
+                        text = { Text("Ver Perfil") }, 
+                        onClick = { 
+                            profileExpanded = false
+                            navController.navigate(Screen.PerfilCliente.route)
+                        }
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(Icons.Default.Settings, null) }, 
+                        text = { Text("Configuración") }, 
+                        onClick = { profileExpanded = false }
+                    )
                 }
             }
         }
