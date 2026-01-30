@@ -1,4 +1,4 @@
-package com.example.myapplication.Client
+/**package com.example.myapplication.Client
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -279,3 +279,4 @@ fun PromotionsScreenPreview() {
         PromotionsScreen()
     }
 }
+**/

@@ -5,14 +5,29 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 
+// ==========================================
+// MODELO DE DATOS DE CATEGORÍA
+// ==========================================
 data class CategoryItem(
     val name: String,
-    val icon: String, // Cambiado de ImageVector a String para usar Emojis
+    val icon: String, // Emoji
     val color: Color,
-    val superCategory: String, // [NUEVO] Parámetro para la supercategoría
-    val providerIds: List<String> = emptyList()
+    val superCategory: String,
+    val providerIds: List<String> = emptyList(),
+    val imageUrl: String? = "https://picsum.photos/200",
+    
+    // [NUEVO] Campos aleatorios para indicar estado "Nuevo" y "Nuevo Prestador"
+    // Se generan aleatoriamente al iniciar la app (Math.random())
+    val isNew: Boolean = Math.random() < 0.2, // 20% de probabilidad de ser Nuevo
+    val isNewPrestador: Boolean = Math.random() < 0.15, // 15% de probabilidad de tener aviso
+    
+    // [NUEVO] Campo para identificar si es un anuncio
+    val isAd: Boolean = false
 )
 
+// ==========================================
+// BASE DE DATOS FALSA (STATIC DATA)
+// ==========================================
 object CategorySampleDataFalso {
     val categories = listOf(
         // SuperCategoría: Hogar
@@ -55,7 +70,7 @@ object CategorySampleDataFalso {
         CategoryItem("Tecnología", "💻", Color(0xFFFFB7B2), "Tecnología y Reparaciones", providerIds = listOf("9", "19")),
         CategoryItem("Desarrollo Web", "👨‍💻", Color(0xFFD4F0F0), "Tecnología y Reparaciones", providerIds = listOf("9", "1")),
         CategoryItem("Reparación de Móviles", "📱", Color(0xFFA2D2FF), "Tecnología y Reparaciones", providerIds = listOf("19")),
-        CategoryItem("Informatica", "💻", Color(0xFFB2EBF2), "Tecnología y Reparaciones", providerIds = listOf("1", "9", "19")),
+        CategoryItem("Informatica", "💻", Color(0xFFB2EBF2), "Tecnología y Reparaciones", providerIds = listOf("", "9", "19","18","17","16","15","14","13","12","11","10","9","8","7","6","5","4","3","2","1")),
         CategoryItem("Tecnico", "🛠️", Color(0xFF80DEEA), "Tecnología y Reparaciones", providerIds = listOf("1", "19")),
         CategoryItem("Redes", "🌐", Color(0xFF00BCD4), "Tecnología y Reparaciones", providerIds = listOf("9", "19")),
         CategoryItem("Programador", "👨‍💻", Color(0xFFD1C4E9), "Tecnología y Reparaciones", providerIds = listOf("4", "9", "1")),

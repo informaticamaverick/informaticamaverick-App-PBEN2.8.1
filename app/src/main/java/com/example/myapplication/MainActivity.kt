@@ -1,4 +1,4 @@
- package com.example.myapplication
+package com.example.myapplication
 
 import android.os.Build
 import android.os.Bundle
@@ -22,7 +22,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.myapplication.Admin.AdminInitScreen
-import com.example.myapplication.Client.* // Import all from Client
+// Se importa la navegación del cliente y se le da un alias para evitar conflictos.
+import com.example.myapplication.Client.AppNavigation as ClientAppNavigation
+import com.example.myapplication.Client.PerfilUsuarioScreen
 import com.example.myapplication.Login.LoginScreen
 import com.example.myapplication.Profile.CompleteProfileScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
@@ -30,37 +32,34 @@ import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
 
-
-
-
-
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge() // Habilita soporte para edge-to-edge y gestos
+        enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                // Surface usa el color 'background' definido en tu tema automáticamente
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation()
+                    // Se llama a la navegación raíz de la aplicación.
+                    RootNavigation()
                 }
             }
         }
     }
 }
 
+/**
+ * RootNavigation maneja la navegación principal de la aplicación.
+ * Decide si mostrar la pantalla de login, la de completar perfil o la navegación principal del cliente.
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun AppNavigation() {
+fun RootNavigation() {
     val navController = rememberNavController()
-    val currentUser = Firebase.auth.currentUser
-    // Siempre iniciar en login para verificar el estado del perfil
     val startDestination = "login"
 
     NavHost(
@@ -95,12 +94,12 @@ fun AppNavigation() {
             LoginScreen(
                 onLoginSuccess = { hasProfile, userName ->
                     if (hasProfile) {
-                        // Si ya tiene perfil, ir directamente al nuevo dashboard
+                        // Si el usuario tiene perfil, navega a la pantalla principal del cliente.
                         navController.navigate("main_screen") {
                             popUpTo("login") { inclusive = true }
                         }
                     } else {
-                        // Si no tiene perfil, ir a completar perfil
+                        // Si no, navega a la pantalla para completar el perfil.
                         navController.navigate("complete_profile/$userName") {
                             popUpTo("login") { inclusive = true }
                         }
@@ -123,6 +122,7 @@ fun AppNavigation() {
             CompleteProfileScreen(
                 userName = userName,
                 onProfileComplete = {
+                    // Cuando se completa el perfil, navega a la pantalla principal.
                     navController.navigate("main_screen") {
                         popUpTo("complete_profile/$userName") { inclusive = true }
                     }
@@ -130,48 +130,10 @@ fun AppNavigation() {
             )
         }
 
-        // New route for our main screen
+        // La ruta "main_screen" ahora carga toda la navegación del cliente.
         composable("main_screen") {
-            MainScreen()
+            ClientAppNavigation()
         }
-
-        // The old dashboard is no longer directly used from here, but kept for reference if needed
-        composable(
-            route = "dashboard/{userName}",
-            arguments = listOf(
-                navArgument("userName") {
-                    type = NavType.StringType
-                    defaultValue = "Usuario"
-                }
-            )
-        ) { backStackEntry ->
-            val userName = backStackEntry.arguments?.getString("userName") ?: "Usuario"
-
-            /**ClientDashboardScreen(
-                userName = userName,
-                location = "Buenos Aires, AR",
-                onLogout = {
-                    Firebase.auth.signOut()
-                    navController.navigate("login") {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-                onNavigateToAdmin = {
-                    navController.navigate("admin_init")
-                },
-                onNavigateToProfile = {
-                    navController.navigate("client_profile")
-                },
-                onNavigateToChat = {
-                    navController.navigate("chat")
-                },
-                onNavigateToCalendar = {
-                    navController.navigate("calendar")
-                }
-            )**/
-        }
-
-
 
         composable("client_profile") {
             PerfilUsuarioScreen(

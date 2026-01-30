@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
@@ -298,7 +299,8 @@ fun ChatScreen(
                 }
             },
             onBack = onBack,
-            appColors = appColors
+            appColors = appColors,
+            navController = navController
         )
 
     } else {
@@ -401,7 +403,8 @@ fun ChatScreen(
 fun ChatListView(
     onChatClick: (String) -> Unit,
     onBack: () -> Unit,
-    appColors: com.example.myapplication.ui.theme.AppColors
+    appColors: com.example.myapplication.ui.theme.AppColors,
+    navController: NavHostController? = null
 ) {
     // PASO 1: Obtenemos una lista de 10 prestadores de ejemplo para simular chats
     var providersList by remember { mutableStateOf(SampleDataFalso.prestadores.take(10)) }
@@ -508,7 +511,7 @@ fun ChatListView(
                 PrestadorCard(
                     provider = provider,
                     onClick = { 
-                        onChatClick(provider.id)
+                        navController?.navigate("perfil_prestador/${provider.id}")
                     },
                     // onLongClick eliminado
                     onChat = { onChatClick(provider.id) },
@@ -1929,4 +1932,32 @@ fun TarjetaMensajeCita(
     }
 }
 
+@Composable
+fun ActionContent(
+    inDeleteMode: Boolean,
+    onMessageClick: () -> Unit,
+    onDeleteRequest: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (!inDeleteMode) {
+            IconButton(onClick = onMessageClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Chat,
+                    contentDescription = "Enviar mensaje",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        IconButton(onClick = onDeleteRequest) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Eliminar",
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
 
