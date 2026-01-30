@@ -299,7 +299,8 @@ fun ChatScreen(
                 }
             },
             onBack = onBack,
-            appColors = appColors
+            appColors = appColors,
+            navController = navController
         )
 
     } else {
@@ -402,7 +403,8 @@ fun ChatScreen(
 fun ChatListView(
     onChatClick: (String) -> Unit,
     onBack: () -> Unit,
-    appColors: com.example.myapplication.ui.theme.AppColors
+    appColors: com.example.myapplication.ui.theme.AppColors,
+    navController: NavHostController? = null
 ) {
     // PASO 1: Obtenemos una lista de 10 prestadores de ejemplo para simular chats
     var providersList by remember { mutableStateOf(SampleDataFalso.prestadores.take(10)) }
@@ -509,7 +511,7 @@ fun ChatListView(
                 PrestadorCard(
                     provider = provider,
                     onClick = { 
-                        onChatClick(provider.id)
+                        navController?.navigate("perfil_prestador/${provider.id}")
                     },
                     // onLongClick eliminado
                     onChat = { onChatClick(provider.id) },
