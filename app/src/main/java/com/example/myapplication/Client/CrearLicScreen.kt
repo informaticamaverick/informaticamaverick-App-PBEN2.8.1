@@ -50,7 +50,7 @@ fun CrearLicScreen(
 ) {
     // We will now use the sample data directly
     val categories = CategorySampleDataFalso.categories
-    val user = UserSampleDataFalso.findUserByUsername("maxinanterne")!! // Get a sample user
+    val user = UserSampleDataFalso.currentUser // Get a sample user
 
     CrearLicScreenContent(
         onBack = onBack,
@@ -117,7 +117,7 @@ fun CrearLicScreenContent(
     var isCategorySearchFocused by remember { mutableStateOf(false) }
 
     // Estados para dirección
-    var address by remember { mutableStateOf(user.direccionCasa ?: "") }
+    var address by remember { mutableStateOf(user.personalAddresses.firstOrNull()?.fullString() ?: "") }
     var locationExpanded by remember { mutableStateOf(false) }
 
 
@@ -261,20 +261,20 @@ fun CrearLicScreenContent(
                                         expanded = locationExpanded,
                                         onDismissRequest = { locationExpanded = false }
                                     ) {
-                                        user.direccionCasa?.let {
+                                        user.personalAddresses.forEach { addr ->
                                             DropdownMenuItem(
-                                                text = { Text("Casa: $it") },
+                                                text = { Text("Casa: ${addr.fullString()}") },
                                                 onClick = {
-                                                    address = it
+                                                    address = addr.fullString()
                                                     locationExpanded = false
                                                 }
                                             )
                                         }
-                                        user.direccionTrabajo?.let {
+                                        user.companies.forEach { company ->
                                             DropdownMenuItem(
-                                                text = { Text("Trabajo: $it") },
+                                                text = { Text("Trabajo: ${company.casaCentral.fullString()}") },
                                                 onClick = {
-                                                    address = it
+                                                    address = company.casaCentral.fullString()
                                                     locationExpanded = false
                                                 }
                                             )
@@ -892,7 +892,7 @@ fun CrearLicScreenPreview() {
         CrearLicScreenContent(
             onBack = {},
             categories = CategorySampleDataFalso.categories,
-            user = UserSampleDataFalso.findUserByUsername("maxinanterne")!!
+            user = UserSampleDataFalso.currentUser
         )
     }
 }

@@ -274,7 +274,7 @@ fun LicitacionesTabContent(
                     val presupuestoAdjudicado = if (licitacionInfo.estadoLicitacion == EstadoLicitacion.ADJUDICADA) {
                         presupuestos.firstOrNull()
                     } else null
-                    
+
                     LicitacionArchiveroCard(
                         categoriaNombre = licitacionInfo.servicioCategoria,
                         licitacionNombre = nombre,
@@ -288,7 +288,7 @@ fun LicitacionesTabContent(
                         presupuestoAdjudicado = presupuestoAdjudicado,
                         onAdjudicadoClick = { presupuestoAdjudicado?.let { onPresupuestoClick(it) } }
                     )
-                    
+
                     // Agregar divisor gradiente entre items (no después del último)
                     if (index < filteredAndSortedLicitaciones.size - 1) {
                         GradientDivider(
@@ -633,21 +633,21 @@ sealed class FolderTheme(
 // Helper function para obtener el emoji de cada categoría
 fun getCategoryEmoji(categoria: String): String {
     return when {
-        categoria.contains("Informatica", ignoreCase = true) || 
-        categoria.contains("Tecnología", ignoreCase = true) -> "💻"
-        categoria.contains("Electricidad", ignoreCase = true) || 
-        categoria.contains("Electricista", ignoreCase = true) -> "⚡"
+        categoria.contains("Informatica", ignoreCase = true) ||
+                categoria.contains("Tecnología", ignoreCase = true) -> "💻"
+        categoria.contains("Electricidad", ignoreCase = true) ||
+                categoria.contains("Electricista", ignoreCase = true) -> "⚡"
         categoria.contains("Diseño", ignoreCase = true) -> "🎨"
-        categoria.contains("Plomero", ignoreCase = true) || 
-        categoria.contains("Plomería", ignoreCase = true) -> "🪠"
+        categoria.contains("Plomero", ignoreCase = true) ||
+                categoria.contains("Plomería", ignoreCase = true) -> "🪠"
         categoria.contains("Pintura", ignoreCase = true) -> "🏘️"
         categoria.contains("Limpieza", ignoreCase = true) -> "🧹"
-        categoria.contains("Albañil", ignoreCase = true) || 
-        categoria.contains("Construcción", ignoreCase = true) -> "🔨"
-        categoria.contains("Mecánico", ignoreCase = true) || 
-        categoria.contains("Mecánica", ignoreCase = true) -> "🔧"
-        categoria.contains("Jardín", ignoreCase = true) || 
-        categoria.contains("Jardinería", ignoreCase = true) -> "🌿"
+        categoria.contains("Albañil", ignoreCase = true) ||
+                categoria.contains("Construcción", ignoreCase = true) -> "🔨"
+        categoria.contains("Mecánico", ignoreCase = true) ||
+                categoria.contains("Mecánica", ignoreCase = true) -> "🔧"
+        categoria.contains("Jardín", ignoreCase = true) ||
+                categoria.contains("Jardinería", ignoreCase = true) -> "🌿"
         categoria.contains("Mudanza", ignoreCase = true) -> "🚚"
         categoria.contains("Carpintería", ignoreCase = true) -> "🪚"
         categoria.contains("Fotografía", ignoreCase = true) -> "📷"
@@ -783,7 +783,7 @@ fun LicitacionArchiveroCard(
 ) {
     // Estado para controlar si la tarjeta está expandida
     var isExpanded by remember { mutableStateOf(false) }
-    
+
     // Mapear el status a FolderTheme
     val theme = when {
         status.contains("ACTIVA", ignoreCase = true) -> FolderTheme.Active
@@ -792,10 +792,10 @@ fun LicitacionArchiveroCard(
         status.contains("CANCELADA", ignoreCase = true) -> FolderTheme.Cancelled
         else -> FolderTheme.Active
     }
-    
+
     val alpha = if (theme.isCancelled) 0.8f else 1f
     val dateRange = "$fechaInicio - $fechaFin"
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -803,7 +803,7 @@ fun LicitacionArchiveroCard(
             .clickable { isExpanded = !isExpanded }
             .graphicsLayer { this.alpha = alpha }
     ) {
-        
+
         // CAPA 1: Hoja trasera
         Surface(
             modifier = Modifier
@@ -922,7 +922,7 @@ fun LicitacionArchiveroCard(
                                 textDecoration = if (theme.isCancelled) TextDecoration.LineThrough else TextDecoration.None
                             )
                         }
-                        
+
                         // Indicador de expandir/colapsar - Lado derecho
                         Column(horizontalAlignment = Alignment.End) {
                             Row(
@@ -943,7 +943,7 @@ fun LicitacionArchiveroCard(
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
-                            
+
                             // Indicador de nuevos ingresos cuando está contraída
                             if (!isExpanded && hasNewBudgets && !theme.isCancelled) {
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -972,7 +972,7 @@ fun LicitacionArchiveroCard(
                     ) {
                         Column {
                             Spacer(modifier = Modifier.height(6.dp))
-                            
+
                             // Fechas de inicio y fin en formato horizontal
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1004,9 +1004,9 @@ fun LicitacionArchiveroCard(
                                         )
                                     }
                                 }
-                                
+
                                 Spacer(modifier = Modifier.width(24.dp))
-                                
+
                                 // FECHA DE FIN
                                 Column {
                                     Text(
@@ -1066,97 +1066,97 @@ fun LicitacionArchiveroCard(
                             ) {
                                 // Columna izquierda - Tiempo restante o Adjudicado
                                 Column {
-                            when {
-                                // Licitación ACTIVA - Mostrar tiempo restante
-                                !theme.isCancelled && status.contains("ACTIVA", ignoreCase = true) -> {
-                                    Text(
-                                        text = "TIEMPO RESTANTE",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = theme.badgeTextColor,
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-                                    
-                                    Surface(
-                                        color = Color.White.copy(alpha = 0.6f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.2f))
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Timer,
-                                                contentDescription = null,
-                                                tint = theme.badgeTextColor,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
+                                    when {
+                                        // Licitación ACTIVA - Mostrar tiempo restante
+                                        !theme.isCancelled && status.contains("ACTIVA", ignoreCase = true) -> {
                                             Text(
-                                                text = "Cierra en 8 días",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = theme.badgeTextColor
-                                            )
-                                        }
-                                    }
-                                }
-                                // Licitación ADJUDICADA - Mostrar adjudicatario
-                                status.contains("ADJUDICADA", ignoreCase = true) -> {
-                                    Text(
-                                        text = "ADJUDICADO A",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = theme.badgeTextColor,
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-                                    
-                                    Surface(
-                                        color = Color.White.copy(alpha = 0.6f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.2f)),
-                                        modifier = Modifier.clickable { 
-                                            if (presupuestoAdjudicado != null) onAdjudicadoClick() 
-                                        }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.WorkspacePremium,
-                                                contentDescription = null,
-                                                tint = theme.badgeTextColor,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = presupuestoAdjudicado?.prestadorNombre ?: "Por definir",
-                                                fontSize = 11.sp,
+                                                text = "TIEMPO RESTANTE",
+                                                fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = theme.badgeTextColor,
-                                                maxLines = 1
+                                                modifier = Modifier.padding(bottom = 4.dp)
                                             )
-                                            if (presupuestoAdjudicado != null) {
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Visibility,
-                                                    contentDescription = "Ver presupuesto",
-                                                    tint = theme.badgeTextColor,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
+
+                                            Surface(
+                                                color = Color.White.copy(alpha = 0.6f),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.2f))
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Timer,
+                                                        contentDescription = null,
+                                                        tint = theme.badgeTextColor,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = "Cierra en 8 días",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = theme.badgeTextColor
+                                                    )
+                                                }
                                             }
+                                        }
+                                        // Licitación ADJUDICADA - Mostrar adjudicatario
+                                        status.contains("ADJUDICADA", ignoreCase = true) -> {
+                                            Text(
+                                                text = "ADJUDICADO A",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = theme.badgeTextColor,
+                                                modifier = Modifier.padding(bottom = 4.dp)
+                                            )
+
+                                            Surface(
+                                                color = Color.White.copy(alpha = 0.6f),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.2f)),
+                                                modifier = Modifier.clickable {
+                                                    if (presupuestoAdjudicado != null) onAdjudicadoClick()
+                                                }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.WorkspacePremium,
+                                                        contentDescription = null,
+                                                        tint = theme.badgeTextColor,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = presupuestoAdjudicado?.prestadorNombre ?: "Por definir",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = theme.badgeTextColor,
+                                                        maxLines = 1
+                                                    )
+                                                    if (presupuestoAdjudicado != null) {
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Icon(
+                                                            imageVector = Icons.Rounded.Visibility,
+                                                            contentDescription = "Ver presupuesto",
+                                                            tint = theme.badgeTextColor,
+                                                            modifier = Modifier.size(12.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        // Para otros estados (Terminada, Cancelada) no mostrar nada
+                                        else -> {
+                                            Spacer(modifier = Modifier.width(1.dp))
                                         }
                                     }
                                 }
-                                // Para otros estados (Terminada, Cancelada) no mostrar nada
-                                else -> {
-                                    Spacer(modifier = Modifier.width(1.dp))
-                                }
-                            }
-                        }
-                        
+
                                 // Columna derecha - Contador de archivos
                                 Column(
                                     horizontalAlignment = Alignment.End
@@ -1186,7 +1186,7 @@ fun LicitacionArchiveroCard(
                                             )
                                         }
                                     }
-                                    
+
                                     // Indicador de nuevos ingresos
                                     if (hasNewBudgets && !theme.isCancelled) {
                                         Spacer(modifier = Modifier.height(6.dp))
@@ -1275,8 +1275,8 @@ fun PresupuestoGeneralCard(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    "S/ ${presupuesto.precioTotal}", 
-                    fontWeight = FontWeight.Bold, 
+                    "S/ ${presupuesto.precioTotal}",
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -1404,7 +1404,7 @@ fun BudgetPreviewPDFDialog(
     onDismiss: () -> Unit
 ) {
     val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
-    
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1481,7 +1481,7 @@ fun BudgetPreviewPDFDialog(
                         }
                     }
                 }
-                
+
                 item {
                     // Información del presupuesto
                     Card(
@@ -1498,13 +1498,13 @@ fun BudgetPreviewPDFDialog(
                                 letterSpacing = 0.5.sp
                             )
                             Spacer(modifier = Modifier.height(12.dp))
-                            
+
                             InfoRow("Proyecto:", presupuesto.nombre)
                             Spacer(modifier = Modifier.height(8.dp))
                             InfoRow("Categoría:", presupuesto.servicioCategoria)
                             Spacer(modifier = Modifier.height(8.dp))
                             InfoRow("Fecha de Recepción:", presupuesto.fechaRecepcion)
-                            
+
                             if (presupuesto.esLicitacion) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 InfoRow("Estado:", presupuesto.estadoLicitacion.displayName)
@@ -1520,7 +1520,7 @@ fun BudgetPreviewPDFDialog(
                         }
                     }
                 }
-                
+
                 item {
                     // Desglose de costos (simulado)
                     Card(
@@ -1537,7 +1537,7 @@ fun BudgetPreviewPDFDialog(
                                 letterSpacing = 0.5.sp
                             )
                             Spacer(modifier = Modifier.height(12.dp))
-                            
+
                             // Simulación de items (datos de ejemplo)
                             CostItemRow("Materiales", presupuesto.precioTotal * 0.6)
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -1547,7 +1547,7 @@ fun BudgetPreviewPDFDialog(
                         }
                     }
                 }
-                
+
                 item {
                     // Total
                     Card(
@@ -1576,7 +1576,7 @@ fun BudgetPreviewPDFDialog(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            
+
                             if (presupuesto.isNew) {
                                 Surface(
                                     color = Color(0xFFEF4444),
@@ -1594,7 +1594,7 @@ fun BudgetPreviewPDFDialog(
                         }
                     }
                 }
-                
+
                 item {
                     // Nota al pie
                     Text(
@@ -1640,7 +1640,7 @@ data class PresupuestoItemDisplay(
 
 // --- DIMENSIONES A4 ---
 // Ratio A4 = 1 : 1.414
-val A4_WIDTH = 450.dp 
+val A4_WIDTH = 450.dp
 val A4_HEIGHT = (450 * 1.414).dp // ~636.dp
 
 @Composable
@@ -1649,7 +1649,7 @@ fun BudgetPreviewPDFDialog(
     onDismiss: () -> Unit
 ) {
     val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
-    
+
     val items = listOf(
         PresupuestoItemDisplay("1", "Fuente 12v", "$ 18.000,00", "$ 18.000,00"),
         PresupuestoItemDisplay("1", "Balun TVI", "$ 3.000,00", "$ 3.000,00"),
@@ -1666,10 +1666,10 @@ fun BudgetPreviewPDFDialog(
             modifier = Modifier.fillMaxSize()
         ) {
             val screenWidth = maxWidth
-            val initialFitScale = remember(screenWidth) { 
+            val initialFitScale = remember(screenWidth) {
                 ((screenWidth - 32.dp) / A4_WIDTH).coerceAtMost(1f)
             }
-            
+
             // ESTADOS DE ZOOM Y PANEO
             var scale by remember { mutableStateOf(initialFitScale) }
             var offset by remember { mutableStateOf(Offset.Zero) }
@@ -1686,7 +1686,7 @@ fun BudgetPreviewPDFDialog(
                         }
                     }
             ) {
-                
+
                 // --- LA HOJA DE PAPEL A4 ---
                 Box(
                     modifier = Modifier
@@ -1717,10 +1717,10 @@ fun BudgetPreviewPDFDialog(
 
                         // Datos Cliente
                         A4ClientInfoSection(provider, presupuesto)
-                        
+
                         // Tabla
                         A4ItemsTable(items)
-                        
+
                         // Footer (sin espacio adicional)
                         A4FooterSection(presupuesto.precioTotal)
                     }
@@ -1751,7 +1751,7 @@ fun BudgetPreviewPDFDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = { 
+                        onClick = {
                             scale = (scale * 0.8f).coerceAtLeast(initialFitScale)
                             offset = Offset.Zero
                         },
@@ -1759,7 +1759,7 @@ fun BudgetPreviewPDFDialog(
                     ) {
                         Icon(Icons.Default.Remove, "Alejar", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
-                    
+
                     Text(
                         text = "${(scale / initialFitScale * 100).toInt()}%",
                         color = Color.White,
@@ -1768,18 +1768,18 @@ fun BudgetPreviewPDFDialog(
                         modifier = Modifier.widthIn(min = 50.dp),
                         textAlign = TextAlign.Center
                     )
-                    
+
                     IconButton(
-                        onClick = { 
+                        onClick = {
                             scale = (scale * 1.25f).coerceAtMost(4f)
                         },
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(Icons.Default.Add, "Acercar", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
-                    
+
                     IconButton(
-                        onClick = { 
+                        onClick = {
                             scale = initialFitScale
                             offset = Offset.Zero
                         },
@@ -1788,10 +1788,10 @@ fun BudgetPreviewPDFDialog(
                         Icon(Icons.Default.Refresh, "Resetear", tint = Color.White)
                     }
                 }
-                
+
                 // --- BOTÓN DESCARGAR PDF ---
                 IconButton(
-                    onClick = { 
+                    onClick = {
                         // TODO: Implementar descarga de PDF
                     },
                     modifier = Modifier
@@ -1809,7 +1809,7 @@ fun BudgetPreviewPDFDialog(
 }
 
 @Composable
-fun A4HeaderSection(provider: PrestadorProfileFalso?, presupuesto: PresupuestoFalso) {
+fun A4HeaderSection(provider: UserFalso?, presupuesto: PresupuestoFalso) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1848,13 +1848,13 @@ fun A4HeaderSection(provider: PrestadorProfileFalso?, presupuesto: PresupuestoFa
                         letterSpacing = 1.5.sp,
                         lineHeight = 11.sp
                     )
-                    Text(
-                        it.address,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = Slate600,
-                        lineHeight = 11.sp
-                    )
+                   // Text(
+                        //it.address,
+                     //   fontSize = 9.sp,
+                       // fontWeight = FontWeight.Normal,
+                       // color = Slate600,
+                       /// lineHeight = 11.sp
+                    //)
                 } ?: run {
                     Text("MAVERICK", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Slate800, letterSpacing = (-0.5).sp, lineHeight = 16.sp)
                     Text("INFORMÁTICA", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400, letterSpacing = 1.5.sp, lineHeight = 11.sp)
@@ -1897,7 +1897,7 @@ fun A4HeaderSection(provider: PrestadorProfileFalso?, presupuesto: PresupuestoFa
 }
 
 @Composable
-fun A4ClientInfoSection(provider: PrestadorProfileFalso?, presupuesto: PresupuestoFalso) {
+fun A4ClientInfoSection(provider: UserFalso?, presupuesto: PresupuestoFalso) {
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
         // Emisor
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1913,14 +1913,14 @@ fun A4ClientInfoSection(provider: PrestadorProfileFalso?, presupuesto: Presupues
                 Text("Maverick Informática", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = Slate600)
             }
         }
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         // Receptor
         Column {
             Text("PARA:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Slate400)
             HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp).width(20.dp), color = Slate300)
-            
+
             Column(modifier = Modifier.padding(bottom = 4.dp)) {
                 Text("CLIENTE / EMPRESA", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Slate400)
                 Row(
@@ -1974,7 +1974,7 @@ fun A4ItemsTable(items: List<PresupuestoItemDisplay>) {
                 A4TableCell("Total", 0.3f, true, alignRight = true, isLast = true)
             }
             HorizontalDivider(color = Slate300)
-            
+
             // Items
             items.forEach { item ->
                 val bg = if (item.isSpecial) Color(0xFFEFF6FF) else Color.White
@@ -1989,7 +1989,7 @@ fun A4ItemsTable(items: List<PresupuestoItemDisplay>) {
                 }
                 HorizontalDivider(color = Slate300)
             }
-            
+
             // Filas de relleno ELIMINADAS para evitar espacio en blanco forzado
         }
     }
@@ -2066,7 +2066,7 @@ fun A4FooterSection(total: Double) {
                     Text("Subtotal:", fontSize = 11.sp, color = Slate600)
                     Text("$ ${total.toInt()}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
                 }
-                
+
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -2074,7 +2074,7 @@ fun A4FooterSection(total: Double) {
                     Text("Descuento:", fontSize = 11.sp, color = Slate600)
                     Text("-", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
                 }
-                
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Slate200)
 
                 Row(
@@ -2112,3 +2112,600 @@ fun PresupuestosScreenPreview() {
         PresupuestosScreen(onBack = {})
     }
 }
+
+/**package com.example.myapplication.Client
+
+import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import coil.compose.rememberAsyncImagePainter
+import com.example.myapplication.ui.theme.MyApplicationTheme
+
+// =================================================================================
+// --- PANTALLA PRINCIPAL DE PRESUPUESTOS ---
+// =================================================================================
+// Esta pantalla muestra dos tipos de presupuestos:
+// 1. Presupuestos de Licitaciones (Agrupados por licitación)
+// 2. Presupuestos Generales (Solicitudes directas)
+// Utiliza un sistema de capas (Box) para manejar búsquedas y menús flotantes.
+
+@OptIn(ExperimentalMaterial3Api::class)
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun PresupuestosScreen(
+    onProfileClick: (String) -> Unit = {},
+    onChatClick: (String) -> Unit = {},
+    onBack: () -> Unit
+) {
+    // --- ESTADOS DE LA UI ---
+    // Control de pestañas (0: Licitaciones, 1: Generales)
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Presupuestos de Licitaciones", "Presupuestos Generales")
+
+    // Control de búsqueda y menú flotante
+    var isSearchActive by remember { mutableStateOf(false) }
+    var isFabMenuExpanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // --- CARGA DE DATOS ---
+    // Se cargan los presupuestos desde la fuente de datos falsa
+    val allPresupuestos = remember { ClientBudgetDataFalso.presupuestos }
+    // Filtro 1: Agrupar licitaciones por nombre
+    val licitacionesAgrupadas = allPresupuestos.filter { it.esLicitacion }.groupBy { it.nombre }
+    // Filtro 2: Presupuestos directos
+    val presupuestosGenerales = allPresupuestos.filter { !it.esLicitacion }
+
+    // --- ESTADOS DE DIÁLOGOS Y SHEETS ---
+    var selectedLicitacionBudgets by remember { mutableStateOf<List<PresupuestoFalso>>(emptyList()) }
+    var showBudgetSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    var selectedPresupuesto by remember { mutableStateOf<PresupuestoFalso?>(null) }
+
+    // Función para limpiar y cerrar la búsqueda
+    val closeSearch = {
+        isSearchActive = false
+        searchQuery = ""
+        keyboardController?.hide()
+        Unit
+    }
+
+    // --- MANEJO DE VENTANAS MODALES ---
+
+    // BottomSheet: Muestra la lista de presupuestos dentro de una licitación específica
+    if (showBudgetSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBudgetSheet = false },
+            sheetState = sheetState,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LicitacionDetailSheetContent(
+                budgets = selectedLicitacionBudgets,
+                onProfileClick = onProfileClick,
+                onChatClick = onChatClick,
+                onBudgetClick = { presupuesto -> selectedPresupuesto = presupuesto }
+            )
+        }
+    }
+
+    // Diálogo: Vista previa del PDF (Simulada)
+    if (selectedPresupuesto != null) {
+        BudgetPreviewPDFDialog(
+            presupuesto = selectedPresupuesto!!,
+            onDismiss = { selectedPresupuesto = null }
+        )
+    }
+
+    // --- ESTRUCTURA PRINCIPAL (SCAFFOLD) ---
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            // La barra superior desaparece si la búsqueda está activa para dar paso a la barra de búsqueda animada
+            if (!isSearchActive) {
+                TopAppBar(
+                    title = { Text("Presupuestos Recibidos") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
+                )
+            }
+        }
+    ) { paddingValues ->
+        // Contenedor Box para manejar capas superpuestas (Search, Scrim, FAB)
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+
+            // CAPA 1: CONTENIDO PRINCIPAL (PESTAÑAS Y LISTAS)
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Selector de Pestañas
+                TabRow(selectedTabIndex = selectedTabIndex) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTabIndex == index,
+                            onClick = { selectedTabIndex = index },
+                            text = { Text(title) }
+                        )
+                    }
+                }
+
+                // Contenido según pestaña seleccionada
+                when (selectedTabIndex) {
+                    0 -> LicitacionesTabContent(
+                        licitaciones = licitacionesAgrupadas,
+                        searchQuery = searchQuery,
+                        onLicitacionClick = { budgets ->
+                            selectedLicitacionBudgets = budgets
+                            showBudgetSheet = true
+                        },
+                        onPresupuestoClick = { presupuesto -> selectedPresupuesto = presupuesto }
+                    )
+                    1 -> GeneralesTabContent(
+                        presupuestos = presupuestosGenerales,
+                        searchQuery = searchQuery,
+                        onPresupuestoClick = { presupuesto -> selectedPresupuesto = presupuesto },
+                        onProfileClick = onProfileClick,
+                        onChatClick = onChatClick
+                    )
+                }
+            }
+
+            // CAPA 2: SCRIM (FONDO OSCURO AL BUSCAR/ABRIR MENÚ)
+            if (isSearchActive || isFabMenuExpanded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .zIndex(5f)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            isFabMenuExpanded = false
+                            if (isSearchActive) closeSearch()
+                        }
+                )
+            }
+
+            // CAPA 3: BARRA DE BÚSQUEDA ANIMADA (PARTE SUPERIOR)
+            AnimatedVisibility(
+                visible = isSearchActive,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+                modifier = Modifier
+                    .zIndex(10f)
+                    .align(Alignment.TopCenter)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        GeminiTopSearchBar(
+                            searchQuery = searchQuery,
+                            onSearchQueryChange = { searchQuery = it },
+                            placeholderText = "Buscar presupuestos..."
+                        )
+                    }
+
+                    // Botón cerrar búsqueda
+                    val rainbowBrush = geminiGradientEffect()
+                    Surface(
+                        modifier = Modifier.size(56.dp).clickable(onClick = closeSearch),
+                        shape = CircleShape,
+                        color = Color(0xFF121212),
+                        border = BorderStroke(2.5.dp, rainbowBrush),
+                        shadowElevation = 12.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                }
+            }
+
+            // CAPA 4: MENÚ FLOTANTE DIVIDIDO (FAB GEMINI)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .zIndex(15f),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                GeminiSplitFAB(
+                    isExpanded = isFabMenuExpanded,
+                    isSearchActive = isSearchActive,
+                    onToggleExpand = { isFabMenuExpanded = !isFabMenuExpanded },
+                    onActivateSearch = { isSearchActive = true },
+                    onCloseSearch = closeSearch,
+                    expandedTools = {
+                        SmallFabTool(label = "Filtros", icon = Icons.Default.FilterList, onClick = {})
+                        SmallFabTool(label = "Recientes", icon = Icons.Default.History, onClick = {})
+                    }
+                )
+            }
+        }
+    }
+}
+
+// =================================================================================
+// --- SECCIÓN: CONTENIDO DE PESTAÑA LICITACIONES ---
+// =================================================================================
+
+@Composable
+fun LicitacionesTabContent(
+    licitaciones: Map<String, List<PresupuestoFalso>>,
+    searchQuery: String,
+    onLicitacionClick: (List<PresupuestoFalso>) -> Unit,
+    onPresupuestoClick: (PresupuestoFalso) -> Unit
+) {
+    // --- ESTADOS DE FILTRADO ---
+    var selectedStatus by remember { mutableStateOf<EstadoLicitacion?>(null) }
+    var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var sortAscending by remember { mutableStateOf(true) }
+
+    // Obtención dinámica de categorías disponibles
+    val allCategories = licitaciones.values.flatten().map { it.servicioCategoria }.distinct()
+
+    // Lógica de ordenamiento por prioridad de estado
+    val statusOrder = mapOf(
+        EstadoLicitacion.ACTIVA to 1,
+        EstadoLicitacion.ADJUDICADA to 2,
+        EstadoLicitacion.TERMINADA to 3,
+        EstadoLicitacion.CANCELADA to 4
+    )
+
+    // Filtrado y ordenamiento de la lista
+    val filteredAndSortedLicitaciones = licitaciones.filter { (nombre, presupuestos) ->
+        val first = presupuestos.first()
+        val statusMatch = selectedStatus == null || first.estadoLicitacion == selectedStatus
+        val categoryMatch = selectedCategories.isEmpty() || selectedCategories.contains(first.servicioCategoria)
+        val searchMatch = nombre.contains(searchQuery, ignoreCase = true) ||
+                presupuestos.any { it.servicioCategoria.contains(searchQuery, ignoreCase = true) }
+        statusMatch && categoryMatch && searchMatch
+    }.entries.sortedWith(
+        compareBy<Map.Entry<String, List<PresupuestoFalso>>> { (_, budgets) ->
+            // Prioridad 1: Activas con nuevos presupuestos
+            val hasNew = budgets.any { it.isNew }
+            val status = budgets.first().estadoLicitacion
+            if (status == EstadoLicitacion.ACTIVA && hasNew) 0 else 1
+        }.thenBy { (_, budgets) ->
+            // Prioridad 2: Estado de la licitación
+            statusOrder[budgets.first().estadoLicitacion] ?: 5
+        }
+    )
+
+    Column {
+        // Barra de Filtros (Horizontal)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CategoryFilterSplitButton(
+                allCategories = allCategories,
+                selectedCategories = selectedCategories,
+                onCategoryToggle = { category ->
+                    val newSelection = selectedCategories.toMutableSet()
+                    if (newSelection.contains(category)) newSelection.remove(category) else newSelection.add(category)
+                    selectedCategories = newSelection
+                },
+                onClear = { selectedCategories = emptySet() }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            SortFilterChip(isAscending = sortAscending, onClick = { sortAscending = !sortAscending })
+            Spacer(modifier = Modifier.weight(1f))
+            StatusFilterSplitButton(selectedStatus = selectedStatus, onStatusSelected = { selectedStatus = it })
+        }
+
+        // Lista de resultados
+        if (filteredAndSortedLicitaciones.isEmpty()) {
+            EmptyState()
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                itemsIndexed(
+                    items = filteredAndSortedLicitaciones,
+                    key = { _, item -> item.key } // Clave única: Nombre de licitación
+                ) { index, (nombre, presupuestos) ->
+                    val licitacionInfo = presupuestos.first()
+                    val hasNew = presupuestos.any { it.isNew }
+                    val presupuestoAdjudicado = if (licitacionInfo.estadoLicitacion == EstadoLicitacion.ADJUDICADA) presupuestos.firstOrNull() else null
+
+                    LicitacionArchiveroCard(
+                        categoriaNombre = licitacionInfo.servicioCategoria,
+                        licitacionNombre = nombre,
+                        fechaInicio = licitacionInfo.fechaInicioLicitacion ?: "-",
+                        fechaFin = licitacionInfo.fechaFinLicitacion ?: "-",
+                        status = licitacionInfo.estadoLicitacion.displayName,
+                        statusColor = licitacionInfo.estadoLicitacion.color,
+                        presupuestosCount = presupuestos.size,
+                        hasNewBudgets = hasNew,
+                        onClick = { onLicitacionClick(presupuestos) },
+                        presupuestoAdjudicado = presupuestoAdjudicado,
+                        onAdjudicadoClick = { presupuestoAdjudicado?.let { onPresupuestoClick(it) } }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// =================================================================================
+// --- SECCIÓN: CONTENIDO DE PESTAÑA GENERALES ---
+// =================================================================================
+
+@Composable
+fun GeneralesTabContent(
+    presupuestos: List<PresupuestoFalso>,
+    searchQuery: String,
+    onPresupuestoClick: (PresupuestoFalso) -> Unit,
+    onProfileClick: (String) -> Unit,
+    onChatClick: (String) -> Unit
+) {
+    // Filtrado simple por nombre o prestador
+    val filtered = presupuestos.filter {
+        it.nombre.contains(searchQuery, ignoreCase = true) ||
+        it.prestadorNombre.contains(searchQuery, ignoreCase = true)
+    }
+
+    if (filtered.isEmpty()) {
+        EmptyState()
+    } else {
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(filtered, key = { it.id }) { p ->
+                PresupuestoGeneralCard(
+                    presupuesto = p,
+                    onClick = { onPresupuestoClick(p) },
+                    onProfileClick = { onProfileClick(p.prestadorId) },
+                    onChatClick = { onChatClick(p.prestadorId) }, // Corrección aplicada aquí
+                    onPreviewClick = { onPresupuestoClick(p) }
+                )
+            }
+        }
+    }
+}
+
+// =================================================================================
+// --- SECCIÓN: COMPONENTES DE UI (BOTONES DE FILTRO) ---
+// =================================================================================
+
+@Composable
+fun CategoryFilterSplitButton(allCategories: List<String>, selectedCategories: Set<String>, onCategoryToggle: (String) -> Unit, onClear: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val isSelected = selectedCategories.isNotEmpty()
+    val containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box {
+        Surface(shape = RoundedCornerShape(24.dp), color = containerColor, contentColor = contentColor, modifier = Modifier.height(44.dp).animateContentSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.clickable { expanded = true }.padding(start = 12.dp, end = 8.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Category, null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = if (isSelected) "${selectedCategories.size}" else "Categorías", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Box(modifier = Modifier.width(1.dp).height(24.dp).background(contentColor.copy(alpha = 0.3f)))
+                Box(modifier = Modifier.clickable { if (isSelected) onClear() else expanded = true }.padding(horizontal = 10.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Icon(imageVector = if (isSelected) Icons.Default.Close else Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            allCategories.forEach { category ->
+                DropdownMenuItem(text = { Text(category) }, onClick = { onCategoryToggle(category) })
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusFilterSplitButton(selectedStatus: EstadoLicitacion?, onStatusSelected: (EstadoLicitacion?) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val isSelected = selectedStatus != null
+    val containerColor = if (isSelected) selectedStatus.color else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box {
+        Surface(shape = RoundedCornerShape(24.dp), color = containerColor, contentColor = contentColor, modifier = Modifier.height(44.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.clickable { expanded = true }.padding(start = 12.dp, end = 8.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Text(text = selectedStatus?.displayName ?: "Estado", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Box(modifier = Modifier.width(1.dp).height(24.dp).background(contentColor.copy(alpha = 0.3f)))
+                Box(modifier = Modifier.clickable { if (isSelected) onStatusSelected(null) else expanded = true }.padding(horizontal = 10.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Icon(imageVector = if (isSelected) Icons.Default.Close else Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            EstadoLicitacion.entries.forEach { status ->
+                DropdownMenuItem(text = { Text(status.displayName) }, onClick = { onStatusSelected(status); expanded = false })
+            }
+        }
+    }
+}
+
+// =================================================================================
+// --- SECCIÓN: TARJETAS Y ELEMENTOS VISUALES ---
+// =================================================================================
+
+/**
+ * Obtiene un emoji representativo basado en el nombre de la categoría.
+ */
+fun getCategoryEmoji(categoria: String): String = when {
+    categoria.contains("Informatica", ignoreCase = true) -> "💻"
+    categoria.contains("Electricidad", ignoreCase = true) -> "⚡"
+    else -> "📋"
+}
+
+/**
+ * Indicador visual animado (punto pulsante) para notificaciones nuevas.
+ */
+@Composable
+fun PulsingDotIndicator(dotSize: Dp = 8.dp, color: Color = Color(0xFFE11D48)) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(initialValue = 1f, targetValue = 2.5f, animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Restart), label = "scale")
+    val alpha by infiniteTransition.animateFloat(initialValue = 0.7f, targetValue = 0f, animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Restart), label = "alpha")
+    Box(modifier = Modifier.size(dotSize * 2), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(dotSize).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }.background(color, CircleShape))
+        Box(modifier = Modifier.size(dotSize).background(color, CircleShape))
+    }
+}
+
+/**
+ * Tarjeta expandible que agrupa presupuestos de una misma licitación.
+ * Muestra resumen, estado y alertas de nuevos presupuestos.
+ */
+@Composable
+fun LicitacionArchiveroCard(categoriaNombre: String, licitacionNombre: String, fechaInicio: String, fechaFin: String, status: String, statusColor: Color, presupuestosCount: Int, hasNewBudgets: Boolean, onClick: () -> Unit, presupuestoAdjudicado: PresupuestoFalso?, onAdjudicadoClick: () -> Unit) {
+    var isExpanded by remember { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth().clickable { isExpanded = !isExpanded }, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Cabecera: Icono, Nombre y Estado
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(getCategoryEmoji(categoriaNombre), fontSize = 20.sp)
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(licitacionNombre, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(status.uppercase(), color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Icon(if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null)
+            }
+            // Detalles expandibles
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Text("Desde: $fechaInicio - Hasta: $fechaFin", fontSize = 12.sp, color = Color.Gray)
+                    if (presupuestoAdjudicado != null) Text("Adjudicado a: ${presupuestoAdjudicado.prestadorNombre}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp).clickable { onAdjudicadoClick() })
+                    Button(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Ver $presupuestosCount Presupuestos") }
+                }
+            }
+            // Indicador de "Nuevos"
+            if (!isExpanded && hasNewBudgets) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) { PulsingDotIndicator(dotSize = 6.dp); Spacer(Modifier.width(4.dp)); Text("Nuevos", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE123C)) }
+        }
+    }
+}
+
+/**
+ * Tarjeta simple para un presupuesto individual (fuera de licitaciones).
+ */
+@Composable
+fun PresupuestoGeneralCard(presupuesto: PresupuestoFalso, onClick: () -> Unit, onProfileClick: () -> Unit, onChatClick: () -> Unit, onPreviewClick: () -> Unit) {
+    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
+    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Image(painter = rememberAsyncImagePainter(model = provider?.profileImageUrl), contentDescription = null, modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onProfileClick), contentScale = ContentScale.Crop)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(presupuesto.nombre, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(presupuesto.prestadorNombre, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("S/ ${presupuesto.precioTotal}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Row {
+                    IconButton(onClick = onPreviewClick) { Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.primary) }
+                    IconButton(onClick = onChatClick) { Icon(Icons.AutoMirrored.Filled.Send, null, tint = MaterialTheme.colorScheme.primary) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyState() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.SearchOff, null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+            Text("No se encontraron resultados", color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun LicitacionDetailSheetContent(budgets: List<PresupuestoFalso>, onProfileClick: (String) -> Unit, onChatClick: (String) -> Unit, onBudgetClick: (PresupuestoFalso) -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Detalle de Presupuestos", style = MaterialTheme.typography.titleLarge, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 16.dp))
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(budgets) { b -> PresupuestoGeneralCard(presupuesto = b, onClick = { onBudgetClick(b) }, onProfileClick = { onProfileClick(b.prestadorId) }, onChatClick = { onChatClick(b.prestadorId) }, onPreviewClick = { onBudgetClick(b) }) }
+        }
+    }
+}
+
+@Composable
+fun SortFilterChip(isAscending: Boolean, onClick: () -> Unit) {
+    FilterChip(selected = true, onClick = onClick, label = { Text("Fecha") }, leadingIcon = { Icon(if (isAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward, null, modifier = Modifier.size(18.dp)) })
+}
+
+@Composable
+fun BudgetPreviewPDFDialog(presupuesto: PresupuestoFalso, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }, title = { Text("Vista Previa PDF") }, text = { Text("Aquí se mostraría el documento para ${presupuesto.nombre}") })
+}
+
+@Composable
+fun GradientDivider(color: Color, thickness: Dp, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxWidth().height(thickness).background(Brush.horizontalGradient(listOf(Color.Transparent, color, Color.Transparent))))
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview(showBackground = true)
+@Composable
+fun PresupuestosScreenPreview() { MyApplicationTheme { PresupuestosScreen(onBack = {}) } }
+**/

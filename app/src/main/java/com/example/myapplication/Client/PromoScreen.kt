@@ -59,7 +59,7 @@ data class Promotion(
 )
 
 data class ProviderPromotions(
-    val provider: PrestadorProfileFalso,
+    val provider: UserFalso,
     val promotions: List<Promotion>
 )
 

@@ -6,7 +6,9 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -103,11 +105,12 @@ fun AppNavigation() {
             }
         }
     ) { innerPadding ->
-        // Contenedor del NavHost
+        // Contenedor del NavHost----------------------------------------------------------------------------------------------------------
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.fillMaxSize()
+            //modifier = Modifier.padding(innerPadding)
         ) {
 
             // --- NUEVO: Animaciones de desplazamiento lateral (Left <-> Right) ---
@@ -116,28 +119,46 @@ fun AppNavigation() {
             // 1. PANTALLA PRINCIPAL (HOME)
             composable(
                 route = Screen.Home.route,
+                // Las transiciones son PARÁMETROS, van dentro del paréntesis ( )
                 enterTransition = {
                     val initialIndex = getRouteIndex(initialState.destination.route)
                     val targetIndex = getRouteIndex(targetState.destination.route)
                     if (initialIndex != -1 && targetIndex > initialIndex) {
-                        slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
+                        slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Left,
+                            animationSpec = tween(300)
+                        )
                     } else {
-                        slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
+                        slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(300)
+                        )
                     }
                 },
                 exitTransition = {
                     val initialIndex = getRouteIndex(initialState.destination.route)
                     val targetIndex = getRouteIndex(targetState.destination.route)
                     if (targetIndex != -1 && targetIndex > initialIndex) {
-                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
+                        slideOutOfContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Left,
+                            animationSpec = tween(300)
+                        )
                     } else {
-                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
+                        slideOutOfContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(300)
+                        )
                     }
                 }
-            ) { 
-                HomeScreenComplete(navController = navController)
+            ) { // <--- Aquí cerramos el paréntesis y abrimos la llave del contenido
+
+                // El contenido de la pantalla va aquí adentro
+                HomeScreenComplete(
+                    navController = navController,
+                    bottomPadding = innerPadding // ¡Ahora sí pasamos el padding correctamente!
+                )
             }
-            
+
             // 2. PANTALLA PRESUPUESTOS
             composable(
                 route = Screen.Presupuestos.route,
@@ -281,13 +302,17 @@ fun AppBottomNavigationBar(
     allItems: List<Screen>,
     currentRoute: String?
 ) {
+    // Determinamos el color de fondo: en modo oscuro aplicamos un tono que continúe el degradado (negro con alpha)
+    val isDark = isSystemInDarkTheme()
+    val navBarColor = if (isDark) Color.Black.copy(alpha = 1f) else MaterialTheme.colorScheme.surface
+
     NavigationBar(
         modifier = Modifier
             .height(80.dp) 
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) 
             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)), 
-        containerColor = MaterialTheme.colorScheme.surface, 
-        tonalElevation = 8.dp 
+        containerColor = navBarColor, 
+        tonalElevation = if (isDark) 0.dp else 8.dp
     ) {
         allItems.forEach { screen ->
             // Determinamos si este item está seleccionado

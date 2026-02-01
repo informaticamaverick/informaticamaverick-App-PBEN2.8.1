@@ -56,7 +56,8 @@ dependencies {
     implementation(libs.play.services.location)
 
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
-
+    implementation(libs.androidx.ui)
+    implementation("androidx.compose.material3:material3:1.3.1")
 
 
     testImplementation(libs.junit)
