@@ -52,14 +52,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.util.lerp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.example.myapplication.Client.*
+import com.example.myapplication.R
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
-import com.example.myapplication.R
 
 // ==================================================================================
 // --- SECCIÓN: MODELOS DE DATOS ---
@@ -96,59 +97,62 @@ data class SuperCategory(
 @OptIn(ExperimentalMaterial3Api::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingValues) {
-    // --- ESTADOS DE LA UI ---
-    var profileMode by remember { mutableStateOf(ProfileMode.CLIENTE) } // Estado para alternar entre Cliente/Empresa
-    var isSearchActive by remember { mutableStateOf(false) } // ¿Barra de búsqueda visible?
-    var isFabMenuExpanded by remember { mutableStateOf(false) } // ¿Menú del FAB abierto?
-    var showFavorites by remember { mutableStateOf(false) } // ¿Panel de favoritos visible?
-    var searchQuery by remember { mutableStateOf("") } // Texto que escribe el usuario
-    
-    // Estados para favoritos (orden y selección)
-    var favoritesSortBy by remember { mutableStateOf("Name") }
-    var isSelectionMode by remember { mutableStateOf(false) }
-    var selectedFavorites by remember { mutableStateOf(setOf<String>()) }
+fun HomeScreenComplete(
+    navController: NavHostController,
+    bottomPadding: PaddingValues,
+    viewModel: ProfileSharedViewModel = hiltViewModel() // <-- OBTENER VIEWMODEL
+) {
+    // --- ESTADOS DE LA UI (AHORA DESDE EL VIEWMODEL) ---
+    val profileMode by viewModel.profileMode.collectAsState() // <-- ESTADO CENTRALIZADO
+    val userState by viewModel.userState.collectAsState() // <-- DATOS DEL USUARIO
 
-    // Estados para manejo de recarga y barajado
-    var isLoading by remember { mutableStateOf(false) }
+    HomeScreenContent(
+        navController = navController,
+        bottomPadding = bottomPadding,
+        profileMode = profileMode,
+        userState = userState,
+        onModeToggle = viewModel::toggleProfileMode
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun HomeScreenContent(
+    navController: NavHostController,
+    bottomPadding: PaddingValues,
+    profileMode: ProfileMode,
+    userState: UserEntity?,
+    onModeToggle: () -> Unit
+) {
+    var isSearchActive by remember { mutableStateOf(false) }
+    var isFabMenuExpanded by remember { mutableStateOf(false) }
+    var showFavorites by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
     var refreshTrigger by remember { mutableStateOf(0) }
     
     val keyboardController = LocalSoftwareKeyboardController.current
     
-    // Generación de datos falsos (Categorías y Banner)
-    // Se recalcula cuando cambia refreshTrigger
     val generatedData = remember(refreshTrigger) { 
         generateFakeBannerAndCategories() 
     }
     val bannerItems = generatedData.first
     val regularCategories = generatedData.second
 
-    // Efecto para simular carga inicial y al refrescar
-    LaunchedEffect(refreshTrigger) {
-        isLoading = true
-        delay(1500) // Simular retardo de carga para ver el efecto
-        isLoading = false
-    }
-
-    // Efecto para barajar al entrar a la pantalla (simulado con el trigger inicial 0)
     LaunchedEffect(Unit) {
-        // Al entrar, si queremos forzar un refresh:
         refreshTrigger++
     }
 
-    // Animación del Scrim (Fondo oscuro transparente al abrir menús)
     val scrimAlpha by animateFloatAsState(
         targetValue = if (isFabMenuExpanded || isSearchActive || showFavorites) 0.6f else 0f,
-        animationSpec = tween(durationMillis = 300),
+        animationSpec = tween(durationMillis = 200),
         label = "scrim"
     )
-    val showScrim by remember { mutableStateOf(true) }
-    // Callback para navegar a resultados de categoría
+    
     val onCategoryClick: (String) -> Unit = { categoryName ->
         navController.navigate("result_busqueda/$categoryName")
     }
 
-    // Función auxiliar para cerrar búsqueda y teclado
     val closeSearch = {
         isSearchActive = false
         searchQuery = ""
@@ -157,54 +161,45 @@ fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingV
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background // [MODIFICABLE] Color de fondo de toda la pantalla
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
             
             // --- CAPA 1: CONTENIDO DE FONDO (SCROLLABLE) ---
-            if (!isLoading) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // SECCIÓN DEL ENCABEZADO (Refactorizada con 3 columnas)
-                    TopHeaderSection(
-                        navController = navController,
-                        profileMode = profileMode,
-                        onModeToggle = {
-                            profileMode = if (profileMode == ProfileMode.CLIENTE) ProfileMode.EMPRESA else ProfileMode.CLIENTE
-                        }
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopHeaderSection(
+                    navController = navController,
+                    profileMode = profileMode,
+                    user = userState, // <-- PASAR USUARIO REAL
+                    onModeToggle = onModeToggle // <-- ACCIÓN CENTRALIZADA
+                )
+
+                // Banner de Novedades (Carrusel Superior Mixto)
+                if (bannerItems.isNotEmpty()) {
+                    AutoPlayingBannerSection(
+                        bannerItems = bannerItems,
+                        onCategoryClick = onCategoryClick,
+                        navController = navController
                     )
+                }
 
-                    // Banner de Novedades (Carrusel Superior Mixto)
-                    if (bannerItems.isNotEmpty()) {
-                        AutoPlayingBannerSection(
-                            bannerItems = bannerItems,
-                            onCategoryClick = onCategoryClick,
-                            navController = navController
+                // Lista Vertical de Categorías
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = 8.dp,
+                        // [MODIFICABLE] Espacio inferior para que el contenido no quede tapado por el FAB/BottomBar
+                        bottom = paddingValues.calculateBottomPadding() + 80.dp
+                    )
+                ) {
+                    items(regularCategories) { superCat ->
+                        SuperCategorySection(
+                            superCategory = superCat,
+                            onCategoryClick = onCategoryClick
                         )
-                    }
-
-                    // Lista Vertical de Categorías
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            top = 8.dp,
-                            // [MODIFICABLE] Espacio inferior para que el contenido no quede tapado por el FAB/BottomBar
-                            bottom = paddingValues.calculateBottomPadding() + 80.dp 
-                        )
-                    ) {
-                        items(regularCategories) { superCat ->
-                            SuperCategorySection(
-                                superCategory = superCat,
-                                onCategoryClick = onCategoryClick
-                            )
-                            Spacer(modifier = Modifier.height(1.dp)) // [MODIFICABLE] Separación entre filas de categorías
-                        }
+                        Spacer(modifier = Modifier.height(1.dp)) // [MODIFICABLE] Separación entre filas de categorías
                     }
                 }
-            } else {
-                 // --- LOADING SCREEN ---
-                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                     ContainedJellyLoader()
-                 }
             }
 
             // --- CAPA 2: SCRIM (FONDO OSCURO INTERACTIVO) ---
@@ -229,8 +224,8 @@ fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingV
             // --- CAPA 3: BARRA DE BÚSQUEDA (ANIMADA DESDE ABAJO) ---
             AnimatedVisibility(
                 visible = isSearchActive,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { fullHeight -> fullHeight }), // Entra subiendo
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { fullHeight -> fullHeight }), // Sale bajando
+                enter = fadeIn(animationSpec = tween(200)) + slideInVertically(initialOffsetY = { it / 2 }),
+                exit = fadeOut(animationSpec = tween(200)) + slideOutVertically(targetOffsetY = { it / 2 }),
                 modifier = Modifier.zIndex(10f).align(Alignment.TopCenter)
             ) {
                 Row(
@@ -270,13 +265,13 @@ fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingV
             // --- CAPA 4: PANEL DE RESULTADOS DE BÚSQUEDA ---
             AnimatedVisibility(
                 visible = isSearchActive && searchQuery.isNotEmpty() && !showFavorites,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut(),
+                enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(250)),
+                exit = shrinkVertically(animationSpec = tween(250)) + fadeOut(animationSpec = tween(250)),
                 modifier = Modifier
                     .zIndex(9f)
                     .align(Alignment.TopCenter)
                     // [MODIFICABLE] Ajustar este padding si cambia la altura del TopBar o SearchBar
-                    .padding(top = 130.dp) 
+                    .padding(top = 130.dp)
             ) {
                 SearchResultsPanel(
                     isVisible = true,
@@ -295,33 +290,19 @@ fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingV
                 FavoritesPanel(
                     navController = navController,
                     onClose = { showFavorites = false },
-                    sortBy = favoritesSortBy,
-                    selectionMode = isSelectionMode,
-                    selectedIds = selectedFavorites,
-                    searchQuery = searchQuery,
-                    onToggleSelection = { id ->
-                        selectedFavorites = if (selectedFavorites.contains(id)) selectedFavorites - id else selectedFavorites + id
-                    }
+                    sortBy = "Name",
+                    selectionMode = false,
+                    selectedIds = emptySet(),
+                    searchQuery = "",
+                    onToggleSelection = { }
                 )
             }
 
             // --- CAPA 6: FAB DIVIDIDO CON SCRIM REUTILIZABLE ---
             GeminiFABWithScrim(
-                //showScrim = showScrim
                 bottomPadding = bottomPadding,
                 showScrim = true // Solo mostrar el degradado si no hay menús abiertos
             ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(16.dp) // Espacio entre elementos si añades más
-                ) {
-                    // Si quieres que el cargador de gelatina aparezca arriba del FAB cuando buscas:
-                    if (isSearchActive) {
-                        M3JellyLoader(size = 40.dp, color = MaterialTheme.colorScheme.secondary)
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-
                 GeminiSplitFAB(
                     isExpanded = isFabMenuExpanded,
                     isSearchActive = isSearchActive,
@@ -330,14 +311,29 @@ fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingV
                     onActivateSearch = { isSearchActive = true },
                     onCloseSearch = closeSearch,
                     onCloseSecondaryPanel = { showFavorites = false },
-                    // Botones de acción rápida (Izquierda del FAB)
+                    // --- MODIFICADO --- Botones de acción con el nuevo estilo
                     secondaryActions = {
-                        SmallActionFab(icon = Icons.Default.Gavel, onClick = { navController.navigate(Screen.CrearLicitacion.route) })
-                        SmallActionFab(icon = Icons.Default.Bolt, onClick = { println("Acción rápida") })
-                        SmallActionFab(icon = Icons.Default.Favorite, onClick = {
-                            showFavorites = true
-                            isFabMenuExpanded = false
-                        })
+                        SmallActionFab(
+                            icon = Icons.Default.Gavel, 
+                            label = "Licitar",
+                            iconColor = Color(0xFF4285F4),
+                            onClick = { navController.navigate(Screen.CrearLicitacion.route) }
+                        )
+                        SmallActionFab(
+                            icon = Icons.Default.Bolt, 
+                            label = "Rápido",
+                            iconColor = Color(0xFFFBC02D),
+                            onClick = { println("Acción rápida") }
+                        )
+                        SmallActionFab(
+                            icon = Icons.Default.Favorite, 
+                            label = "Favs",
+                            iconColor = Color(0xFFE91E63),
+                            onClick = {
+                                showFavorites = true
+                                isFabMenuExpanded = false
+                            }
+                        )
                     },
 
 
@@ -355,8 +351,6 @@ fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingV
                         )
                     }
                 )
-
-
             }
         }
     }
@@ -365,158 +359,141 @@ fun HomeScreenComplete(navController: NavHostController, bottomPadding: PaddingV
 // ==================================================================================
 // --- SECCIÓN: COMPONENTES DEL TOP BAR (REFACTORIZADO) ---
 // ==================================================================================
-
 @Composable
 fun TopHeaderSection(
     navController: NavHostController,
     profileMode: ProfileMode,
+    user: UserEntity?, // <-- AHORA RECIBE EL USUARIO REAL (Puede ser null al cargar)
     onModeToggle: () -> Unit
 ) {
-    // Usamos el currentUser simulado
-    val user = remember { UserSampleDataFalso.currentUser }
-    
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    // --- NUEVO --- Fondo negro mate para toda la barra superior
+    Surface(
+        color = Color(0xFF121212),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        // --- 1. COLUMNA IZQUIERDA: WIDGET DE CLIMA ---
-        Box(modifier = Modifier.weight(1f)) {
-            WeatherWidget(temperature = "24°C")
-        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 8.dp) // Padding reducido para más espacio
+                .height(IntrinsicSize.Min), // Para que todos los hijos tengan la misma altura
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // --- 1. COLUMNA IZQUIERDA: WIDGET DE CLIMA ---
+            Box(modifier = Modifier.weight(1f)) {
+                WeatherWidget(temperature = "24°C")
+            }
 
-        Spacer(modifier = Modifier.width(8.dp))
+            // --- 2. COLUMNA CENTRAL: UBICACIÓN Y SELECTOR ---
+            Box(modifier = Modifier.weight(1.3f)) { // Peso ligeramente mayor
+                LocationSelector(user = user, mode = profileMode)
+            }
 
-        // --- 2. COLUMNA CENTRAL: UBICACIÓN Y SELECTOR ---
-        Box(modifier = Modifier.weight(1.2f), contentAlignment = Alignment.Center) {
-            LocationSelector(user = user, mode = profileMode)
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // --- 3. COLUMNA DERECHA: PERFIL Y CAMBIO DE MODO ---
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            ProfileModeSection(
-                user = user,
-                mode = profileMode,
-                onModeToggle = onModeToggle,
-                navController = navController
-            )
+            // --- 3. COLUMNA DERECHA: PERFIL Y CAMBIO DE MODO ---
+            Box(modifier = Modifier.weight(1f)) {
+                ProfileModeSection(
+                    user = user,
+                    mode = profileMode,
+                    onModeToggle = onModeToggle,
+                    navController = navController
+                )
+            }
         }
     }
 }
 
-/**
- * Widget que muestra información del clima de forma compacta.
- */
 @Composable
 fun WeatherWidget(temperature: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .padding(horizontal = 8.dp, vertical = 6.dp)
+    Card(
+        modifier = Modifier.fillMaxSize(), // Ocupa todo el espacio disponible
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f) // Fondo blanco semitransparente
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
     ) {
-        Icon(
-            imageVector = Icons.Rounded.WbSunny,
-            contentDescription = "Clima",
-            tint = Color(0xFFFFD700),
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Column {
-            Text(
-                text = temperature,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 14.sp
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.WbSunny,
+                contentDescription = "Clima",
+                tint = Color(0xFFFFD700),
+                modifier = Modifier.size(24.dp)
             )
-            Text(
-                text = "Tucumán",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray,
-                fontSize = 8.sp
-            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = temperature,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "Tucumán",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
         }
     }
 }
 
-/**
- * Selector de ubicación que permite filtrar según el modo (Cliente/Empresa).
- */
 @Composable
-fun LocationSelector(user: UserFalso?, mode: ProfileMode) {
+fun LocationSelector(user: UserEntity?, mode: ProfileMode) {
     var expanded by remember { mutableStateOf(false) }
-    // Estado para la dirección seleccionada actualmente
     var currentAddress by remember { 
         mutableStateOf(user?.personalAddresses?.firstOrNull()?.calle ?: "Ubicación") 
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { expanded = true }
-            .padding(horizontal = 4.dp, vertical = 2.dp)
+    // --- NUEVO: Efecto para actualizar la dirección por defecto al cambiar de modo ---
+    LaunchedEffect(mode, user) {
+        currentAddress = if (mode == ProfileMode.CLIENTE) {
+            user?.personalAddresses?.firstOrNull()?.calle ?: "Sin Dirección"
+        } else {
+            user?.companies?.firstOrNull()?.branches?.firstOrNull()?.address?.fullString() ?: "Sin Sucursal"
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxSize(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)),
+        onClick = { expanded = true }
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.weight(1f, fill = false)
+        Box(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center
         ) {
+            // Solo Texto Centrado
             Text(
                 text = currentAddress,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(4.dp))
-        
-        // Icono para actualización en tiempo real
-        IconButton(
-            onClick = { /* Lógica para actualizar ubicación GPS */ },
-            modifier = Modifier.size(28.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.MyLocation,
-                contentDescription = "Actualizar GPS",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
+                textAlign = TextAlign.Center,
+                color = Color.White
             )
         }
 
-        // MENÚ DESPLEGABLE DE UBICACIONES
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             modifier = Modifier.widthIn(min = 200.dp)
         ) {
+            // --- NUEVO: Lógica para mostrar direcciones según el modo ---
             if (mode == ProfileMode.CLIENTE) {
-                // SECCIÓN CLIENTE
-                Text(
-                    "Mis Direcciones Guardadas",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Mis Direcciones", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = FontWeight.Bold)
                 user?.personalAddresses?.forEach { address ->
                     DropdownMenuItem(
-                        text = { Text(address.fullString(), fontSize = 12.sp) },
+                        text = { Text(address.fullString()) },
                         onClick = {
                             currentAddress = address.calle
                             expanded = false
@@ -524,108 +501,112 @@ fun LocationSelector(user: UserFalso?, mode: ProfileMode) {
                     )
                 }
             } else {
-                // SECCIÓN EMPRESA
-                Text(
-                    "Ubicaciones de Mis Empresas",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold
-                )
-                user?.companies?.forEachIndexed { index, company ->
-                    if (index > 0) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    
-                    // Nombre de la empresa (No clickeable directamente si tiene sucursales)
-                    Text(
-                        text = company.name.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
-                    
-                    // Listar sucursales de la empresa
+                Text("Mis Empresas", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = FontWeight.Bold)
+                user?.companies?.forEach { company ->
                     company.branches.forEach { branch ->
-                        DropdownMenuItem(
-                            text = { 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Store, null, modifier = Modifier.size(16.dp), tint = Color.Gray)
-                                    Spacer(Modifier.width(8.dp))
-                                    Column {
-                                        Text(branch.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                        Text(branch.address.fullString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                    }
-                                }
-                            },
+                         DropdownMenuItem(
+                            text = { Text("${company.name} - ${branch.name}") },
                             onClick = {
-                                currentAddress = "${company.name} - ${branch.name}"
+                                currentAddress = branch.name
                                 expanded = false
                             }
                         )
                     }
                 }
             }
-        }
-    }
-}
-
-/**
- * Sección derecha que muestra el perfil y permite cambiar de modo (Cliente/Empresa).
- */
-@Composable
-fun ProfileModeSection(
-    user: UserFalso?,
-    mode: ProfileMode,
-    onModeToggle: () -> Unit,
-    navController: NavHostController
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .clickable { onModeToggle() }
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
-    ) {
-        Column(horizontalAlignment = Alignment.End) {
-            // Etiqueta de Modo
-            Surface(
-                color = if (mode == ProfileMode.CLIENTE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                shape = RoundedCornerShape(4.dp)
-            ) {
-                Text(
-                    text = if (mode == ProfileMode.CLIENTE) "CLIENTE" else "EMPRESA",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                    fontSize = 7.sp
-                )
-            }
-
-        }
-        
-        // Imagen de Perfil
-        Surface(
-            shape = CircleShape,
-            modifier = Modifier
-                .size(32.dp)
-                .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), CircleShape)
-                .clickable { navController.navigate(Screen.PerfilCliente.route) },
-            shadowElevation = 2.dp
-        ) {
-            AsyncImage(
-                model = user?.profileImageUrl,
-                contentDescription = "Perfil",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                error = painterResource(id = R.drawable.iconapp),
-                fallback = painterResource(id = R.drawable.iconapp)
+            
+            HorizontalDivider()
+            
+            // Opción de Ubicación Actual con Refresh
+            DropdownMenuItem(
+                text = { 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Ubicación Actual")
+                        Icon(Icons.Default.Refresh, contentDescription = "Actualizar", tint = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                onClick = {
+                    currentAddress = "Ubicación GPS Actual"
+                    expanded = false
+                }
             )
         }
     }
 }
+/**
+ * --- MODIFICADO ---
+ * Sección de perfil con nombre, modo en dos líneas y nuevo estilo.
+ */
+@Composable
+fun ProfileModeSection(
+    user: UserEntity?,
+    mode: ProfileMode,
+    onModeToggle: () -> Unit,
+    navController: NavHostController
+) {
+    Card(
+        modifier = Modifier.fillMaxSize(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)),
+        onClick = onModeToggle
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            // Columna para Modo
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Modo", 
+                    style = MaterialTheme.typography.labelSmall, 
+                    color = Color.Gray
+                )
+                Text(
+                    text = if (mode == ProfileMode.CLIENTE) "Cliente" else "Empresa",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (mode == ProfileMode.CLIENTE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                )
+            }
+            
+            // Columna para Perfil (Imagen y Nombre)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.clickable { navController.navigate(Screen.PerfilCliente.route) }
+            ) {
+                AsyncImage(
+                    model = user?.profileImageUrl,
+                    contentDescription = "Perfil",
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), CircleShape),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(id = R.drawable.iconapp),
+                    fallback = painterResource(id = R.drawable.iconapp)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = user?.name ?: "Usuario",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
 
+// ... (El resto del archivo permanece igual)
 @Composable
 fun SearchResultsPanel(
     isVisible: Boolean,
@@ -852,9 +833,8 @@ fun AutoPlayingBannerSection(
     // Iniciamos en un número alto para simular scroll infinito (loop)
     val pagerState = rememberPagerState(initialPage = Int.MAX_VALUE / 2, pageCount = { Int.MAX_VALUE })
     
-    // Estados para los diálogos de Ad y Promo
-    var showAdDialog by remember { mutableStateOf<BannerContent.GoogleAd?>(null) } // GoogleAd
-    var showPromoDialog by remember { mutableStateOf<BannerContent.ProviderPromo?>(null) } // ProviderPromo
+    var showAdDialog by remember { mutableStateOf<BannerContent.GoogleAd?>(null) }
+    var showPromoDialog by remember { mutableStateOf<BannerContent.ProviderPromo?>(null) }
 
     // Efecto de Auto-play: Cambia de página cada 4.5 segundos
     LaunchedEffect(pagerState.currentPage) {
@@ -933,9 +913,9 @@ fun AutoPlayingBannerSection(
             }
         }
     }
-    
+
     // --- DIÁLOGOS ---
-    
+
     // Diálogo para Google Ads
     if (showAdDialog != null) {
         AlertDialog(
@@ -1238,7 +1218,7 @@ fun CategoryCard(item: CategoryItem, onClick: () -> Unit) {
                             )
                         }
                         // Menú desplegable para "NUEVO"
-                        DropdownMenu(expanded = showNewMenu, onDismissRequest = { showNewMenu = false }) { 
+                        DropdownMenu(expanded = showNewMenu, onDismissRequest = { showNewMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("¡Esta categoría es nueva!") }, 
                                 onClick = { showNewMenu = false }
@@ -1260,7 +1240,7 @@ fun CategoryCard(item: CategoryItem, onClick: () -> Unit) {
                             }
                         }
                         // Menú desplegable para "ALERTA"
-                        DropdownMenu(expanded = showPrestadorMenu, onDismissRequest = { showPrestadorMenu = false }) { 
+                        DropdownMenu(expanded = showPrestadorMenu, onDismissRequest = { showPrestadorMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("Hay nuevos prestadores disponibles") }, 
                                 onClick = { showPrestadorMenu = false }
@@ -1339,7 +1319,34 @@ fun FavoritesPanelPreview() {
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreenCompletePreview() { 
+    val fakeUser = UserEntity(
+        id = "preview_user",
+        username = "PreviewUser",
+        name = "Preview",
+        lastName = "User",
+        matricula = null,
+        titulo = null,
+        emails = emptyList(),
+        phones = emptyList(),
+        profileImageUrl = null,
+        bannerImageUrl = null,
+        personalAddresses = listOf(Address(calle="Calle Falsa 123", localidad="Tucuman", provincia="Tucuman", pais="Argentina")),
+        hasCompanyProfile = false,
+        isSubscribed = false,
+        isVerified = false,
+        isOnline = true,
+        isFavorite = false,
+        rating = 4.5f,
+        companies = emptyList()
+    )
+
     MyApplicationTheme { 
-        HomeScreenComplete(rememberNavController(), PaddingValues(0.dp)) 
+        HomeScreenContent(
+            navController = rememberNavController(), 
+            bottomPadding = PaddingValues(0.dp),
+            profileMode = ProfileMode.CLIENTE,
+            userState = fakeUser,
+            onModeToggle = {}
+        )
     } 
 }

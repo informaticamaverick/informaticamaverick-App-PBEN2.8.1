@@ -85,19 +85,41 @@ fun geminiGradientEffect(): Brush {
 }
 
 /**
- * Botón de acción pequeño usado en el overlay del FAB.
+ * Botón de acción pequeño con ícono y texto DENTRO del botón.
  */
 @Composable
-fun SmallActionFab(icon: ImageVector, onClick: () -> Unit) {
+fun SmallActionFab(
+    icon: ImageVector,
+    label: String,
+    iconColor: Color,
+    onClick: () -> Unit
+) {
     Surface(
-        modifier = Modifier.size(48.dp),
-        shape = CircleShape,
-        color = Color(0xFF1E1E1E),
-        shadowElevation = 8.dp,
-        onClick = onClick
+        onClick = onClick,
+        modifier = Modifier.size(width = 64.dp, height = 56.dp), // Ancho para que entre el texto, alto como el FAB
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF1E1E1E), // Fondo oscuro
+        shadowElevation = 6.dp
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Box(
+            modifier = Modifier.fillMaxSize().padding(vertical = 6.dp, horizontal = 4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor, // Color personalizado para el ícono
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .size(24.dp)
+            )
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 }
@@ -153,7 +175,7 @@ fun GeminiSplitFAB(
 
     Row(
         verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp) // --- AUMENTADO --- Espacio entre los botones y el FAB principal
     ) {
         // --- ACCIONES RÁPIDAS (IZQUIERDA) ---
         AnimatedVisibility(
@@ -161,7 +183,7 @@ fun GeminiSplitFAB(
             enter = fadeIn() + slideInHorizontally(),
             exit = fadeOut() + slideOutHorizontally()
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { // --- AUMENTADO --- Espacio entre los botones de acción
                 secondaryActions()
             }
         }

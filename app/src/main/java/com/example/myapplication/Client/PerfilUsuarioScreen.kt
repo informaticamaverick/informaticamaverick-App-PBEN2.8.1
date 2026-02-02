@@ -33,71 +33,74 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.rememberAsyncImagePainter
+import com.example.myapplication.R
+import com.example.myapplication.ui.screens.ProfileMode
 import com.example.myapplication.ui.theme.MyApplicationTheme
-import com.example.myapplication.R 
 import kotlinx.coroutines.launch
 
 // =================================================================================
-// --- PANTALLA DE PERFIL DE USUARIO ---
+// --- SECCIÓN 1: PANTALLA DE PERFIL DE USUARIO (PRINCIPAL) ---
 // =================================================================================
 
 /**
  * Pantalla principal del perfil de usuario.
- * Maneja la navegación y el estado global del modo (Cliente/Empresa).
+ * Centraliza la lógica de obtención de datos desde Room y la gestión de modos.
  */
 @Composable
 fun PerfilUsuarioScreen(
     onNavigateBack: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    viewModel: ProfileSharedViewModel = hiltViewModel()
 ) {
-    // Obtenemos el usuario actual desde los datos falsos
-    val user = remember { UserSampleDataFalso.currentUser }
-    
-    // Estado para controlar qué vista se muestra: Cliente (false) o Empresa (true)
-    // Por defecto inicia en modo cliente (false) según requerimiento.
-    var isCompanyViewActive by remember { mutableStateOf(false) }
-    
-    // Trigger para refrescar la UI al guardar cambios en listas mutables durante la edición
-    var refreshTrigger by remember { mutableIntStateOf(0) }
-    
-    PerfilUsuarioContent(
-        user = user,
-        isCompanyViewActive = isCompanyViewActive,
-        onToggleViewMode = { 
-            // Solo permite cambiar si tiene perfil de empresa habilitado
-            if (user.hasCompanyProfile) isCompanyViewActive = !isCompanyViewActive 
-        },
-        onNavigateBack = onNavigateBack,
-        onLogout = onLogout,
-        onRefresh = { refreshTrigger++ }
-    )
+    // Suscripción al estado global del perfil (Room es la Fuente Única de Verdad)
+    val profileMode by viewModel.profileMode.collectAsState()
+    val userState by viewModel.userState.collectAsState()
+    val isCompanyViewActive = profileMode == ProfileMode.EMPRESA
+
+    val currentUser = userState
+    if (currentUser == null) {
+        // Estado de carga inicial mientras se inicializa la base de datos local
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+    } else {
+        // Renderizado del contenido una vez que tenemos datos reales de Room
+        PerfilUsuarioContent(
+            user = currentUser,
+            isCompanyViewActive = isCompanyViewActive,
+            onToggleViewMode = viewModel::toggleProfileMode,
+            onNavigateBack = onNavigateBack,
+            onLogout = onLogout,
+            onSave = { updatedUser ->
+                // Guardado persistente en Room
+                // 🔥 Sincronización remota: El ViewModel se encargará de enviar 'updatedUser' a Firestore
+                viewModel.saveUserProfile(updatedUser)
+            }
+        )
+    }
 }
 
 /**
- * Contenido principal de la pantalla de perfil.
- * Implementa Scaffold, Animación de Header y Lógica de Pagers.
+ * Estructura visual del perfil (Scaffold, Barra superior animada y Contenido).
  */
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PerfilUsuarioContent(
-    user: UserFalso,
+    user: UserEntity,
     isCompanyViewActive: Boolean,
     onToggleViewMode: () -> Unit,
     onNavigateBack: () -> Unit,
     onLogout: () -> Unit,
-    onRefresh: () -> Unit
+    onSave: (UserEntity) -> Unit
 ) {
-    // --- ESTADOS DE UI ---
-    val lazyListState = rememberLazyListState() // Estado del scroll principal
-    var showEditSheet by remember { mutableStateOf(false) } // Controla la visibilidad del sheet de edición
-    
-    // Estados del FAB Gemini (Boton flotante interactivo)
+    val lazyListState = rememberLazyListState()
+    var showEditSheet by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
-    var isSearchActive by remember { mutableStateOf(false) }
     
-    // Cálculo para la animación de transparencia del TopBar al scrollear
+    // Configuración para la animación del TopBar basada en el scroll
     val density = LocalDensity.current
     val headerSizePx = with(density) { 280.dp.toPx() }
     val scrollProgress by remember {
@@ -121,30 +124,28 @@ fun PerfilUsuarioContent(
     ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
             
-            // --- CONTENIDO SCROLLABLE PRINCIPAL ---
+            // --- LISTA PRINCIPAL DE CONTENIDO ---
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 100.dp)
             ) {
-                // 1. HEADER (Común para ambos modos, pero con comportamiento distinto en botones)
+                // 1. CABECERA (Portada, Foto y Nombre)
                 item {
                     ProfileHeader(
                         user = user, 
                         isCompanyMode = isCompanyViewActive,
                         onToggleMode = onToggleViewMode,
-                        onEditPhoto = { /* Acción editar foto perfil */ },
-                        onEditCover = { /* Acción editar portada */ }
+                        onEditPhoto = { /* 🔥 Futuro: Cambiar foto perfil en Firestore/Storage */ },
+                        onEditCover = { /* 🔥 Futuro: Cambiar portada en Firestore/Storage */ }
                     )
                 }
 
-                // 2. CONTENIDO SEGÚN EL MODO (EXCLUSIVO)
+                // 2. BLOQUES DE INFORMACIÓN DINÁMICA
                 if (isCompanyViewActive) {
-                    // --- VISTA EMPRESA (CARRUSEL DE EMPRESAS) ---
-                    // Si el usuario tiene empresas, mostramos el carrusel
+                    // --- VISTA MODO EMPRESA ---
                     if (user.companies.isNotEmpty()) {
                         item {
-                            // Pager para navegar entre múltiples empresas
                             val companyPagerState = rememberPagerState(pageCount = { user.companies.size })
                             
                             HorizontalPager(
@@ -156,40 +157,12 @@ fun PerfilUsuarioContent(
                                 val company = user.companies[page]
                                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                                     Spacer(modifier = Modifier.height(24.dp))
-                                    
-                                    // --- TARJETA DE INFORMACIÓN DE LA EMPRESA ---
-                                    // Título usando el nombre de la empresa
-                                    ArchiveroSection(
-                                        title = company.name, // Requisito 3: Nombre de la empresa
-                                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                                        isProviderMode = true
-                                    ) {
+                                    ArchiveroSection(title = company.name, color = MaterialTheme.colorScheme.tertiaryContainer) {
                                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            // Imagen de perfil de la empresa (si existe)
-                                            if (company.profileImageUrl != null) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Image(
-                                                        painter = rememberAsyncImagePainter(model = company.profileImageUrl),
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(50.dp).clip(CircleShape).border(1.dp, Color.Gray, CircleShape),
-                                                        contentScale = ContentScale.Crop
-                                                    )
-                                                    Spacer(modifier = Modifier.width(12.dp))
-                                                    Text(company.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                                }
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            } else {
-                                                Text(company.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                            }
-
                                             InfoRow(Icons.Default.Domain, "Razón Social", company.razonSocial)
                                             InfoRow(Icons.Default.Badge, "CUIT", company.cuit)
-                                            
-                                            // Nota: Servicios quitados de la tarjeta (Requisito 4)
                                         }
                                     }
-                                    
-                                    // Divider separando info de empresa de las sucursales
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                                     
                                     // --- CARRUSEL DE SUCURSALES Y EQUIPOS ---
@@ -203,64 +176,15 @@ fun PerfilUsuarioContent(
                                             contentPadding = PaddingValues(horizontal = 4.dp)
                                         ) { branchPage ->
                                             val branch = company.branches[branchPage]
-                                            
                                             Column {
-                                                // Tarjeta de Dirección de la Sucursal
-                                                ArchiveroSection(
-                                                    title = branch.name, // "Casa Central", "Sucursal X"
-                                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                                    isProviderMode = true
-                                                ) {
+                                                ArchiveroSection(title = branch.name, color = MaterialTheme.colorScheme.primaryContainer) {
                                                     InfoRow(Icons.Default.Place, "Dirección", branch.address.fullString())
                                                 }
-                                                
-                                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                                                
-                                                // Sección Equipo de Trabajo
-                                                Text(
-                                                    "Equipo de Trabajo", 
-                                                    style = MaterialTheme.typography.titleMedium, 
-                                                    color = Color.Black, // Requisito: Negro
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.padding(start = 8.dp)
-                                                )
-                                                
+                                                Spacer(modifier = Modifier.height(12.dp))
+                                                Text("Equipo de Trabajo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
                                                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                                                
-                                                // Carrusel de Empleados de esta sucursal
-                                                if (branch.employees.isNotEmpty()) {
-                                                    LazyRow(
-                                                        contentPadding = PaddingValues(vertical = 8.dp),
-                                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                                    ) {
-                                                        items(branch.employees) { emp ->
-                                                            EmployeeRoundedCard(emp)
-                                                        }
-                                                    }
-                                                } else {
-                                                    Text("Sin personal asignado.", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(8.dp))
-                                                }
-                                                
-                                                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
-                                            }
-                                        }
-                                        
-                                        // Indicador de Puntos (Dots) para saber que hay varias sucursales
-                                        if (company.branches.size > 1) {
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.Center
-                                            ) {
-                                                repeat(company.branches.size) { iteration ->
-                                                    val color = if (branchPagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else Color.LightGray
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .padding(4.dp)
-                                                            .clip(CircleShape)
-                                                            .background(color)
-                                                            .size(8.dp)
-                                                    )
+                                                LazyRow(contentPadding = PaddingValues(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                    items(branch.employees) { emp -> EmployeeRoundedCard(emp) }
                                                 }
                                             }
                                         }
@@ -269,28 +193,17 @@ fun PerfilUsuarioContent(
                             }
                         }
                     } else {
-                        // Estado vacío empresa
-                        item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text("No hay datos de empresa cargados.", color = Color.Gray)
-                            }
-                        }
+                        item { Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("No tienes empresas vinculadas.", color = Color.Gray) } }
                     }
                 } else {
-                    // --- VISTA CLIENTE ---
-                    // Datos Personales (Mails y Teléfonos)
+                    // --- VISTA MODO CLIENTE ---
                     if (user.emails.isNotEmpty() || user.phones.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(24.dp))
-                            // Títulos arriba a la izquierda
-                            ArchiveroSection(
-                                title = "Contacto", 
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                isProviderMode = false
-                            ) {
+                            ArchiveroSection(title = "Contacto", color = MaterialTheme.colorScheme.secondaryContainer) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    user.emails.forEach { email -> InfoRow(Icons.Default.Email, "Email", email) }
-                                    user.phones.forEach { phone -> InfoRow(Icons.Default.Phone, "Teléfono", phone) }
+                                    user.emails.forEach { InfoRow(Icons.Default.Email, "Email", it) }
+                                    user.phones.forEach { InfoRow(Icons.Default.Phone, "Teléfono", it) }
                                 }
                             }
                         }
@@ -300,72 +213,45 @@ fun PerfilUsuarioContent(
                     if (user.personalAddresses.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(24.dp))
-                            ArchiveroSection(
-                                title = "Mis Direcciones", 
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                isProviderMode = false
-                            ) {
+                            ArchiveroSection(title = "Mis Direcciones", color = MaterialTheme.colorScheme.primaryContainer) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    user.personalAddresses.forEach { addr ->
-                                        InfoRow(Icons.Default.Home, "Domicilio", addr.fullString())
-                                    }
+                                    user.personalAddresses.forEach { addr -> InfoRow(Icons.Default.Home, "Domicilio", addr.fullString()) }
                                 }
-                            }
-                        }
-                    }
-                    
-                    // Si no hay nada
-                    if (user.emails.isEmpty() && user.phones.isEmpty() && user.personalAddresses.isEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text("Completa tu perfil para ver tu información aquí.", color = Color.Gray)
                             }
                         }
                     }
                 }
 
-                // Botón Cerrar Sesión (Siempre al final)
+                // 3. BOTÓN DE CERRAR SESIÓN
                 item {
                     Spacer(modifier = Modifier.height(48.dp))
                     Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
                         Button(
-                            onClick = onLogout,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer, 
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                            ),
+                            onClick = {
+                                // 🔥 Futuro: Firebase Auth Logout
+                                onLogout()
+                            }, 
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer), 
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ExitToApp, null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Cerrar Sesión")
+                            Icon(Icons.AutoMirrored.Filled.ExitToApp, null); Spacer(modifier = Modifier.width(8.dp)); Text("Cerrar Sesión")
                         }
                     }
                 }
             }
 
-            // --- FAB GEMINI (Botón Flotante con herramientas) ---
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .zIndex(10f),
-                contentAlignment = Alignment.BottomEnd
-            ) {
+            // --- 4. FAB GEMINI (BOTÓN FLOTANTE INTERACTIVO) ---
+            Box(modifier = Modifier.fillMaxSize().padding(16.dp).zIndex(10f), contentAlignment = Alignment.BottomEnd) {
                 GeminiSplitFAB(
                     isExpanded = isFabExpanded,
-                    isSearchActive = isSearchActive,
+                    isSearchActive = false,
                     onToggleExpand = { isFabExpanded = !isFabExpanded },
-                    onActivateSearch = { /* No search */ },
-                    onCloseSearch = { /* No search */ },
+                    onActivateSearch = {},
+                    onCloseSearch = {},
                     secondaryActions = {
-                         SmallActionFab(
-                             icon = Icons.Default.Edit,
-                             onClick = { showEditSheet = true }
-                         )
+                         SmallActionFab(icon = Icons.Default.Edit, label = "Editar", iconColor = MaterialTheme.colorScheme.primary, onClick = { showEditSheet = true })
                     },
                     expandedTools = {
-                        // Botón para cambiar Modo (Cliente/Empresa)
                         if (user.hasCompanyProfile) {
                             SmallFabTool(
                                 label = if (isCompanyViewActive) "Modo Cliente" else "Modo Empresa",
@@ -380,189 +266,105 @@ fun PerfilUsuarioContent(
         }
     }
 
-    // --- SHEET DE EDICIÓN (Modal Inferior) ---
+    // Modal de edición - Maneja ambos modos y guarda en Room
     if (showEditSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showEditSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            // Mostramos el editor correspondiente al modo activo
+        ModalBottomSheet(onDismissRequest = { showEditSheet = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             if (isCompanyViewActive) {
-                EditCompanyModeContent(user = user, onSave = { onRefresh(); showEditSheet = false })
+                EditCompanyModeContent(
+                    user = user, 
+                    onSave = { updatedUser ->
+                        onSave(updatedUser)
+                        showEditSheet = false
+                    }
+                )
             } else {
-                EditClientModeContent(user = user, onSave = { onRefresh(); showEditSheet = false })
+                EditClientModeContent(
+                    user = user, 
+                    onSave = { updatedUser ->
+                        onSave(updatedUser)
+                        showEditSheet = false 
+                    }
+                )
             }
         }
     }
 }
 
 // =================================================================================
-// --- COMPONENTES VISUALES ---
+// --- SECCIÓN 3: COMPONENTES VISUALES ---
 // =================================================================================
 
-/**
- * Cabecera del perfil con Foto de Portada, Avatar, Nombre y Botón de cambio de modo.
- */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileHeader(
-    user: UserFalso, 
-    isCompanyMode: Boolean, 
-    onToggleMode: () -> Unit,
-    onEditPhoto: () -> Unit,
-    onEditCover: () -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(280.dp)
-    ) {
-        // Fondo / Portada
-        Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background))))
+fun AnimatedTopBarProfile(title: String, scrollProgress: Float, onBackClick: () -> Unit, isCompanyMode: Boolean) {
+    val alpha = animateFloatAsState(targetValue = scrollProgress, label = "alpha").value
+    if (alpha > 0.1f) {
+        TopAppBar(
+            title = { Text(title, fontWeight = FontWeight.Bold) },
+            navigationIcon = { IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") } },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = alpha)),
+            actions = { if(isCompanyMode) Icon(Icons.Default.Business, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(end = 16.dp)) },
+            modifier = Modifier.graphicsLayer { this.alpha = alpha }
+        )
+    } else {
+        Box(modifier = Modifier.statusBarsPadding().padding(top = 16.dp, start = 16.dp)) {
+            IconButton(onClick = onBackClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.3f), CircleShape)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
+            }
+        }
+    }
+}
 
-        // Etiqueta PREMIUM (Parte Superior Izquierda del Banner)
+@Composable
+fun ProfileHeader(user: UserEntity, isCompanyMode: Boolean, onToggleMode: () -> Unit, onEditPhoto: () -> Unit, onEditCover: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+        Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background))))
         if (user.isSubscribed) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 40.dp, start = 0.dp),
-                color = Color(0xFFFFD700), // Dorado
-                shape = RoundedCornerShape(bottomEnd = 16.dp, topEnd = 16.dp),
-                shadowElevation = 6.dp
-            ) {
+            Surface(modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp), color = Color(0xFFFFD700), shape = RoundedCornerShape(bottomEnd = 16.dp, topEnd = 16.dp), shadowElevation = 6.dp) {
                 Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Star, null, tint = Color.Black, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("PREMIUM", fontWeight = FontWeight.Bold, color = Color.Black, style = MaterialTheme.typography.labelMedium)
+                    Text("PREMIUM", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 11.sp)
                 }
             }
         }
-
-        // Botón Editar Portada (Parte Superior Derecha)
-        IconButton(
-            onClick = onEditCover,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 40.dp, end = 16.dp)
-                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-        ) {
+        IconButton(onClick = onEditCover, modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 16.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)) {
             Icon(Icons.Default.CameraAlt, contentDescription = "Editar Portada", tint = Color.White)
         }
-
-        // Contenido Central (Avatar y Nombre)
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Box {
-                // Avatar (Imagen del usuario, o de la empresa actual podría ser una mejora futura)
-                Image(
-                    painter = rememberAsyncImagePainter(model = user.profileImageUrl ?: R.drawable.iconapp),
-                    contentDescription = null,
-                    modifier = Modifier.size(120.dp).clip(CircleShape).border(4.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-                
-                // Botón Editar Foto Perfil (Abajo Derecha del Avatar)
-                IconButton(
-                    onClick = onEditPhoto,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 8.dp, y = 8.dp)
-                        .size(36.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
-                ) {
+                Image(painter = rememberAsyncImagePainter(model = user.profileImageUrl ?: R.drawable.iconapp), contentDescription = null, modifier = Modifier.size(120.dp).clip(CircleShape).border(4.dp, MaterialTheme.colorScheme.surface, CircleShape), contentScale = ContentScale.Crop)
+                IconButton(onClick = onEditPhoto, modifier = Modifier.align(Alignment.BottomEnd).offset(x = 8.dp, y = 8.dp).size(36.dp).background(MaterialTheme.colorScheme.primary, CircleShape).border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)) {
                     Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
-
-                // Icono Verificado (Si corresponde)
                 if (user.isVerified) {
-                    Icon(
-                        imageVector = Icons.Filled.Verified,
-                        contentDescription = "Verificado",
-                        tint = Color(0xFF1DA1F2), // Azul estilo verificado
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .offset(x = (-4).dp, y = 4.dp)
-                            .size(32.dp)
-                            .background(Color.White, CircleShape)
-                            .border(2.dp, Color.White, CircleShape)
-                    )
+                    Icon(imageVector = Icons.Filled.Verified, contentDescription = "Verificado", tint = Color(0xFF1DA1F2), modifier = Modifier.align(Alignment.BottomStart).offset(x = (-4).dp, y = 4.dp).size(32.dp).background(Color.White, CircleShape).border(2.dp, Color.White, CircleShape))
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text("${user.name} ${user.lastName}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            
-            // Subtítulo
-            if (!isCompanyMode && user.emails.isNotEmpty()) {
-                Text(user.emails.first(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else if (isCompanyMode && user.companies.isNotEmpty()) {
-                Text(user.companies.first().name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Text("Usuario Verificado", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-
-        // Botón Switch Modo (Abajo Derecha de la Portada)
         if (user.hasCompanyProfile) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-                    .clickable { onToggleMode() },
-                color = if (isCompanyMode) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
-                shape = RoundedCornerShape(24.dp),
-                shadowElevation = 6.dp
-            ) {
+            Surface(modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).clickable { onToggleMode() }, color = if (isCompanyMode) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary, shape = RoundedCornerShape(24.dp), shadowElevation = 6.dp) {
                 Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (isCompanyMode) "Modo Empresa" else "Modo Cliente", 
-                        color = Color.White, 
-                        style = MaterialTheme.typography.labelMedium, 
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(if (isCompanyMode) "Modo Empresa" else "Modo Cliente", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        if (isCompanyMode) Icons.Default.Business else Icons.Default.Person, 
-                        null, 
-                        tint = Color.White, 
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(if (isCompanyMode) Icons.Default.Business else Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
     }
 }
 
-/**
- * Tarjeta rectangular con bordes redondeados para el carrusel de empleados.
- */
 @Composable
 fun EmployeeRoundedCard(employee: Employee) {
-    Card(
-        modifier = Modifier.width(200.dp).height(80.dp), // Rectangular horizontal
-        shape = RoundedCornerShape(12.dp), // Bordes redondeados
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Image(
-                painter = rememberAsyncImagePainter(model = employee.photoUrl ?: R.drawable.iconapp),
-                contentDescription = null,
-                modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp)), // Foto cuadrada redondeada
-                contentScale = ContentScale.Crop
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(verticalArrangement = Arrangement.Center) {
-                Text(
-                    "${employee.name} ${employee.lastName}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
-                Text(
-                    employee.position,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
+    Card(modifier = Modifier.width(200.dp).height(80.dp), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(modifier = Modifier.fillMaxSize().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Image(painter = rememberAsyncImagePainter(model = employee.photoUrl ?: R.drawable.iconapp), contentDescription = null, modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+            Spacer(modifier = Modifier.width(12.dp)); Column {
+                Text("${employee.name} ${employee.lastName}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(employee.position, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
             }
         }
     }
@@ -573,40 +375,14 @@ fun EmployeeRoundedCard(employee: Employee) {
  * Usada para agrupar información.
  */
 @Composable
-fun ArchiveroSection(
-    title: String, 
-    color: Color, 
-    isProviderMode: Boolean = false,
-    content: @Composable () -> Unit
-) {
+fun ArchiveroSection(title: String, color: Color, content: @Composable () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        // Cabecera de la tarjeta
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(width = 4.dp, height = 18.dp)
-                    .background(color, RoundedCornerShape(2.dp))
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Box(modifier = Modifier.size(width = 4.dp, height = 18.dp).background(color, RoundedCornerShape(2.dp)))
+            Spacer(modifier = Modifier.width(8.dp)); Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
-
-        // Tarjeta de Contenido
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            border = BorderStroke(1.dp, color.copy(alpha = 0.5f))
-        ) {
-            Box(modifier = Modifier.fillMaxWidth().background(color.copy(alpha = 0.05f)).padding(16.dp)) {
-                content()
-            }
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, color.copy(alpha = 0.5f)), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Box(modifier = Modifier.fillMaxWidth().background(color.copy(alpha = 0.05f)).padding(16.dp)) { content() }
         }
     }
 }
@@ -615,147 +391,95 @@ fun ArchiveroSection(
 fun InfoRow(icon: ImageVector, label: String, value: String) {
     Row(verticalAlignment = Alignment.Top) {
         Icon(icon, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
+        Spacer(modifier = Modifier.width(12.dp)); Column {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AnimatedTopBarProfile(title: String, scrollProgress: Float, onBackClick: () -> Unit, isCompanyMode: Boolean) {
-    val alpha = animateFloatAsState(targetValue = scrollProgress, label = "").value
-    if (alpha > 0.1f) {
-        TopAppBar(
-            title = { Text(title) },
-            navigationIcon = { IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background.copy(alpha = alpha)),
-            actions = {
-                if(isCompanyMode) Icon(Icons.Default.Business, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(end = 16.dp))
-            },
-            modifier = Modifier.graphicsLayer { this.alpha = alpha }
-        )
-    } else {
-        Box(modifier = Modifier.padding(top = 16.dp, start = 16.dp)) {
-            IconButton(onClick = onBackClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.3f), CircleShape)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
-            }
-        }
-    }
-}
-
 // =================================================================================
-// --- PANTALLAS DE EDICIÓN SEPARADAS ---
+// --- SECCIÓN 4: PANTALLAS DE EDICIÓN CON PERSISTENCIA ---
 // =================================================================================
 
-// --- EDITOR MODO CLIENTE ---
 @Composable
-fun EditClientModeContent(user: UserFalso, onSave: () -> Unit) {
+fun EditClientModeContent(user: UserEntity, onSave: (UserEntity) -> Unit) {
     var name by remember { mutableStateOf(user.name) }
     var lastName by remember { mutableStateOf(user.lastName) }
-    // Estado para "Activar" el perfil empresa si no lo tiene
     var hasCompanyProfile by remember { mutableStateOf(user.hasCompanyProfile) }
-    var refresh by remember { mutableIntStateOf(0) }
+    val emails = remember { mutableStateListOf(*user.emails.toTypedArray()) }
+    val phones = remember { mutableStateListOf(*user.phones.toTypedArray()) }
+    val addresses = remember { mutableStateListOf(*user.personalAddresses.toTypedArray()) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Editar Datos Personales", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Nombre y Apellido
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = name, onValueChange = { name = it; user.name = it }, label = { Text("Nombre") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(value = lastName, onValueChange = { lastName = it; user.lastName = it }, label = { Text("Apellido") }, modifier = Modifier.weight(1f))
-        }
-        
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        // Listas Dinámicas (Emails y Teléfonos)
-        DynamicStringListEditor(
-            title = "Correos Electrónicos",
-            items = user.emails,
-            icon = Icons.Default.Email,
-            onUpdate = { refresh++ }
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        DynamicStringListEditor(
-            title = "Teléfonos",
-            items = user.phones,
-            icon = Icons.Default.Phone,
-            onUpdate = { refresh++ }
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-        // Direcciones Personales
-        Text("Mis Direcciones", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Button(
-            onClick = { user.personalAddresses.add(Address(calle="", localidad="", provincia="", pais="")); refresh++ },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            colors = ButtonDefaults.outlinedButtonColors()
-        ) {
-            Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Agregar Dirección")
-        }
-        user.personalAddresses.forEachIndexed { index, addr ->
-            key(addr.id, refresh) {
-                AddressFullEditor(addr, onDelete = { user.personalAddresses.removeAt(index); refresh++ })
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+            Text("Editar Datos Personales", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Apellido") }, modifier = Modifier.weight(1f))
             }
-        }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+            // Editor de Emails
+            DynamicStringListEditor(title = "Correos Electrónicos", items = emails, icon = Icons.Default.Email, onUpdate = {})
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Switch para Habilitar Modo Empresa
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("¿Tienes un Negocio?", fontWeight = FontWeight.Bold)
-                    Text("Habilita el perfil empresarial.", style = MaterialTheme.typography.bodySmall)
+            // Editor de Teléfonos
+            DynamicStringListEditor(title = "Teléfonos", items = phones, icon = Icons.Default.Phone, onUpdate = {})
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // Editor de Direcciones
+            Text("Mis Direcciones", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Button(onClick = { addresses.add(Address(calle="", localidad="", provincia="", pais="")) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = ButtonDefaults.outlinedButtonColors()) {
+                Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Agregar Dirección")
+            }
+            addresses.forEachIndexed { index, addr -> AddressFullEditor(addr, onDelete = { addresses.removeAt(index) }) }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+            // Perfil de Empresa
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("¿Tienes un Negocio?", fontWeight = FontWeight.Bold); Text("Habilita el perfil empresarial.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = hasCompanyProfile, onCheckedChange = { hasCompanyProfile = it })
                 }
-                Switch(checked = hasCompanyProfile, onCheckedChange = { hasCompanyProfile = it; user.hasCompanyProfile = it })
             }
+            Spacer(modifier = Modifier.height(100.dp))
         }
-        
-        Spacer(modifier = Modifier.height(100.dp))
+        SaveButton {
+            onSave(user.copy(name = name, lastName = lastName, hasCompanyProfile = hasCompanyProfile, emails = emails.toList(), phones = phones.toList(), personalAddresses = addresses.toList()))
+        }
     }
-    SaveButton(onSave)
 }
 
-// --- EDITOR MODO EMPRESA ---
 @Composable
-fun EditCompanyModeContent(user: UserFalso, onSave: () -> Unit) {
-    var refresh by remember { mutableIntStateOf(0) }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Editar Datos Empresariales", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Lista de Empresas
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Mis Empresas", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            // Botón para agregar una nueva empresa (Lógica simplificada)
-            IconButton(onClick = { 
-                user.companies.add(Company(name="Nueva", razonSocial="", cuit="", branches = mutableListOf(CompanyBranch(name="Central", address=Address(calle="", localidad="", provincia="", pais=""))))); 
-                refresh++ 
-            }) {
-                Icon(Icons.Default.AddBusiness, null, tint = MaterialTheme.colorScheme.primary)
+fun EditCompanyModeContent(user: UserEntity, onSave: (UserEntity) -> Unit) {
+    // Para simplificar, editamos la primera empresa si existe
+    val companies = remember { mutableStateListOf(*user.companies.toTypedArray()) }
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+            Text("Editar Datos Empresariales", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            if (companies.isEmpty()) {
+                Text("No tienes empresas registradas.", modifier = Modifier.padding(16.dp), color = Color.Gray)
+            } else {
+                companies.forEachIndexed { index, company ->
+                    CompanyFullEditor(
+                        company = company,
+                        onUpdate = { updatedCompany -> companies[index] = updatedCompany }
+                    )
+                }
             }
+            Spacer(modifier = Modifier.height(100.dp))
         }
-
-        if (user.companies.isEmpty()) {
-            Text("No tienes empresas registradas.", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
+        SaveButton {
+            onSave(user.copy(companies = companies.toList()))
         }
-
-        user.companies.forEachIndexed { _, company ->
-            key(company.id, refresh) {
-                CompanyFullEditor(company)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        
-        Spacer(modifier = Modifier.height(100.dp))
     }
-    SaveButton(onSave)
 }
 
 // =================================================================================
@@ -765,7 +489,7 @@ fun EditCompanyModeContent(user: UserFalso, onSave: () -> Unit) {
 @Composable
 fun SaveButton(onSave: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomEnd) {
-        FloatingActionButton(onClick = onSave) { Icon(Icons.Default.Save, null) }
+        FloatingActionButton(onClick = onSave, containerColor = MaterialTheme.colorScheme.primary) { Icon(Icons.Default.Save, null, tint = Color.White) }
     }
 }
 
@@ -774,25 +498,14 @@ fun DynamicStringListEditor(title: String, items: MutableList<String>, icon: Ima
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(8.dp))
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = { items.add(""); onUpdate() }) {
-                Icon(Icons.Default.Add, null)
-            }
+            Spacer(Modifier.width(8.dp)); Text(title, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.weight(1f))
+            IconButton(onClick = { items.add(""); onUpdate() }) { Icon(Icons.Default.Add, null) }
         }
         items.forEachIndexed { index, item ->
             var text by remember { mutableStateOf(item) }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it; items[index] = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                IconButton(onClick = { items.removeAt(index); onUpdate() }) {
-                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
-                }
+                OutlinedTextField(value = text, onValueChange = { text = it; items[index] = it }, modifier = Modifier.weight(1f), singleLine = true)
+                IconButton(onClick = { items.removeAt(index); onUpdate() }) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
             }
         }
     }
@@ -804,14 +517,11 @@ fun AddressFullEditor(address: Address, onDelete: (() -> Unit)? = null) {
     var localidad by remember { mutableStateOf(address.localidad) }
     var provincia by remember { mutableStateOf(address.provincia) }
     var pais by remember { mutableStateOf(address.pais) }
-
     fun update() { address.calle = calle; address.localidad = localidad; address.provincia = provincia; address.pais = pais }
-
-    Card(border = BorderStroke(1.dp, Color.Gray.copy(0.3f)), modifier = Modifier.fillMaxWidth()) {
+    Card(border = BorderStroke(1.dp, Color.Gray.copy(0.3f)), modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Dirección", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Spacer(Modifier.weight(1f))
+                Text("Dirección", fontWeight = FontWeight.Bold, fontSize = 12.sp); Spacer(Modifier.weight(1f))
                 if(onDelete != null) IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
             }
             OutlinedTextField(value = calle, onValueChange = { calle = it; update() }, label = { Text("Calle y Número") }, modifier = Modifier.fillMaxWidth())
@@ -825,55 +535,17 @@ fun AddressFullEditor(address: Address, onDelete: (() -> Unit)? = null) {
 }
 
 @Composable
-fun CompanyFullEditor(company: Company) {
+fun CompanyFullEditor(company: Company, onUpdate: (Company) -> Unit) {
     var name by remember { mutableStateOf(company.name) }
     var razon by remember { mutableStateOf(company.razonSocial) }
     var cuit by remember { mutableStateOf(company.cuit) }
-    var refresh by remember { mutableIntStateOf(0) }
-
-    fun update() { company.name = name; company.razonSocial = razon; company.cuit = cuit }
-
-    Card(modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary)) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Datos Fiscales", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = name, onValueChange = { name = it; update() }, label = { Text("Nombre Comercial") }, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = razon, onValueChange = { razon = it; update() }, label = { Text("Razón Social") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = cuit, onValueChange = { cuit = it; update() }, label = { Text("CUIT") }, modifier = Modifier.weight(1f))
-            }
-            
-            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-            
-            // Servicios
-            DynamicStringListEditor("Categorías / Servicios", company.services, Icons.Default.Category, { refresh++ })
-            
-            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-            
-            // Sedes / Sucursales (Ahora Branches)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Sedes / Sucursales", style = MaterialTheme.typography.labelMedium)
-                IconButton(onClick = { 
-                    company.branches.add(CompanyBranch(name="Nueva Sucursal", address=Address(calle="", localidad="", provincia="", pais=""))); 
-                    refresh++ 
-                }) { Icon(Icons.Default.Add, null) }
-            }
-            company.branches.forEachIndexed { i, branch ->
-                key(branch.id, refresh) {
-                    var branchName by remember { mutableStateOf(branch.name) }
-                    OutlinedTextField(
-                        value = branchName, 
-                        onValueChange = { branchName = it; branch.name = it }, 
-                        label = { Text("Nombre Sucursal") },
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
-                    )
-                    AddressFullEditor(branch.address, onDelete = { company.branches.removeAt(i); refresh++ })
-                    Spacer(Modifier.height(16.dp))
-                }
-            }
-            
-            // Empleados (Placeholder)
-            Text("Gestión de empleados disponible en detalle.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            OutlinedTextField(value = name, onValueChange = { name = it; onUpdate(company.copy(name = it)) }, label = { Text("Nombre Comercial") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = razon, onValueChange = { razon = it; onUpdate(company.copy(razonSocial = it)) }, label = { Text("Razón Social") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = cuit, onValueChange = { cuit = it; onUpdate(company.copy(cuit = it)) }, label = { Text("CUIT") }, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -882,6 +554,6 @@ fun CompanyFullEditor(company: Company) {
 @Composable
 fun PerfilUsuarioScreenPreview() {
     MyApplicationTheme {
-        PerfilUsuarioScreen(onNavigateBack = {}, onLogout = {})
+        // PerfilUsuarioScreen(onNavigateBack = {}, onLogout = {})
     }
 }
