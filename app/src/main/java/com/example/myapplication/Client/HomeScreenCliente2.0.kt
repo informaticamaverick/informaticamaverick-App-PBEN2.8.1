@@ -1,11 +1,14 @@
 package com.example.myapplication.ui.screens
 
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -21,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.Air
+import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,7 +62,11 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.example.myapplication.Client.*
+import com.example.myapplication.Model.OpenMeteoResponse
 import com.example.myapplication.R
+import com.example.myapplication.ViewModel.LocationViewModel
+import com.example.myapplication.ViewModel.LocationViewModelFactory
+import com.example.myapplication.ViewModel.WeatherViewModel
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
@@ -100,18 +109,89 @@ data class SuperCategory(
 fun HomeScreenComplete(
     navController: NavHostController,
     bottomPadding: PaddingValues,
-    viewModel: ProfileSharedViewModel = hiltViewModel() // <-- OBTENER VIEWMODEL
+    viewModel: ProfileSharedViewModel = hiltViewModel(), // <-- OBTENER VIEWMODEL
+    weatherViewModel: WeatherViewModel = androidx.lifecycle.viewmodel.compose.viewModel() // <-- WEATHER VIEWMODEL
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val locationViewModel: LocationViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = LocationViewModelFactory(context)
+    )
+    
+    // Solicitar permisos de ubicación
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineLocationGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        
+        if (fineLocationGranted || coarseLocationGranted) {
+            // Permisos otorgados, obtener ubicación
+            locationViewModel.fetchLocation()
+        }
+    }
+    
     // --- ESTADOS DE LA UI (AHORA DESDE EL VIEWMODEL) ---
     val profileMode by viewModel.profileMode.collectAsState() // <-- ESTADO CENTRALIZADO
     val userState by viewModel.userState.collectAsState() // <-- DATOS DEL USUARIO
+    
+    // --- ESTADOS DEL CLIMA ---
+    val temperature by weatherViewModel.temperature.collectAsState()
+    val weatherEmoji by weatherViewModel.weatherEmoji.collectAsState()
+    val weatherData by weatherViewModel.weatherData.collectAsState()
+    val weatherDescription by weatherViewModel.weatherDescription.collectAsState()
+    val windSpeed by weatherViewModel.windSpeed.collectAsState()
+    val humidity by weatherViewModel.humidity.collectAsState()
+    
+    // --- ESTADOS DE UBICACIÓN ---
+    val cityName by locationViewModel.locationName.collectAsState()
+    val latitude by locationViewModel.latitude.collectAsState()
+    val longitude by locationViewModel.longitude.collectAsState()
+    
+    // --- OBTENER UBICACIÓN Y CLIMA AL INICIAR ---
+    LaunchedEffect(Unit) {
+        // Verificar si ya tiene permisos
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        
+        if (hasPermission) {
+            locationViewModel.fetchLocation()
+        } else {
+            // Solicitar permisos
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
+    
+    // --- ACTUALIZAR CLIMA CUANDO CAMBIA LA UBICACIÓN ---
+    LaunchedEffect(latitude, longitude) {
+        if (latitude != null && longitude != null) {
+            weatherViewModel.fetchWeather(lat = latitude!!, lon = longitude!!)
+        } else {
+            // Ubicación por defecto: Tucumán
+            weatherViewModel.fetchWeather(lat = -26.8083, lon = -65.2176)
+        }
+    }
 
     HomeScreenContent(
         navController = navController,
         bottomPadding = bottomPadding,
         profileMode = profileMode,
         userState = userState,
-        onModeToggle = viewModel::toggleProfileMode
+        onModeToggle = viewModel::toggleProfileMode,
+        temperature = temperature,
+        weatherEmoji = weatherEmoji,
+        weatherData = weatherData,
+        weatherDescription = weatherDescription,
+        windSpeed = windSpeed,
+        humidity = humidity,
+        cityName = cityName,
+        onRefreshLocation = { locationViewModel.fetchLocation() }
     )
 }
 
@@ -123,9 +203,20 @@ fun HomeScreenContent(
     bottomPadding: PaddingValues,
     profileMode: ProfileMode,
     userState: UserEntity?,
-    onModeToggle: () -> Unit
+    onModeToggle: () -> Unit,
+    temperature: String = "24°C",
+    weatherEmoji: String = "☀️",
+    weatherData: OpenMeteoResponse? = null,
+    weatherDescription: String = "Despejado",
+    windSpeed: String = "15 km/h",
+    humidity: String = "60%",
+    cityName: String = "Tucumán",
+    onRefreshLocation: () -> Unit = {}
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isSystemInDarkMode = isSystemInDarkTheme()
     var isSearchActive by remember { mutableStateOf(false) }
+    var showWeatherDetails by remember { mutableStateOf(false) }
     var isFabMenuExpanded by remember { mutableStateOf(false) }
     var showFavorites by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -144,7 +235,7 @@ fun HomeScreenContent(
     }
 
     val scrimAlpha by animateFloatAsState(
-        targetValue = if (isFabMenuExpanded || isSearchActive || showFavorites) 0.6f else 0f,
+        targetValue = if (isFabMenuExpanded || isSearchActive || showFavorites || showWeatherDetails) 0.6f else 0f,
         animationSpec = tween(durationMillis = 200),
         label = "scrim"
     )
@@ -171,7 +262,13 @@ fun HomeScreenContent(
                     navController = navController,
                     profileMode = profileMode,
                     user = userState, // <-- PASAR USUARIO REAL
-                    onModeToggle = onModeToggle // <-- ACCIÓN CENTRALIZADA
+                    onModeToggle = onModeToggle, // <-- ACCIÓN CENTRALIZADA
+                    temperature = temperature,
+                    weatherEmoji = weatherEmoji,
+                    cityName = cityName,
+                    gpsLocation = cityName, // Pasar ubicación GPS
+                    onWeatherClick = { showWeatherDetails = !showWeatherDetails },
+                    onRefreshLocation = onRefreshLocation
                 )
 
                 // Banner de Novedades (Carrusel Superior Mixto)
@@ -217,7 +314,42 @@ fun HomeScreenContent(
                             isFabMenuExpanded = false
                             if (isSearchActive) closeSearch()
                             showFavorites = false
+                            showWeatherDetails = false
                         }
+                )
+            }
+            
+            // --- CAPA 2.5: PANEL EXPANDIDO DEL CLIMA (SOBREPUESTO) ---
+            AnimatedVisibility(
+                visible = showWeatherDetails,
+                enter = expandVertically(
+                    expandFrom = Alignment.Top,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(300)
+                ),
+                exit = shrinkVertically(
+                    shrinkTowards = Alignment.Top,
+                    animationSpec = tween(250)
+                ) + fadeOut(
+                    animationSpec = tween(200)
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 60.dp) // Ajusta según altura del TopHeaderSection
+                    .zIndex(2f)
+            ) {
+                WeatherExpandedCard(
+                    temperature = temperature,
+                    weatherEmoji = weatherEmoji,
+                    weatherDescription = weatherDescription,
+                    windSpeed = windSpeed,
+                    humidity = humidity,
+                    cityName = cityName
                 )
             }
 
@@ -251,12 +383,12 @@ fun HomeScreenContent(
                     Surface(
                         modifier = Modifier.size(56.dp).clickable(onClick = closeSearch),
                         shape = CircleShape,
-                        color = Color(0xFF121212), // [MODIFICABLE] Fondo oscuro
-                        border = BorderStroke(2.5.dp, rainbowBrush), // [MODIFICABLE] Grosor borde
+                        color = colors.surface,
+                        border = BorderStroke(2.5.dp, rainbowBrush),
                         shadowElevation = 12.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(26.dp))
+                            Icon(Icons.Default.Close, "Cerrar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
                         }
                     }
                 }
@@ -364,11 +496,18 @@ fun TopHeaderSection(
     navController: NavHostController,
     profileMode: ProfileMode,
     user: UserEntity?, // <-- AHORA RECIBE EL USUARIO REAL (Puede ser null al cargar)
-    onModeToggle: () -> Unit
+    onModeToggle: () -> Unit,
+    temperature: String = "24°C",
+    weatherEmoji: String = "☀️",
+    cityName: String = "Tucumán",
+    gpsLocation: String = "Tucumán",
+    onWeatherClick: () -> Unit = {},
+    onRefreshLocation: () -> Unit = {}
 ) {
-    // --- NUEVO --- Fondo negro mate para toda la barra superior
+    val colors = MaterialTheme.colorScheme
+    // --- NUEVO --- Fondo adaptativo para toda la barra superior
     Surface(
-        color = Color(0xFF121212),
+        color = colors.surface,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -382,12 +521,22 @@ fun TopHeaderSection(
         ) {
             // --- 1. COLUMNA IZQUIERDA: WIDGET DE CLIMA ---
             Box(modifier = Modifier.weight(1f)) {
-                WeatherWidget(temperature = "24°C")
+                WeatherWidget(
+                    temperature = temperature,
+                    weatherEmoji = weatherEmoji,
+                    cityName = cityName,
+                    onClick = onWeatherClick
+                )
             }
 
             // --- 2. COLUMNA CENTRAL: UBICACIÓN Y SELECTOR ---
             Box(modifier = Modifier.weight(1.3f)) { // Peso ligeramente mayor
-                LocationSelector(user = user, mode = profileMode)
+                LocationSelector(
+                    user = user, 
+                    mode = profileMode,
+                    gpsLocation = gpsLocation,
+                    onRefreshLocation = onRefreshLocation
+                )
             }
 
             // --- 3. COLUMNA DERECHA: PERFIL Y CAMBIO DE MODO ---
@@ -404,9 +553,17 @@ fun TopHeaderSection(
 }
 
 @Composable
-fun WeatherWidget(temperature: String) {
+fun WeatherWidget(
+    temperature: String, 
+    weatherEmoji: String, 
+    cityName: String = "Tucumán",
+    onClick: () -> Unit = {}
+) {
+    val colors = MaterialTheme.colorScheme
     Card(
-        modifier = Modifier.fillMaxSize(), // Ocupa todo el espacio disponible
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = onClick), // Hacer clickeable
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f) // Fondo blanco semitransparente
@@ -418,11 +575,11 @@ fun WeatherWidget(temperature: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = Icons.Rounded.WbSunny,
-                contentDescription = "Clima",
-                tint = Color(0xFFFFD700),
-                modifier = Modifier.size(24.dp)
+            // Mostrar emoji del clima en lugar de ícono fijo
+            Text(
+                text = weatherEmoji,
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.size(28.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Column {
@@ -430,12 +587,14 @@ fun WeatherWidget(temperature: String) {
                     text = temperature,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = colors.onSurface
                 )
                 Text(
-                    text = "Tucumán",
+                    text = cityName,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -443,19 +602,48 @@ fun WeatherWidget(temperature: String) {
 }
 
 @Composable
-fun LocationSelector(user: UserEntity?, mode: ProfileMode) {
+fun LocationSelector(
+    user: UserEntity?, 
+    mode: ProfileMode,
+    gpsLocation: String = "Tucumán",
+    onRefreshLocation: () -> Unit = {}
+) {
+    val colors = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
-    var currentAddress by remember { 
-        mutableStateOf(user?.personalAddresses?.firstOrNull()?.calle ?: "Ubicación") 
-    }
-
-    // --- NUEVO: Efecto para actualizar la dirección por defecto al cambiar de modo ---
-    LaunchedEffect(mode, user) {
-        currentAddress = if (mode == ProfileMode.CLIENTE) {
-            user?.personalAddresses?.firstOrNull()?.calle ?: "Sin Dirección"
-        } else {
-            user?.companies?.firstOrNull()?.branches?.firstOrNull()?.address?.fullString() ?: "Sin Sucursal"
+    var useGpsLocation by remember { mutableStateOf(true) } // Usar GPS por defecto
+    
+    // DEBUG: Log para verificar datos del usuario
+    LaunchedEffect(user) {
+        android.util.Log.d("LocationSelector", "User: ${user?.name}")
+        android.util.Log.d("LocationSelector", "GPS Location: $gpsLocation")
+        android.util.Log.d("LocationSelector", "Personal Addresses: ${user?.personalAddresses?.size}")
+        android.util.Log.d("LocationSelector", "Companies: ${user?.companies?.size}")
+        user?.personalAddresses?.forEach { address ->
+            android.util.Log.d("LocationSelector", "Address: ${address.fullString()}")
         }
+    }
+    
+    // Calcular la dirección a mostrar
+    val displayAddress = remember(user, mode, gpsLocation, useGpsLocation) {
+        if (useGpsLocation) {
+            gpsLocation
+        } else {
+            if (mode == ProfileMode.CLIENTE) {
+                user?.personalAddresses?.firstOrNull()?.calle ?: "Sin Dirección"
+            } else {
+                user?.companies?.firstOrNull()?.branches?.firstOrNull()?.address?.calle 
+                    ?: user?.companies?.firstOrNull()?.name 
+                    ?: "Sin Sucursal"
+            }
+        }
+    }
+    
+    var currentAddress by remember { mutableStateOf(displayAddress) }
+
+    // Actualizar la dirección cuando cambie
+    LaunchedEffect(displayAddress) {
+        currentAddress = displayAddress
+        android.util.Log.d("LocationSelector", "Updated address: $currentAddress")
     }
 
     Card(
@@ -473,13 +661,13 @@ fun LocationSelector(user: UserEntity?, mode: ProfileMode) {
         ) {
             // Solo Texto Centrado
             Text(
-                text = currentAddress,
+                text = if (user == null) "Cargando..." else currentAddress,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                color = Color.White
+                color = colors.onSurface
             )
         }
 
@@ -488,29 +676,71 @@ fun LocationSelector(user: UserEntity?, mode: ProfileMode) {
             onDismissRequest = { expanded = false },
             modifier = Modifier.widthIn(min = 200.dp)
         ) {
-            // --- NUEVO: Lógica para mostrar direcciones según el modo ---
+            // --- Lógica para mostrar direcciones según el modo ---
             if (mode == ProfileMode.CLIENTE) {
-                Text("Mis Direcciones", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = FontWeight.Bold)
-                user?.personalAddresses?.forEach { address ->
+                Text(
+                    "Mis Direcciones", 
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onSurface
+                )
+                
+                if (user?.personalAddresses.isNullOrEmpty()) {
                     DropdownMenuItem(
-                        text = { Text(address.fullString()) },
-                        onClick = {
-                            currentAddress = address.calle
-                            expanded = false
-                        }
+                        text = { 
+                            Text(
+                                "No hay direcciones guardadas",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant
+                            ) 
+                        },
+                        onClick = { expanded = false },
+                        enabled = false
                     )
-                }
-            } else {
-                Text("Mis Empresas", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = FontWeight.Bold)
-                user?.companies?.forEach { company ->
-                    company.branches.forEach { branch ->
-                         DropdownMenuItem(
-                            text = { Text("${company.name} - ${branch.name}") },
+                } else {
+                    user?.personalAddresses?.forEach { address ->
+                        DropdownMenuItem(
+                            text = { Text(address.fullString()) },
                             onClick = {
-                                currentAddress = branch.name
+                                useGpsLocation = false
+                                currentAddress = address.calle
                                 expanded = false
                             }
                         )
+                    }
+                }
+            } else {
+                Text(
+                    "Mis Empresas", 
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onSurface
+                )
+                
+                if (user?.companies.isNullOrEmpty()) {
+                    DropdownMenuItem(
+                        text = { 
+                            Text(
+                                "No hay empresas registradas",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant
+                            ) 
+                        },
+                        onClick = { expanded = false },
+                        enabled = false
+                    )
+                } else {
+                    user?.companies?.forEach { company ->
+                        company.branches.forEach { branch ->
+                             DropdownMenuItem(
+                                text = { Text("${company.name} - ${branch.name}") },
+                                onClick = {
+                                    useGpsLocation = false
+                                    currentAddress = branch.name
+                                    expanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -525,12 +755,14 @@ fun LocationSelector(user: UserEntity?, mode: ProfileMode) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Ubicación Actual")
+                        Text("Ubicación GPS Actual")
                         Icon(Icons.Default.Refresh, contentDescription = "Actualizar", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
                 onClick = {
-                    currentAddress = "Ubicación GPS Actual"
+                    useGpsLocation = true
+                    currentAddress = gpsLocation
+                    onRefreshLocation()
                     expanded = false
                 }
             )
@@ -548,6 +780,7 @@ fun ProfileModeSection(
     onModeToggle: () -> Unit,
     navController: NavHostController
 ) {
+    val colors = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxSize(),
         shape = RoundedCornerShape(16.dp),
@@ -597,7 +830,7 @@ fun ProfileModeSection(
                 Text(
                     text = user?.name ?: "Usuario",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
+                    color = colors.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -731,6 +964,7 @@ fun FavoritesPanel(
         modifier = Modifier
             .fillMaxHeight()
             .width(320.dp),
+
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 8.dp,
         shadowElevation = 8.dp,
@@ -1350,3 +1584,220 @@ fun HomeScreenCompletePreview() {
         )
     } 
 }
+
+// ==================================================================================
+// --- SECCIÓN: TARJETA EXPANDIDA DEL CLIMA ---
+// ==================================================================================
+@Composable
+fun WeatherExpandedCard(
+    temperature: String,
+    weatherEmoji: String,
+    weatherDescription: String,
+    windSpeed: String,
+    humidity: String,
+    cityName: String = "Tucumán"
+) {
+    val colors = MaterialTheme.colorScheme
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = colors.surfaceVariant.copy(alpha = 0.85f) // Más transparencia
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Ciudad y descripción del clima
+            Text(
+                text = cityName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.onSurface
+            )
+            Text(
+                text = weatherDescription,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Temperatura con emoji
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = weatherEmoji,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontSize = 48.sp
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = temperature,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Light,
+                    color = colors.onSurface
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Información adicional en tarjetas compactas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Viento
+                WeatherInfoCard(
+                    icon = Icons.Default.Air,
+                    label = "Viento",
+                    value = windSpeed,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                // Humedad
+                WeatherInfoCard(
+                    icon = Icons.Default.WaterDrop,
+                    label = "Humedad",
+                    value = humidity,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WeatherInfoCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = colors.surfaceVariant
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = colors.primary,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.onSurface
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// Funciones comentadas - disponibles para pronóstico extendido futuro
+/*
+@Composable
+fun WeatherForecastItem(
+    date: String,
+    maxTemp: Int,
+    minTemp: Int,
+    weatherCode: Int
+) {
+    val colors = MaterialTheme.colorScheme
+    val emoji = getWeatherEmojiFromCode(weatherCode)
+    
+    // Parsear fecha para mostrar día de la semana
+    val dayName = try {
+        val parts = date.split("-")
+        if (parts.size == 3) {
+            val month = parts[1].toInt()
+            val day = parts[2].toInt()
+            "$day/$month"
+        } else {
+            date.takeLast(5)
+        }
+    } catch (e: Exception) {
+        date.takeLast(5)
+    }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = dayName,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        
+        Text(
+            text = emoji,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center
+        )
+        
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.End
+        ) {
+            Text(
+                text = "$maxTemp°",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.onSurface
+            )
+            Text(
+                text = " / $minTemp°",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant
+            )
+        }
+    }
+}
+
+fun getWeatherEmojiFromCode(code: Int): String {
+    return when (code) {
+        0 -> "☀️"
+        1, 2, 3 -> "⛅"
+        45, 48 -> "🌫️"
+        51, 53, 55 -> "🌦️"
+        61, 63, 65 -> "🌧️"
+        71, 73, 75 -> "❄️"
+        95, 96, 99 -> "⛈️"
+        else -> "🌤️"
+    }
+}
+*/

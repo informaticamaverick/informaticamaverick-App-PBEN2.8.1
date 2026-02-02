@@ -1,10 +1,23 @@
 package com.example.myapplication.Client
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,18 +35,28 @@ import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.zIndex
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavHostController
@@ -458,16 +481,47 @@ fun AdCard() {
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PromoScreen(
     onBack: () -> Unit,
     navController: NavHostController
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isSystemInDarkMode = isSystemInDarkTheme()
+    
     var selectedPromotion by remember { mutableStateOf<Promotion?>(null) }
     var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
     var providerForDialog by remember { mutableStateOf<ProviderPromotions?>(null) }
     var viewedFavorites by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    // Estados para FABs y búsqueda
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Estado cíclico del menú: 0 = Filtros, 1 = Menú config, 2 = Todo oculto
+    var menuState by remember { mutableIntStateOf(0) }
+    val showSettingsMenu = menuState == 0
+    val showVerticalMenu = menuState == 1
+    
+    // Estados para filtros adicionales
+    var sortByDiscount by remember { mutableStateOf(false) } // false = Más reciente, true = Mayor descuento
+    var onlyWithDiscount by remember { mutableStateOf(false) }
+    
+    // Estados del menú de configuración
+    var showNotificationsDialog by remember { mutableStateOf(false) }
+    var showDataVisibilityDialog by remember { mutableStateOf(false) }
+    var showTimePeriodDialog by remember { mutableStateOf(false) }
+    
+    // Preferencias de usuario
+    var viewMode by remember { mutableStateOf("Detallada") } // "Compacta", "Detallada", "Tarjetas"
+    var timePeriod by remember { mutableStateOf("Todo") } // "Semana", "Mes", "3 Meses", "Todo"
+    var showExpiry by remember { mutableStateOf(true) }
+    var showProviderInfo by remember { mutableStateOf(true) }
+    var showBadges by remember { mutableStateOf(true) }
+    var notifyNewPromotions by remember { mutableStateOf(true) }
+    var notifyExpiring by remember { mutableStateOf(true) }
+    var notifyFlashSales by remember { mutableStateOf(true) }
     
     // Estados para el BottomSheet de filtros
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -541,8 +595,8 @@ fun PromoScreen(
         }
     }
 
-    val filteredListItems = remember(selectedCategories, promosState) {
-        if (selectedCategories.isEmpty()) {
+    val filteredListItems = remember(selectedCategories, promosState, searchQuery, onlyWithDiscount, sortByDiscount) {
+        var filtered = if (selectedCategories.isEmpty()) {
             listItems
         } else {
             listItems.mapNotNull { item ->
@@ -561,6 +615,59 @@ fun PromoScreen(
                 }
             }
         }
+        
+        // Filtro por búsqueda
+        if (searchQuery.isNotEmpty()) {
+            filtered = filtered.mapNotNull { item ->
+                when (item) {
+                    is PromoListItem.AdItem -> item
+                    is PromoListItem.ProviderPromoItem -> {
+                        val matchingPromos = item.providerPromotions.promotions.filter { promo ->
+                            promo.description.contains(searchQuery, ignoreCase = true) ||
+                            promo.providerName.contains(searchQuery, ignoreCase = true) ||
+                            promo.categories.any { it.contains(searchQuery, ignoreCase = true) }
+                        }
+                        if (matchingPromos.isNotEmpty()) {
+                            PromoListItem.ProviderPromoItem(item.providerPromotions.copy(promotions = matchingPromos))
+                        } else {
+                            null
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Filtro por descuento
+        if (onlyWithDiscount) {
+            filtered = filtered.mapNotNull { item ->
+                when (item) {
+                    is PromoListItem.AdItem -> item
+                    is PromoListItem.ProviderPromoItem -> {
+                        val discountPromos = item.providerPromotions.promotions.filter { it.discount != null }
+                        if (discountPromos.isNotEmpty()) {
+                            PromoListItem.ProviderPromoItem(item.providerPromotions.copy(promotions = discountPromos))
+                        } else {
+                            null
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Ordenar por descuento
+        if (sortByDiscount) {
+            filtered = filtered.map { item ->
+                when (item) {
+                    is PromoListItem.AdItem -> item
+                    is PromoListItem.ProviderPromoItem -> {
+                        val sortedPromos = item.providerPromotions.promotions.sortedByDescending { it.discount ?: 0 }
+                        PromoListItem.ProviderPromoItem(item.providerPromotions.copy(promotions = sortedPromos))
+                    }
+                }
+            }
+        }
+        
+        filtered
     }
 
     val orderedCategories = remember(selectedCategories) {
@@ -570,6 +677,7 @@ fun PromoScreen(
     }
 
     MyApplicationTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -580,8 +688,491 @@ fun PromoScreen(
                         }
                     }
                 )
-            }
+            },
+                        floatingActionButton = {
+                val rainbowBrush = geminiGradientEffect()
+                
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(bottom = 70.dp)
+                ) {
+                    // Menú vertical de configuración (aparece arriba del engranaje)
+                    AnimatedVisibility(
+                        visible = showVerticalMenu && !isSearchActive,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                        exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Opción: Modo de Vista
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    viewMode = when(viewMode) {
+                                        "Compacta" -> "Detallada"
+                                        "Detallada" -> "Tarjetas"
+                                        else -> "Compacta"
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = colors.surface,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.ViewModule,
+                                        "Modo Vista",
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = when(viewMode) {
+                                            "Compacta" -> "Comp"
+                                            "Detallada" -> "Det"
+                                            "Tarjetas" -> "Card"
+                                            else -> "Vista"
+                                        },
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.onSurface,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Opción: Alertas
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    showNotificationsDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = colors.surface,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        "Alertas",
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Alertas",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.onSurface,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Opción: Mostrar Datos
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    showDataVisibilityDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = colors.surface,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Visibility,
+                                        "Mostrar Datos",
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Datos",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.onSurface,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Opción: Período
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    showTimePeriodDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = colors.surface,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.DateRange,
+                                        "Período",
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Período",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.onSurface,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                
+                    // Botones de búsqueda y engranaje
+                    AnimatedVisibility(
+                        visible = !isSearchActive,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut()
+                    ) {
+                        val gearRotation by animateFloatAsState(
+                            targetValue = if (menuState == 2) 0f else 45f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            )
+                        )
+                        
+                        Row(
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                        // Botones de filtros expandibles (aparecen a la izquierda)
+                        AnimatedVisibility(
+                            visible = showSettingsMenu && !isSearchActive,
+                            enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
+                            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(start = 32.dp, end = 8.dp)
+                            ) {
+                                // Botón: Categorías
+                                Surface(
+                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                    onClick = { 
+                                        tempSelectedCategories = selectedCategories
+                                        showFilterSheet = true
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selectedCategories.isNotEmpty()) colors.primaryContainer else colors.surface,
+                                    shadowElevation = 6.dp
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Category,
+                                            "Categorías",
+                                            tint = if (selectedCategories.isNotEmpty()) colors.onPrimaryContainer else colors.onSurface,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = if (selectedCategories.isNotEmpty()) "Activo" else "Categorías",
+                                            color = if (selectedCategories.isNotEmpty()) colors.onPrimaryContainer else colors.onSurface,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                                
+                                // Botón: Con Descuento
+                                Surface(
+                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                    onClick = { 
+                                        onlyWithDiscount = !onlyWithDiscount
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (onlyWithDiscount) colors.primaryContainer else colors.surface,
+                                    shadowElevation = 6.dp
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.LocalOffer,
+                                            "Descuentos",
+                                            tint = if (onlyWithDiscount) colors.onPrimaryContainer else colors.onSurface,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = if (onlyWithDiscount) "Activo" else "Descuentos",
+                                            color = if (onlyWithDiscount) colors.onPrimaryContainer else colors.onSurface,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        // Botón Dividido (Buscar + Engranaje)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            // Parte Izquierda: Buscar
+                            Surface(
+                                onClick = { isSearchActive = true },
+                                modifier = Modifier.size(56.dp),
+                                shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                                color = colors.surface,
+                                border = BorderStroke(2.5.dp, rainbowBrush),
+                                shadowElevation = 12.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Search, null, tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                                }
+                            }
+                            
+                            // Parte Derecha: Ajustes / Cerrar
+                            Surface(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .combinedClickable(
+                                        onClick = { 
+                                            menuState = (menuState + 1) % 3
+                                        },
+                                        onLongClick = { }
+                                    ),
+                                shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp, topEnd = 28.dp, bottomEnd = 28.dp),
+                                color = colors.surface,
+                                border = BorderStroke(2.5.dp, rainbowBrush),
+                                shadowElevation = 12.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        "Ajustes",
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(26.dp).rotate(gearRotation)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    }
+                }
+            },
+floatingActionButtonPosition = FabPosition.End
         ) { paddingValues ->
+        
+        // Diálogos de configuración
+        // Diálogo: Alertas de Notificaciones
+        if (showNotificationsDialog) {
+            AlertDialog(
+                onDismissRequest = { showNotificationsDialog = false },
+                title = { Text("Alertas", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Configurar notificaciones:", fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Notificar nuevas promociones")
+                            Switch(
+                                checked = notifyNewPromotions,
+                                onCheckedChange = { notifyNewPromotions = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Notificar ofertas por vencer")
+                            Switch(
+                                checked = notifyExpiring,
+                                onCheckedChange = { notifyExpiring = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Notificar ventas flash")
+                            Switch(
+                                checked = notifyFlashSales,
+                                onCheckedChange = { notifyFlashSales = it }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        showNotificationsDialog = false
+                    }) {
+                        Text("Aceptar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNotificationsDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        
+        // Diálogo: Mostrar Datos
+        if (showDataVisibilityDialog) {
+            AlertDialog(
+                onDismissRequest = { showDataVisibilityDialog = false },
+                title = { Text("Mostrar Datos", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Configurar visibilidad de datos:", fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Mostrar fecha de expiración")
+                            Switch(
+                                checked = showExpiry,
+                                onCheckedChange = { showExpiry = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Mostrar info del prestador")
+                            Switch(
+                                checked = showProviderInfo,
+                                onCheckedChange = { showProviderInfo = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Mostrar insignias 'NUEVO'")
+                            Switch(
+                                checked = showBadges,
+                                onCheckedChange = { showBadges = it }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        showDataVisibilityDialog = false
+                    }) {
+                        Text("Aceptar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDataVisibilityDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        
+        // Diálogo: Período de Tiempo
+        if (showTimePeriodDialog) {
+            AlertDialog(
+                onDismissRequest = { showTimePeriodDialog = false },
+                title = { Text("Período de Tiempo", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Filtrar promociones por período:", fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val periods = listOf("Semana", "Mes", "3 Meses", "Todo")
+                        periods.forEach { period ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { timePeriod = period }
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(period)
+                                RadioButton(
+                                    selected = timePeriod == period,
+                                    onClick = { timePeriod = period }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        showTimePeriodDialog = false
+                    }) {
+                        Text("Aceptar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showTimePeriodDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -595,17 +1186,6 @@ fun PromoScreen(
                             // Al hacer click, solo abrimos el dialogo. NO marcamos como visto aun.
                             providerForDialog = it
                         }
-                    )
-                }
-                item {
-                    CategoryFiltersRow(
-                        allCategories = orderedCategories,
-                        selectedCategories = selectedCategories,
-                        onOpenSheet = { 
-                            tempSelectedCategories = selectedCategories 
-                            showFilterSheet = true 
-                        },
-                        onClearFilters = { selectedCategories = emptySet() }
                     )
                 }
                 items(filteredListItems, key = {
@@ -654,7 +1234,7 @@ fun PromoScreen(
                     }
                 }
             }
-        }
+        } // Cierre de LazyColumn y Scaffold paddingValues
         
         // Dialogo del prestador favorito
         providerForDialog?.let { currentProvider ->
@@ -741,7 +1321,89 @@ fun PromoScreen(
                 }
             }
         }
-    }
+        
+        // Barra de búsqueda flotante
+        if (isSearchActive) {
+            val rainbowBrush = geminiGradientEffect()
+            val focusRequester = remember { FocusRequester() }
+            val keyboardController = LocalSoftwareKeyboardController.current
+
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp)
+                    .zIndex(10f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = colors.surface,
+                        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                        shadowElevation = 12.dp,
+                        border = BorderStroke(2.5.dp, rainbowBrush)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                null,
+                                tint = colors.onSurface.copy(0.8f),
+                                modifier = Modifier.padding(start = 24.dp).size(20.dp)
+                            )
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = 12.dp)
+                                    .focusRequester(focusRequester),
+                                textStyle = TextStyle(color = colors.onSurface, fontSize = 17.sp),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                decorationBox = { inner ->
+                                    Box(contentAlignment = Alignment.CenterStart) {
+                                        if (searchQuery.isEmpty()) {
+                                            Text("Buscar promociones...", color = colors.onSurfaceVariant, fontSize = 16.sp)
+                                        }
+                                        inner()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    onClick = {
+                        isSearchActive = false
+                        searchQuery = ""
+                        keyboardController?.hide()
+                    },
+                    shape = CircleShape,
+                    color = colors.surface,
+                    border = BorderStroke(2.5.dp, rainbowBrush),
+                    shadowElevation = 12.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, "Cerrar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                    }
+                }
+            }
+        }
+        } // Cierre del Box externo
+    } // Cierre de MyApplicationTheme
 }
 
 @Composable
@@ -1028,3 +1690,4 @@ fun PromoScreenPreview() {
         PromoScreen(onBack = {}, navController = rememberNavController())
     }
 }
+

@@ -9,6 +9,9 @@ interface WeatherApi {
     suspend fun getWeather(
         @Query("latitude") lat: Double,
         @Query("longitude") lon: Double,
-        @Query("current_weather") currentWeather: Boolean = true
+        @Query("current_weather") currentWeather: Boolean = true,
+        @Query("hourly") hourly: String? = null,
+        @Query("daily") daily: String? = null,
+        @Query("timezone") timezone: String = "auto"
     ): OpenMeteoResponse
 }

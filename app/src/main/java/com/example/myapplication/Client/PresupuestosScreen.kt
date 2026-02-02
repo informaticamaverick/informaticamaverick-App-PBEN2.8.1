@@ -5,11 +5,14 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -44,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -53,18 +58,206 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.filled.Description
 import coil.compose.rememberAsyncImagePainter
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 
-@OptIn(ExperimentalMaterial3Api::class)
+// =================================================================================
+// --- SECCIÓN: DIALOGS DE FILTROS ---
+// =================================================================================
+
+@Composable
+fun CategoryFilterDialog(
+    allCategories: List<String>,
+    selectedCategories: Set<String>,
+    onCategoryToggle: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = colors.surface,
+            border = BorderStroke(2.dp, geminiGradientEffect())
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Filtrar por Categoría",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    items(allCategories) { category ->
+                        val isSelected = selectedCategories.contains(category)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onCategoryToggle(category) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { onCategoryToggle(category) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(category, color = colors.onSurface)
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            onClear()
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Limpiar")
+                    }
+                    
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Aplicar")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusFilterDialog(
+    selectedStatus: EstadoLicitacion?,
+    onStatusSelected: (EstadoLicitacion?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        val colors = MaterialTheme.colorScheme
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = colors.surface,
+            border = BorderStroke(2.dp, geminiGradientEffect())
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Filtrar por Estado",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Opción "Todos"
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onStatusSelected(null) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = selectedStatus == null,
+                        onClick = { onStatusSelected(null) }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Todos", color = colors.onSurface)
+                }
+                
+                // Opciones de estado
+                EstadoLicitacion.values().forEach { estado ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onStatusSelected(estado) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedStatus == estado,
+                            onClick = { onStatusSelected(estado) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .background(estado.color, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(estado.displayName, color = colors.onSurface)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Aplicar")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PresupuestosScreen(
     onProfileClick: (String) -> Unit = {},
     onChatClick: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isSystemInDarkMode = isSystemInDarkTheme()
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Presupuestos de Licitaciones", "Presupuestos Generales")
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    
+    // Estado cíclico del menú: 0 = Filtros, 1 = Menú config, 2 = Todo oculto
+    var menuState by remember { mutableIntStateOf(0) }
+    val showSettingsMenu = menuState == 0
+    val showVerticalMenu = menuState == 1
+    
+    // Estados de filtros
+    var selectedStatus by remember { mutableStateOf<EstadoLicitacion?>(null) }
+    var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var sortAscending by remember { mutableStateOf(true) }
+    
+    // Estados para mostrar menús de filtros
+    var showCategoryFilter by remember { mutableStateOf(false) }
+    var showStatusFilter by remember { mutableStateOf(false) }
+    
+    // Estados del menú de configuración
+    var showNotificationsDialog by remember { mutableStateOf(false) }
+    var showDataVisibilityDialog by remember { mutableStateOf(false) }
+    var showTimePeriodDialog by remember { mutableStateOf(false) }
+    
+    // Preferencias de usuario
+    var viewMode by remember { mutableStateOf("Detallada") } // "Compacta", "Detallada", "Tarjetas"
+    var timePeriod by remember { mutableStateOf("Todo") } // "Semana", "Mes", "3 Meses", "Todo"
+    var showDates by remember { mutableStateOf(true) }
+    var showPrices by remember { mutableStateOf(true) }
+    var showOfferCount by remember { mutableStateOf(true) }
+    var showBadges by remember { mutableStateOf(true) }
+    var notifyNewQuotes by remember { mutableStateOf(true) }
+    var notifyStatusChanges by remember { mutableStateOf(true) }
+    var notifyDeadlines by remember { mutableStateOf(true) }
 
     val allPresupuestos = remember { ClientBudgetDataFalso.presupuestos }
     val licitacionesAgrupadas = allPresupuestos.filter { it.esLicitacion }.groupBy { it.nombre }
@@ -102,57 +295,590 @@ fun PresupuestosScreen(
             onDismiss = { selectedPresupuesto = null }
         )
     }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (!isSearchActive) Text("Presupuestos Recibidos")
-                },
-                navigationIcon = {
-                    if (!isSearchActive) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+    
+    // Diálogos de filtros
+    val allCategories = licitacionesAgrupadas.values.flatten().map { it.servicioCategoria }.distinct()
+    
+    if (showCategoryFilter) {
+        CategoryFilterDialog(
+            allCategories = allCategories,
+            selectedCategories = selectedCategories,
+            onCategoryToggle = { category ->
+                selectedCategories = if (selectedCategories.contains(category)) {
+                    selectedCategories - category
+                } else {
+                    selectedCategories + category
+                }
+            },
+            onClear = { selectedCategories = emptySet() },
+            onDismiss = { showCategoryFilter = false }
+        )
+    }
+    
+    if (showStatusFilter) {
+        StatusFilterDialog(
+            selectedStatus = selectedStatus,
+            onStatusSelected = { 
+                selectedStatus = it
+                showStatusFilter = false
+            },
+            onDismiss = { showStatusFilter = false }
+        )
+    }
+    
+    // Diálogo: Período de Tiempo
+    if (showTimePeriodDialog) {
+        Dialog(onDismissRequest = { showTimePeriodDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colors.surface,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "Período de Tiempo",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    listOf(
+                        "Semana" to "Última semana",
+                        "Mes" to "Último mes",
+                        "3 Meses" to "Últimos 3 meses",
+                        "Todo" to "Todos los períodos"
+                    ).forEach { (value, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { timePeriod = value }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = timePeriod == value,
+                                onClick = { timePeriod = value }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(label, color = colors.onSurface)
                         }
                     }
-                },
-                actions = {
-                    if (isSearchActive) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier.fillMaxWidth().padding(end = 8.dp, top = 4.dp, bottom = 4.dp),
-                            placeholder = { Text("Buscar...") },
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                            trailingIcon = {
-                                IconButton(onClick = {
-                                    isSearchActive = false
-                                    searchQuery = ""
-                                }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cerrar búsqueda")
-                                }
-                            },
-                            singleLine = true,
-                            shape = CircleShape
-                        )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { showTimePeriodDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Aplicar")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                )
-            )
-        },
-        floatingActionButton = {
-            AnimatedVisibility(visible = !isSearchActive) {
-                FloatingActionButton(onClick = { isSearchActive = true }) {
-                    Icon(Icons.Default.Search, contentDescription = "Buscar Presupuesto")
                 }
             }
         }
+    }
+    
+    // Diálogo: Mostrar/Ocultar Datos
+    if (showDataVisibilityDialog) {
+        Dialog(onDismissRequest = { showDataVisibilityDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colors.surface,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "Mostrar u Ocultar Datos",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDates = !showDates }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Mostrar fechas", color = colors.onSurface)
+                        Switch(checked = showDates, onCheckedChange = { showDates = it })
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showPrices = !showPrices }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Mostrar precios", color = colors.onSurface)
+                        Switch(checked = showPrices, onCheckedChange = { showPrices = it })
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showOfferCount = !showOfferCount }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Mostrar cantidad de ofertas", color = colors.onSurface)
+                        Switch(checked = showOfferCount, onCheckedChange = { showOfferCount = it })
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showBadges = !showBadges }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Mostrar insignias", color = colors.onSurface)
+                        Switch(checked = showBadges, onCheckedChange = { showBadges = it })
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { showDataVisibilityDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Aplicar")
+                    }
+                }
+            }
+        }
+    }
+    
+    // Diálogo: Alertas y Notificaciones
+    if (showNotificationsDialog) {
+        Dialog(onDismissRequest = { showNotificationsDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colors.surface,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "Alertas y Notificaciones",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { notifyNewQuotes = !notifyNewQuotes }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Nuevos presupuestos", color = colors.onSurface)
+                        Switch(checked = notifyNewQuotes, onCheckedChange = { notifyNewQuotes = it })
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { notifyStatusChanges = !notifyStatusChanges }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Cambios de estado", color = colors.onSurface)
+                        Switch(checked = notifyStatusChanges, onCheckedChange = { notifyStatusChanges = it })
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { notifyDeadlines = !notifyDeadlines }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Próximas fechas límite", color = colors.onSurface)
+                        Switch(checked = notifyDeadlines, onCheckedChange = { notifyDeadlines = it })
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { showNotificationsDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Aplicar")
+                    }
+                }
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Presupuestos") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            },
+        floatingActionButton = {
+            val rainbowBrush = geminiGradientEffect()
+            
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(bottom = 70.dp)
+            ) {
+                // Menú vertical de configuración (aparece arriba del engranaje)
+                AnimatedVisibility(
+                    visible = showVerticalMenu && !isSearchActive,
+                    enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                    exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Opción: Modo de Vista
+                        Surface(
+                            modifier = Modifier.size(64.dp),
+                            onClick = { 
+                                viewMode = when(viewMode) {
+                                    "Compacta" -> "Detallada"
+                                    "Detallada" -> "Tarjetas"
+                                    else -> "Compacta"
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = colors.surface,
+                            shadowElevation = 6.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.ViewModule,
+                                    "Modo Vista",
+                                    tint = colors.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = when(viewMode) {
+                                        "Compacta" -> "Comp"
+                                        "Detallada" -> "Det"
+                                        "Tarjetas" -> "Card"
+                                        else -> "Vista"
+                                    },
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = colors.onSurface,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        
+                        // Opción: Alertas
+                        Surface(
+                            modifier = Modifier.size(64.dp),
+                            onClick = { 
+                                showNotificationsDialog = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = colors.surface,
+                            shadowElevation = 6.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Notifications,
+                                    "Alertas",
+                                    tint = colors.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "Alertas",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = colors.onSurface,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        
+                        // Opción: Mostrar Datos
+                        Surface(
+                            modifier = Modifier.size(64.dp),
+                            onClick = { 
+                                showDataVisibilityDialog = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = colors.surface,
+                            shadowElevation = 6.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Visibility,
+                                    "Mostrar Datos",
+                                    tint = colors.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "Datos",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = colors.onSurface,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        
+                        // Opción: Período
+                        Surface(
+                            modifier = Modifier.size(64.dp),
+                            onClick = { 
+                                showTimePeriodDialog = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = colors.surface,
+                            shadowElevation = 6.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.DateRange,
+                                    "Período",
+                                    tint = colors.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "Período",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = colors.onSurface,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            
+                // Botones de búsqueda y engranaje (separados)
+                AnimatedVisibility(
+                    visible = !isSearchActive,
+                    enter = fadeIn() + scaleIn(),
+                    exit = fadeOut() + scaleOut()
+                ) {
+                    val gearRotation by animateFloatAsState(
+                        targetValue = if (menuState == 2) 0f else 45f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        )
+                    )
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                    // Botones de filtros expandibles (aparecen a la izquierda)
+                    AnimatedVisibility(
+                        visible = showSettingsMenu && !isSearchActive,
+                        enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
+                        exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(start = 32.dp, end = 8.dp)
+                        ) {
+                            // Botón Filtrar por Categoría
+                            Surface(
+                                modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                onClick = { 
+                                    showCategoryFilter = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selectedCategories.isNotEmpty()) colors.primaryContainer else colors.surface,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Category, 
+                                        "Categoría", 
+                                        tint = if (selectedCategories.isNotEmpty()) colors.onPrimaryContainer else colors.onSurface, 
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (selectedCategories.isNotEmpty()) "Activo" else "Categoría",
+                                        color = if (selectedCategories.isNotEmpty()) colors.onPrimaryContainer else colors.onSurface,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Botón Filtrar por Estado
+                            Surface(
+                                modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                onClick = { 
+                                    showStatusFilter = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selectedStatus != null) colors.primaryContainer else colors.surface,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.FilterList, 
+                                        "Estado", 
+                                        tint = if (selectedStatus != null) colors.onPrimaryContainer else colors.onSurface, 
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (selectedStatus != null) "Activo" else "Estado",
+                                        color = if (selectedStatus != null) colors.onPrimaryContainer else colors.onSurface,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Botón Ordenar
+                            Surface(
+                                modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                onClick = { 
+                                    sortAscending = !sortAscending
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = colors.surface,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        if (sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                                        "Ordenar",
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (sortAscending) "A-Z" else "Z-A",
+                                        color = colors.onSurface,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.weight(1f))
+                    
+                    // El Botón Dividido (Buscar + Engranaje)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        // Parte Izquierda: Buscar
+                        Surface(
+                            onClick = { isSearchActive = true },
+                            modifier = Modifier.size(56.dp),
+                            shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                            color = colors.surface,
+                            border = BorderStroke(2.5.dp, rainbowBrush),
+                            shadowElevation = 12.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Search, null, tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                            }
+                        }
+                        
+                        // Parte Derecha: Ajustes / Cerrar
+                        Surface(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .combinedClickable(
+                                    onClick = { 
+                                        menuState = (menuState + 1) % 3
+                                    },
+                                    onLongClick = { }
+                                ),
+                            shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp, topEnd = 28.dp, bottomEnd = 28.dp),
+                            color = colors.surface,
+                            border = BorderStroke(2.5.dp, rainbowBrush),
+                            shadowElevation = 12.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    "Ajustes",
+                                    tint = colors.onSurface,
+                                    modifier = Modifier.size(26.dp).rotate(gearRotation)
+                                )
+                            }
+                        }
+                    }
+                    }
+                }
+            }
+        },
+        floatingActionButtonPosition = FabPosition.End
     ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues)) {
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        // Contenido principal (deja espacio abajo para los FABs)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 80.dp)
+        ) {
+            // Tabs
             TabRow(selectedTabIndex = selectedTabIndex) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -163,10 +889,20 @@ fun PresupuestosScreen(
                 }
             }
 
+            // Contenido de los tabs
             when (selectedTabIndex) {
                 0 -> LicitacionesTabContent(
                     licitaciones = licitacionesAgrupadas,
                     searchQuery = searchQuery,
+                    selectedStatus = selectedStatus,
+                    selectedCategories = selectedCategories,
+                    sortAscending = sortAscending,
+                    viewMode = viewMode,
+                    timePeriod = timePeriod,
+                    showDates = showDates,
+                    showPrices = showPrices,
+                    showOfferCount = showOfferCount,
+                    showBadges = showBadges,
                     onLicitacionClick = { budgets ->
                         selectedLicitacionBudgets = budgets
                         showBudgetSheet = true
@@ -176,27 +912,164 @@ fun PresupuestosScreen(
                 1 -> GeneralesTabContent(
                     presupuestos = presupuestosGenerales,
                     searchQuery = searchQuery,
+                    viewMode = viewMode,
+                    timePeriod = timePeriod,
+                    showDates = showDates,
+                    showPrices = showPrices,
+                    showOfferCount = showOfferCount,
+                    showBadges = showBadges,
                     onPresupuestoClick = { presupuesto -> selectedPresupuesto = presupuesto },
                     onProfileClick = onProfileClick,
                     onChatClick = onChatClick
                 )
             }
         }
+        } // Cierre del Box interno del Scaffold
+    } // Cierre del Scaffold
+        
+    // Barra de búsqueda flotante que tapa el TopAppBar
+    if (isSearchActive) {
+        val rainbowBrush = geminiGradientEffect()
+        val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
+
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(start = 16.dp, end = 16.dp)
+                .zIndex(10f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colors.surface,
+                    shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                    shadowElevation = 12.dp,
+                    border = BorderStroke(2.5.dp, rainbowBrush)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            null,
+                            tint = colors.onSurface.copy(0.8f),
+                            modifier = Modifier.padding(start = 24.dp).size(20.dp)
+                        )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp)
+                                .focusRequester(focusRequester),
+                            textStyle = TextStyle(color = colors.onSurface, fontSize = 17.sp),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            decorationBox = { inner ->
+                                Box(contentAlignment = Alignment.CenterStart) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text("Buscar presupuestos...", color = colors.onSurfaceVariant, fontSize = 16.sp)
+                                    }
+                                    inner()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            Surface(
+                modifier = Modifier.size(56.dp),
+                onClick = {
+                    isSearchActive = false
+                    searchQuery = ""
+                    keyboardController?.hide()
+                },
+                shape = CircleShape,
+                color = colors.surface,
+                border = BorderStroke(2.5.dp, rainbowBrush),
+                shadowElevation = 12.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Close, "Cerrar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                }
+            }
+        }
     }
+    } // Cierre del Box externo
 }
 
 @Composable
 fun LicitacionesTabContent(
     licitaciones: Map<String, List<PresupuestoFalso>>,
     searchQuery: String,
+    selectedStatus: EstadoLicitacion?,
+    selectedCategories: Set<String>,
+    sortAscending: Boolean,
+    viewMode: String,
+    timePeriod: String,
+    showDates: Boolean,
+    showPrices: Boolean,
+    showOfferCount: Boolean,
+    showBadges: Boolean,
     onLicitacionClick: (List<PresupuestoFalso>) -> Unit,
     onPresupuestoClick: (PresupuestoFalso) -> Unit
 ) {
-    var selectedStatus by remember { mutableStateOf<EstadoLicitacion?>(null) }
-    var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var sortAscending by remember { mutableStateOf(true) }
-
     val allCategories = licitaciones.values.flatten().map { it.servicioCategoria }.distinct()
+    
+    // Filtro por período de tiempo basado en fechaRecepcion
+    val periodMatch: (PresupuestoFalso) -> Boolean = { presupuesto ->
+        when (timePeriod) {
+            "Semana" -> {
+                try {
+                    val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                    val fecha = format.parse(presupuesto.fechaRecepcion)
+                    val weekAgo = java.util.Calendar.getInstance().apply {
+                        add(java.util.Calendar.DAY_OF_YEAR, -7)
+                    }
+                    fecha != null && fecha.after(weekAgo.time)
+                } catch (e: Exception) {
+                    true
+                }
+            }
+            "Mes" -> {
+                try {
+                    val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                    val fecha = format.parse(presupuesto.fechaRecepcion)
+                    val monthAgo = java.util.Calendar.getInstance().apply {
+                        add(java.util.Calendar.MONTH, -1)
+                    }
+                    fecha != null && fecha.after(monthAgo.time)
+                } catch (e: Exception) {
+                    true
+                }
+            }
+            "3 Meses" -> {
+                try {
+                    val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                    val fecha = format.parse(presupuesto.fechaRecepcion)
+                    val threeMonthsAgo = java.util.Calendar.getInstance().apply {
+                        add(java.util.Calendar.MONTH, -3)
+                    }
+                    fecha != null && fecha.after(threeMonthsAgo.time)
+                } catch (e: Exception) {
+                    true
+                }
+            }
+            else -> true // "Todo" - mostrar todos
+        }
+    }
 
     // FIX: Se implementó un comparador personalizado para el ordenamiento por defecto.
     // COMENTARIO: Este comparador define un orden de prioridad para los estados de licitación.
@@ -215,7 +1088,8 @@ fun LicitacionesTabContent(
         val categoryMatch = selectedCategories.isEmpty() || selectedCategories.contains(first.servicioCategoria)
         val searchMatch = nombre.contains(searchQuery, ignoreCase = true) ||
                 presupuestos.any { it.servicioCategoria.contains(searchQuery, ignoreCase = true) }
-        statusMatch && categoryMatch && searchMatch
+        val periodFilterMatch = presupuestos.any { periodMatch(it) }
+        statusMatch && categoryMatch && searchMatch && periodFilterMatch
     }.entries.sortedWith(
         compareBy<Map.Entry<String, List<PresupuestoFalso>>> { (_, budgets) ->
             val hasNew = budgets.any { it.isNew }
@@ -227,41 +1101,11 @@ fun LicitacionesTabContent(
     )
 
     Column {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CategoryFilterSplitButton(
-                allCategories = allCategories,
-                selectedCategories = selectedCategories,
-                onCategoryToggle = { category ->
-                    val newSelection = selectedCategories.toMutableSet()
-                    if (newSelection.contains(category)) {
-                        newSelection.remove(category)
-                    } else {
-                        newSelection.add(category)
-                    }
-                    selectedCategories = newSelection
-                },
-                onClear = { selectedCategories = emptySet() }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            SortFilterChip(
-                isAscending = sortAscending,
-                onClick = { sortAscending = !sortAscending }
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            StatusFilterSplitButton(
-                selectedStatus = selectedStatus,
-                onStatusSelected = { selectedStatus = it }
-            )
-        }
-
         if (filteredAndSortedLicitaciones.isEmpty()) {
             EmptyState()
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 48.dp, bottom = 100.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 itemsIndexed(
@@ -284,6 +1128,10 @@ fun LicitacionesTabContent(
                         statusColor = licitacionInfo.estadoLicitacion.color,
                         presupuestosCount = presupuestos.size,
                         hasNewBudgets = hasNew,
+                        viewMode = viewMode,
+                        showDates = showDates,
+                        showOfferCount = showOfferCount,
+                        showBadges = showBadges,
                         onClick = { onLicitacionClick(presupuestos) },
                         presupuestoAdjudicado = presupuestoAdjudicado,
                         onAdjudicadoClick = { presupuestoAdjudicado?.let { onPresupuestoClick(it) } }
@@ -318,7 +1166,7 @@ fun CategoryFilterSplitButton(
 
     Box {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(16.dp),
             color = containerColor,
             contentColor = contentColor,
             tonalElevation = elevation,
@@ -430,7 +1278,7 @@ fun StatusFilterSplitButton(
 
     Box {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(16.dp),
             color = containerColor,
             contentColor = contentColor,
             tonalElevation = elevation,
@@ -539,6 +1387,12 @@ fun StatusFilterSplitButton(
 fun GeneralesTabContent(
     presupuestos: List<PresupuestoFalso>,
     searchQuery: String,
+    viewMode: String,
+    timePeriod: String,
+    showDates: Boolean,
+    showPrices: Boolean,
+    showOfferCount: Boolean,
+    showBadges: Boolean,
     onPresupuestoClick: (PresupuestoFalso) -> Unit,
     onProfileClick: (String) -> Unit,
     onChatClick: (String) -> Unit
@@ -777,13 +1631,14 @@ fun LicitacionArchiveroCard(
     statusColor: Color,
     presupuestosCount: Int,
     hasNewBudgets: Boolean,
+    viewMode: String = "Compacta",
+    showDates: Boolean = true,
+    showOfferCount: Boolean = true,
+    showBadges: Boolean = true,
     onClick: () -> Unit,
     presupuestoAdjudicado: PresupuestoFalso? = null,
     onAdjudicadoClick: () -> Unit = {}
 ) {
-    // Estado para controlar si la tarjeta está expandida
-    var isExpanded by remember { mutableStateOf(false) }
-
     // Mapear el status a FolderTheme
     val theme = when {
         status.contains("ACTIVA", ignoreCase = true) -> FolderTheme.Active
@@ -792,6 +1647,75 @@ fun LicitacionArchiveroCard(
         status.contains("CANCELADA", ignoreCase = true) -> FolderTheme.Cancelled
         else -> FolderTheme.Active
     }
+
+    // Mostrar diseño según viewMode
+    when (viewMode) {
+        "Compacta" -> LicitacionCompactaView(
+            categoriaNombre = categoriaNombre,
+            licitacionNombre = licitacionNombre,
+            status = status,
+            theme = theme,
+            presupuestosCount = presupuestosCount,
+            hasNewBudgets = hasNewBudgets,
+            showBadges = showBadges,
+            showOfferCount = showOfferCount,
+            onClick = onClick
+        )
+        "Tarjetas" -> LicitacionTarjetaView(
+            categoriaNombre = categoriaNombre,
+            licitacionNombre = licitacionNombre,
+            fechaInicio = fechaInicio,
+            fechaFin = fechaFin,
+            status = status,
+            theme = theme,
+            presupuestosCount = presupuestosCount,
+            hasNewBudgets = hasNewBudgets,
+            showDates = showDates,
+            showBadges = showBadges,
+            showOfferCount = showOfferCount,
+            onClick = onClick,
+            presupuestoAdjudicado = presupuestoAdjudicado,
+            onAdjudicadoClick = onAdjudicadoClick
+        )
+        else -> LicitacionArchiveroViewDetallada(
+            categoriaNombre = categoriaNombre,
+            licitacionNombre = licitacionNombre,
+            fechaInicio = fechaInicio,
+            fechaFin = fechaFin,
+            status = status,
+            theme = theme,
+            presupuestosCount = presupuestosCount,
+            hasNewBudgets = hasNewBudgets,
+            showDates = showDates,
+            showBadges = showBadges,
+            showOfferCount = showOfferCount,
+            onClick = onClick,
+            presupuestoAdjudicado = presupuestoAdjudicado,
+            onAdjudicadoClick = onAdjudicadoClick
+        )
+    }
+}
+
+// VISTA DETALLADA (Diseño de Carpeta/Archivero Original)
+@Composable
+fun LicitacionArchiveroViewDetallada(
+    categoriaNombre: String,
+    licitacionNombre: String,
+    fechaInicio: String,
+    fechaFin: String,
+    status: String,
+    theme: FolderTheme,
+    presupuestosCount: Int,
+    hasNewBudgets: Boolean,
+    showDates: Boolean,
+    showBadges: Boolean,
+    showOfferCount: Boolean,
+    onClick: () -> Unit,
+    presupuestoAdjudicado: PresupuestoFalso?,
+    onAdjudicadoClick: () -> Unit
+) {
+    // Estado para controlar si la tarjeta está expandida
+    var isExpanded by remember { mutableStateOf(true) }
 
     val alpha = if (theme.isCancelled) 0.8f else 1f
     val dateRange = "$fechaInicio - $fechaFin"
@@ -855,24 +1779,26 @@ fun LicitacionArchiveroCard(
         }
 
         // CAPA 3: Badge flotante de estado
-        Surface(
-            color = Color.White,
-            shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(2.dp, theme.badgeTextColor),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(y = (-16).dp, x = (-16).dp)
-                .zIndex(2f)
-                .shadow(4.dp, shape = RoundedCornerShape(8.dp))
-        ) {
-            Text(
-                text = status.uppercase(),
-                color = theme.badgeTextColor,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                letterSpacing = 0.5.sp
-            )
+        if (showBadges) {
+            Surface(
+                color = Color.White,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(2.dp, theme.badgeTextColor),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(y = (-16).dp, x = (-16).dp)
+                    .zIndex(2f)
+                    .shadow(4.dp, shape = RoundedCornerShape(8.dp))
+            ) {
+                Text(
+                    text = status.uppercase(),
+                    color = theme.badgeTextColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    letterSpacing = 0.5.sp
+                )
+            }
         }
 
         // CAPA 4: Cuerpo principal
@@ -923,29 +1849,11 @@ fun LicitacionArchiveroCard(
                             )
                         }
 
-                        // Indicador de expandir/colapsar - Lado derecho
+                        // Indicador de expandir/colapsar - Lado derecho (siempre expandido en vista detallada)
                         Column(horizontalAlignment = Alignment.End) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { isExpanded = !isExpanded }
-                            ) {
-                                Text(
-                                    text = if (isExpanded) "Ver menos" else "Ver más detalles",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = theme.primaryColor
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = if (isExpanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-                                    contentDescription = if (isExpanded) "Colapsar" else "Expandir",
-                                    tint = theme.primaryColor,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
 
                             // Indicador de nuevos ingresos cuando está contraída
-                            if (!isExpanded && hasNewBudgets && !theme.isCancelled) {
+                            if (!isExpanded && hasNewBudgets && showBadges && !theme.isCancelled) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     PulsingDotIndicator(
@@ -964,12 +1872,8 @@ fun LicitacionArchiveroCard(
                         }
                     }
 
-                    // Contenido expandible - Fechas
-                    AnimatedVisibility(
-                        visible = isExpanded,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
+                    // Contenido expandible - Fechas (siempre visible en vista detallada)
+                    if (showDates) {
                         Column {
                             Spacer(modifier = Modifier.height(6.dp))
 
@@ -1037,33 +1941,26 @@ fun LicitacionArchiveroCard(
                         }
                     }
 
-                    // Divider y Footer dentro del AnimatedVisibility
-                    AnimatedVisibility(
-                        visible = isExpanded,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
-                        Column {
-                            // Divider
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(
-                                        brush = Brush.horizontalGradient(
-                                            colors = listOf(theme.primaryColor.copy(alpha = 0.5f), Color.Transparent)
-                                        )
-                                    )
+                    // Divider y Footer (siempre visible en vista detallada)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(theme.primaryColor.copy(alpha = 0.5f), Color.Transparent)
+                                )
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                            // Footer
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Bottom
-                            ) {
+                    // Footer
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
                                 // Columna izquierda - Tiempo restante o Adjudicado
                                 Column {
                                     when {
@@ -1158,57 +2055,337 @@ fun LicitacionArchiveroCard(
                                 }
 
                                 // Columna derecha - Contador de archivos
-                                Column(
-                                    horizontalAlignment = Alignment.End
-                                ) {
-                                    Surface(
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        shape = RoundedCornerShape(50),
-                                        border = BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.5f)),
-                                        shadowElevation = 1.dp,
-                                        modifier = Modifier.clickable { onClick() }
+                                if (showOfferCount) {
+                                    Column(
+                                        horizontalAlignment = Alignment.End
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                        Surface(
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            shape = RoundedCornerShape(50),
+                                            border = BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.5f)),
+                                            shadowElevation = 1.dp,
+                                            modifier = Modifier.clickable { onClick() }
                                         ) {
-                                            Text(
-                                                text = "$presupuestosCount Archivo${if (presupuestosCount != 1) "s" else ""}",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF451A03)
-                                            )
-                                            Icon(
-                                                imageVector = Icons.Rounded.ArrowForwardIos,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(10.dp).padding(start = 4.dp),
-                                                tint = theme.primaryColor
-                                            )
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "$presupuestosCount Archivo${if (presupuestosCount != 1) "s" else ""}",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF451A03)
+                                                )
+                                                Icon(
+                                                    imageVector = Icons.Rounded.ArrowForwardIos,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(10.dp).padding(start = 4.dp),
+                                                    tint = theme.primaryColor
+                                                )
+                                            }
                                         }
-                                    }
 
-                                    // Indicador de nuevos ingresos
-                                    if (hasNewBudgets && !theme.isCancelled) {
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            // COMPONENTE ANIMADO
-                                            PulsingDotIndicator(
-                                                dotSize = 6.dp,
-                                                color = Color(0xFFE11D48) // Rose-500
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Nuevos Ingresos",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFBE123C)
-                                            )
-                                        }
-                                    }
-                                }
-                            } // Cierre Row Footer
-                        } // Cierre Column del AnimatedVisibility
-                    } // Cierre AnimatedVisibility
+                                        // Indicador de nuevos ingresos
+                                        if (hasNewBudgets && showBadges && !theme.isCancelled) {
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                // COMPONENTE ANIMADO
+                                                PulsingDotIndicator(
+                                                    dotSize = 6.dp,
+                                                    color = Color(0xFFE11D48) // Rose-500
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Nuevos Ingresos",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFBE123C)
+                                                )
+                                            } // Cierre Row "Nuevos Ingresos"
+                                        } // Cierre if hasNewBudgets
+                                    } // Cierre Column (línea 2018)
+                                } // Cierre if showOfferCount (línea 2017)
+                            } // Cierre Row Footer principal (línea 1918)
+                } // Cierre Column principal (línea 1787)
+            } // Cierre Box interno gradiente (línea 1778)
+        } // Cierre Surface CAPA 4 (línea 1771)
+    } // Cierre Box principal (línea 1682)
+} // Cierre función LicitacionArchiveroViewDetallada
+
+// VISTA COMPACTA (Lista simple y minimalista)
+@Composable
+fun LicitacionCompactaView(
+    categoriaNombre: String,
+    licitacionNombre: String,
+    status: String,
+    theme: FolderTheme,
+    presupuestosCount: Int,
+    hasNewBudgets: Boolean,
+    showBadges: Boolean,
+    showOfferCount: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Columna izquierda - Info principal
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = getCategoryEmoji(categoriaNombre),
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = licitacionNombre,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Columna derecha - Badge y contador
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Badge de estado
+                if (showBadges) {
+                    Surface(
+                        color = theme.badgeTextColor.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = status,
+                            color = theme.badgeTextColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Contador de ofertas
+                if (showOfferCount) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (hasNewBudgets && showBadges) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(Color(0xFFE11D48), CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        Text(
+                            text = "$presupuestosCount",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = theme.primaryColor
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowForwardIos,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = theme.primaryColor
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// VISTA TARJETAS (Diseño moderno tipo Material Design)
+@Composable
+fun LicitacionTarjetaView(
+    categoriaNombre: String,
+    licitacionNombre: String,
+    fechaInicio: String,
+    fechaFin: String,
+    status: String,
+    theme: FolderTheme,
+    presupuestosCount: Int,
+    hasNewBudgets: Boolean,
+    showDates: Boolean,
+    showBadges: Boolean,
+    showOfferCount: Boolean,
+    onClick: () -> Unit,
+    presupuestoAdjudicado: PresupuestoFalso?,
+    onAdjudicadoClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header con gradiente y emoji
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(theme.secondaryColor, theme.tertiaryColor)
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = getCategoryEmoji(categoriaNombre),
+                        fontSize = 48.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = categoriaNombre.uppercase(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.primaryColor,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                // Badge de estado en esquina superior derecha
+                if (showBadges) {
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(bottomStart = 12.dp),
+                        shadowElevation = 4.dp,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Text(
+                            text = status,
+                            color = theme.badgeTextColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            // Contenido de la tarjeta
+            Column(modifier = Modifier.padding(20.dp)) {
+                // Nombre del proyecto
+                Text(
+                    text = licitacionNombre,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 24.sp
+                )
+
+                // Fechas
+                if (showDates) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = "INICIO",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                text = fechaInicio,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = theme.primaryColor
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "FIN",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                text = fechaFin,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = theme.primaryColor
+                            )
+                        }
+                    }
+                }
+
+                // Footer con contador
+                if (showOfferCount) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (hasNewBudgets && showBadges) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color(0xFFE11D48), CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Nuevas ofertas",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFBE123C)
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+
+                        Surface(
+                            color = theme.primaryColor.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "$presupuestosCount ofertas",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = theme.primaryColor
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Rounded.ArrowForwardIos,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = theme.primaryColor
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2534,7 +3711,7 @@ fun CategoryFilterSplitButton(allCategories: List<String>, selectedCategories: S
     val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box {
-        Surface(shape = RoundedCornerShape(24.dp), color = containerColor, contentColor = contentColor, modifier = Modifier.height(44.dp).animateContentSize()) {
+        Surface(shape = RoundedCornerShape(16.dp), color = containerColor, contentColor = contentColor, modifier = Modifier.height(44.dp).animateContentSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.clickable { expanded = true }.padding(start = 12.dp, end = 8.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2565,7 +3742,7 @@ fun StatusFilterSplitButton(selectedStatus: EstadoLicitacion?, onStatusSelected:
     val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box {
-        Surface(shape = RoundedCornerShape(24.dp), color = containerColor, contentColor = contentColor, modifier = Modifier.height(44.dp)) {
+        Surface(shape = RoundedCornerShape(16.dp), color = containerColor, contentColor = contentColor, modifier = Modifier.height(44.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.clickable { expanded = true }.padding(start = 12.dp, end = 8.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
                     Text(text = selectedStatus?.displayName ?: "Estado", fontSize = 12.sp, fontWeight = FontWeight.Bold)

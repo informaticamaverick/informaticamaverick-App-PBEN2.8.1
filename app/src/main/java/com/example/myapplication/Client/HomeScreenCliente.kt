@@ -122,7 +122,7 @@ fun HomeScreenCliente(
         ) {
             FavoritesBox(
                 onNavigateToProviderProfile = { providerId -> navController.navigate("perfil_prestador/$providerId"); scope.launch { panelOffset.animateTo(panelWidthPx) } },
-                onNavigateToChat = { providerId -> navController.navigate("chat_conversation/$providerId"); scope.launch { panelOffset.animateTo(panelWidthPx) } }
+                onNavigateToChat = { providerId -> navController.navigate("chat?providerId=$providerId"); scope.launch { panelOffset.animateTo(panelWidthPx) } }
             )
         }
 

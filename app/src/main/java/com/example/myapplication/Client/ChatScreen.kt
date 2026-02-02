@@ -2,9 +2,15 @@ package com.example.myapplication.Client
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.*
@@ -23,16 +29,29 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -85,8 +104,16 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     onBack: () -> Unit,
@@ -406,6 +433,9 @@ fun ChatListView(
     appColors: com.example.myapplication.ui.theme.AppColors,
     navController: NavHostController? = null
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isSystemInDarkMode = isSystemInDarkTheme()
+    
     // PASO 1: Obtenemos una lista de 10 prestadores de ejemplo para simular chats
     var providersList by remember { mutableStateOf(SampleDataFalso.prestadores.take(10)) }
 
@@ -418,52 +448,739 @@ fun ChatListView(
     }
 
     var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    
+    // Estados para búsqueda y menú cíclico
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Estado cíclico del menú: 0 = Filtros, 1 = Menú config, 2 = Todo oculto
+    var menuState by remember { mutableIntStateOf(0) }
+    val showSettingsMenu = menuState == 0
+    val showVerticalMenu = menuState == 1
+    
+    // Estados de filtros
+    var onlyUnread by remember { mutableStateOf(false) }
+    var sortByAlphabetical by remember { mutableStateOf(false) } // false = Más reciente, true = A-Z
+    
+    // Estados del menú de configuración
+    var showNotificationsDialog by remember { mutableStateOf(false) }
+    var showDataVisibilityDialog by remember { mutableStateOf(false) }
+    var showTimePeriodDialog by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+    
+    // Preferencias de usuario
+    var viewMode by remember { mutableStateOf("Detallada") } // "Compacta", "Detallada", "Tarjetas"
+    var timePeriod by remember { mutableStateOf("Todo") } // "Semana", "Mes", "3 Meses", "Todo"
+    var showDates by remember { mutableStateOf(true) }
+    var showAvatars by remember { mutableStateOf(true) }
+    var showPreviews by remember { mutableStateOf(true) }
+    var showBadges by remember { mutableStateOf(true) }
+    var notifyNewMessages by remember { mutableStateOf(true) }
+    var notifyMentions by remember { mutableStateOf(true) }
+    var notifyReactions by remember { mutableStateOf(true) }
+    
+    // Preferencias de privacidad
+    var showReadReceipts by remember { mutableStateOf(true) }
+    var showLastSeen by remember { mutableStateOf(true) }
+    var showProfilePhoto by remember { mutableStateOf(true) }
+    var showProfileInfo by remember { mutableStateOf(true) }
 
     // Filtramos los prestadores basándonos en los filtros seleccionados.
-    val filteredProviders = remember(selectedCategories, providersList) {
-        if (selectedCategories.isEmpty()) {
-            providersList
-        } else {
-            providersList.filter { 
+    val filteredProviders = remember(selectedCategories, providersList, searchQuery, onlyUnread, sortByAlphabetical) {
+        var result = providersList
+        
+        // Filtro por categoría
+        if (selectedCategories.isNotEmpty()) {
+            result = result.filter { 
                 val service = it.companies.firstOrNull()?.services?.firstOrNull()
                 service != null && service in selectedCategories
             }
         }
+        
+        // Filtro por búsqueda
+        if (searchQuery.isNotEmpty()) {
+            result = result.filter {
+                it.name.contains(searchQuery, ignoreCase = true) ||
+                it.companies.firstOrNull()?.services?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
+            }
+        }
+        
+        // Filtro por no leídos (simulado - en producción verificarías mensajes reales)
+        if (onlyUnread) {
+            result = result.filter { 
+                // Simulación: 50% de los chats tienen mensajes sin leer
+                it.id.hashCode() % 2 == 0
+            }
+        }
+        
+        // Ordenar
+        if (sortByAlphabetical) {
+            result = result.sortedBy { it.name }
+        } else {
+            // Por defecto ordenar por más reciente (simulado usando ID)
+            result = result.sortedByDescending { it.id }
+        }
+        
+        result
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Mensajes") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = appColors.surfaceColor
+                    )
+                )
+            },
+            floatingActionButton = {
+                val rainbowBrush = geminiGradientEffect()
+                
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(bottom = 70.dp)
+                ) {
+                    // Menú vertical de configuración (aparece arriba del engranaje)
+                    AnimatedVisibility(
+                        visible = showVerticalMenu && !isSearchActive,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                        exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Opción: Modo de Vista
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    viewMode = when(viewMode) {
+                                        "Compacta" -> "Detallada"
+                                        "Detallada" -> "Tarjetas"
+                                        else -> "Compacta"
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = appColors.surfaceColor,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.ViewModule,
+                                        "Modo Vista",
+                                        tint = appColors.textPrimaryColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = when(viewMode) {
+                                            "Compacta" -> "Comp"
+                                            "Detallada" -> "Det"
+                                            "Tarjetas" -> "Card"
+                                            else -> "Vista"
+                                        },
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = appColors.textPrimaryColor,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Opción: Alertas
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    showNotificationsDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = appColors.surfaceColor,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        "Alertas",
+                                        tint = appColors.textPrimaryColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Alertas",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = appColors.textPrimaryColor,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Opción: Mostrar Datos
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    showDataVisibilityDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = appColors.surfaceColor,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Visibility,
+                                        "Mostrar Datos",
+                                        tint = appColors.textPrimaryColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Datos",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = appColors.textPrimaryColor,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Opción: Período
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    showTimePeriodDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = appColors.surfaceColor,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.DateRange,
+                                        "Período",
+                                        tint = appColors.textPrimaryColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Período",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = appColors.textPrimaryColor,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            
+                            // Opción: Privacidad
+                            Surface(
+                                modifier = Modifier.size(64.dp),
+                                onClick = { 
+                                    showPrivacyDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = appColors.surfaceColor,
+                                shadowElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Lock,
+                                        "Privacidad",
+                                        tint = appColors.textPrimaryColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Privacidad",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = appColors.textPrimaryColor,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                
+                    // Botones de búsqueda y engranaje
+                    AnimatedVisibility(
+                        visible = !isSearchActive,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut()
+                    ) {
+                        val gearRotation by animateFloatAsState(
+                            targetValue = if (menuState == 2) 0f else 45f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            )
+                        )
+                        
+                        Row(
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                        // Botones de filtros expandibles (aparecen a la izquierda)
+                        AnimatedVisibility(
+                            visible = showSettingsMenu && !isSearchActive,
+                            enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
+                            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(start = 32.dp, end = 8.dp)
+                            ) {
+                                // Botón: No Leídos
+                                Surface(
+                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                    onClick = { 
+                                        onlyUnread = !onlyUnread
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (onlyUnread) appColors.accentBlue else appColors.surfaceColor,
+                                    shadowElevation = 6.dp
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.MarkEmailUnread,
+                                            "No Leídos",
+                                            tint = if (onlyUnread) Color.White else appColors.textPrimaryColor,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = if (onlyUnread) "Activo" else "No Leídos",
+                                            color = if (onlyUnread) Color.White else appColors.textPrimaryColor,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                                
+                                // Botón: Ordenar
+                                Surface(
+                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                    onClick = { 
+                                        sortByAlphabetical = !sortByAlphabetical
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (sortByAlphabetical) appColors.accentBlue else appColors.surfaceColor,
+                                    shadowElevation = 6.dp
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            if (sortByAlphabetical) Icons.Default.SortByAlpha else Icons.Default.Schedule,
+                                            "Ordenar",
+                                            tint = if (sortByAlphabetical) Color.White else appColors.textPrimaryColor,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = if (sortByAlphabetical) "A-Z" else "Reciente",
+                                            color = if (sortByAlphabetical) Color.White else appColors.textPrimaryColor,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        // Botón Dividido (Buscar + Engranaje)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            // Parte Izquierda: Buscar
+                            Surface(
+                                onClick = { isSearchActive = true },
+                                modifier = Modifier.size(56.dp),
+                                shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                                color = appColors.surfaceColor,
+                                border = BorderStroke(2.5.dp, rainbowBrush),
+                                shadowElevation = 12.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Search, null, tint = appColors.textPrimaryColor, modifier = Modifier.size(26.dp))
+                                }
+                            }
+                            
+                            // Parte Derecha: Ajustes / Cerrar
+                            Surface(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .combinedClickable(
+                                        onClick = { 
+                                            menuState = (menuState + 1) % 3
+                                        },
+                                        onLongClick = { }
+                                    ),
+                                shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp, topEnd = 28.dp, bottomEnd = 28.dp),
+                                color = appColors.surfaceColor,
+                                border = BorderStroke(2.5.dp, rainbowBrush),
+                                shadowElevation = 12.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        "Ajustes",
+                                        tint = appColors.textPrimaryColor,
+                                        modifier = Modifier.size(26.dp).rotate(gearRotation)
+                                    )
+                                }
+                            }
+                        }
+                        }
+                    }
+                }
+            },
+            floatingActionButtonPosition = FabPosition.End
+        ) { paddingValues ->
+        
+        // Diálogo: Alertas de Notificaciones
+        if (showNotificationsDialog) {
+            AlertDialog(
+                onDismissRequest = { showNotificationsDialog = false },
+                title = { Text("Alertas", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Configurar notificaciones:", fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Notificar mensajes nuevos")
+                            Switch(
+                                checked = notifyNewMessages,
+                                onCheckedChange = { notifyNewMessages = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Notificar menciones")
+                            Switch(
+                                checked = notifyMentions,
+                                onCheckedChange = { notifyMentions = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Notificar reacciones")
+                            Switch(
+                                checked = notifyReactions,
+                                onCheckedChange = { notifyReactions = it }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        showNotificationsDialog = false
+                    }) {
+                        Text("Aceptar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNotificationsDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        
+        // Diálogo: Mostrar Datos
+        if (showDataVisibilityDialog) {
+            AlertDialog(
+                onDismissRequest = { showDataVisibilityDialog = false },
+                title = { Text("Mostrar Datos", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Configurar visibilidad de datos:", fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Mostrar fechas")
+                            Switch(
+                                checked = showDates,
+                                onCheckedChange = { showDates = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Mostrar avatares")
+                            Switch(
+                                checked = showAvatars,
+                                onCheckedChange = { showAvatars = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Mostrar vista previa")
+                            Switch(
+                                checked = showPreviews,
+                                onCheckedChange = { showPreviews = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Mostrar insignias")
+                            Switch(
+                                checked = showBadges,
+                                onCheckedChange = { showBadges = it }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        showDataVisibilityDialog = false
+                    }) {
+                        Text("Aceptar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDataVisibilityDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        
+        // Diálogo: Período de Tiempo
+        if (showTimePeriodDialog) {
+            AlertDialog(
+                onDismissRequest = { showTimePeriodDialog = false },
+                title = { Text("Período de Tiempo", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Filtrar mensajes por período:", fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val periods = listOf("Semana", "Mes", "3 Meses", "Todo")
+                        periods.forEach { period ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { timePeriod = period }
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(period)
+                                RadioButton(
+                                    selected = timePeriod == period,
+                                    onClick = { timePeriod = period }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        showTimePeriodDialog = false
+                    }) {
+                        Text("Aceptar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showTimePeriodDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        
+        // Diálogo: Privacidad
+        if (showPrivacyDialog) {
+            AlertDialog(
+                onDismissRequest = { showPrivacyDialog = false },
+                title = { Text("Privacidad", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Configurar opciones de privacidad:", fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Confirmación de lectura", fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Mostrar cuando leíste mensajes",
+                                    fontSize = 12.sp,
+                                    color = appColors.textSecondaryColor
+                                )
+                            }
+                            Switch(
+                                checked = showReadReceipts,
+                                onCheckedChange = { showReadReceipts = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Última conexión", fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Mostrar tu última conexión",
+                                    fontSize = 12.sp,
+                                    color = appColors.textSecondaryColor
+                                )
+                            }
+                            Switch(
+                                checked = showLastSeen,
+                                onCheckedChange = { showLastSeen = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Foto de perfil", fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Quién puede ver tu foto",
+                                    fontSize = 12.sp,
+                                    color = appColors.textSecondaryColor
+                                )
+                            }
+                            Switch(
+                                checked = showProfilePhoto,
+                                onCheckedChange = { showProfilePhoto = it }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Información de perfil", fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Mostrar datos de contacto",
+                                    fontSize = 12.sp,
+                                    color = appColors.textSecondaryColor
+                                )
+                            }
+                            Switch(
+                                checked = showProfileInfo,
+                                onCheckedChange = { showProfileInfo = it }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { 
+                        showPrivacyDialog = false
+                    }) {
+                        Text("Aceptar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPrivacyDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(appColors.backgroundColor)
+            .padding(paddingValues)
     ) {
-        // --- Header ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(appColors.surfaceColor)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Volver",
-                        tint = appColors.textPrimaryColor
-                    )
-                }
-                Text(
-                    text = "Mensajes",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = appColors.textPrimaryColor
-                )
-                Box(modifier = Modifier.size(48.dp))
-            }
-        }
 
         // --- Filtros dinámicos ---
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
@@ -532,7 +1249,8 @@ fun ChatListView(
             }
         }
     }
-
+    } // Cierre del Column + Scaffold (paddingValues)
+    
     // Diálogo de confirmación para eliminar
     if (providerToDelete != null) {
         AlertDialog(
@@ -557,6 +1275,88 @@ fun ChatListView(
             }
         )
     }
+    
+    // Barra de búsqueda flotante (igual que en PresupuestosScreen)
+    if (isSearchActive) {
+        val rainbowBrush = geminiGradientEffect()
+        val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
+
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(start = 16.dp, end = 16.dp)
+                .zIndex(10f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colors.surface,
+                    shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                    shadowElevation = 12.dp,
+                    border = BorderStroke(2.5.dp, rainbowBrush)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            null,
+                            tint = colors.onSurface.copy(0.8f),
+                            modifier = Modifier.padding(start = 24.dp).size(20.dp)
+                        )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp)
+                                .focusRequester(focusRequester),
+                            textStyle = TextStyle(color = colors.onSurface, fontSize = 17.sp),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            decorationBox = { inner ->
+                                Box(contentAlignment = Alignment.CenterStart) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text("Buscar conversaciones...", color = colors.onSurfaceVariant, fontSize = 16.sp)
+                                    }
+                                    inner()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            Surface(
+                modifier = Modifier.size(56.dp),
+                onClick = {
+                    isSearchActive = false
+                    searchQuery = ""
+                    keyboardController?.hide()
+                },
+                shape = CircleShape,
+                color = colors.surface,
+                border = BorderStroke(2.5.dp, rainbowBrush),
+                shadowElevation = 12.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Close, "Cerrar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                }
+            }
+        }
+    }
+    } // Cierre del Box externo
 }
 
 fun formatDate(timestamp: Long): String {

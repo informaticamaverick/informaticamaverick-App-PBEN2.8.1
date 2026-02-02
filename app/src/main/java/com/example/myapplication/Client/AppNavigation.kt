@@ -28,6 +28,9 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,8 +75,10 @@ sealed class Screen(val route: String, val title: String) {
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
+
 fun AppNavigation() {
     val navController = rememberNavController()
+    var isInConversation by remember { mutableStateOf(false) }
     
     val navItems = listOf(
         Screen.Home,
@@ -87,7 +92,9 @@ fun AppNavigation() {
     val currentRoute = navBackStackEntry?.destination?.route
     
     val mainScreenRoutes = navItems.map { it.route.split("?").first() }
-    val shouldShowBottomBar = currentRoute?.split("?")?.first() in mainScreenRoutes
+    // Ocultar barra de navegación en chat conversation
+    val shouldShowBottomBar = currentRoute?.split("?")?.first() in mainScreenRoutes && 
+                              !isInConversation
 
     // --- NUEVO: Lógica para determinar el índice de la pantalla y la dirección de la animación ---
     fun getRouteIndex(route: String?): Int {
@@ -178,7 +185,7 @@ fun AppNavigation() {
                 PresupuestosScreen(
                     onBack = { navController.popBackStack() },
                     onChatClick = { prestadorId ->
-                        navController.navigate("chat?providerId=$prestadorId")
+                        navController.navigate("chat_conversation/$prestadorId")
                     },
                     onProfileClick = { prestadorId ->
                         navController.navigate("perfil_prestador/$prestadorId")
@@ -210,7 +217,11 @@ fun AppNavigation() {
                 val providerId = backStackEntry.arguments?.getString("providerId")
                 ChatScreen(
                     onBack = { navController.popBackStack() },
-                    initialProviderId = providerId
+                    initialProviderId = providerId,
+                    navController = null, // No usar navegación, manejar todo internamente
+                    onInConversationChange = { inConversation -> 
+                        isInConversation = inConversation 
+                    }
                 )
             }
             
@@ -285,13 +296,7 @@ fun AppNavigation() {
                 PerfilPrestadorCliente(providerId = providerId, onBack = { navController.popBackStack() })
             }
             
-            composable(
-                route = Screen.ChatConversation.route,
-                arguments = listOf(navArgument("providerId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val providerId = backStackEntry.arguments?.getString("providerId")
-                ChatScreen(onBack = { navController.popBackStack() }, initialProviderId = providerId)
-            }
+            // Ruta chat_conversation eliminada - ahora todo se maneja internamente en ChatScreen
         }
     }
 }
