@@ -54,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.zIndex
 
 // =================================================================================
 // --- COMPONENTES REUTILIZABLES PARA EL EFECTO GEMINI Y FAB ---
@@ -94,11 +95,12 @@ fun SmallActionFab(
     iconColor: Color,
     onClick: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(width = 64.dp, height = 56.dp), // Ancho para que entre el texto, alto como el FAB
+        modifier = Modifier.size(width = 64.dp, height = 56.dp),
         shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF1E1E1E), // Fondo oscuro
+        color = colors.surface,
         shadowElevation = 6.dp
     ) {
         Box(
@@ -114,7 +116,7 @@ fun SmallActionFab(
             )
             Text(
                 text = label,
-                color = Color.White,
+                color = colors.onSurface,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -166,6 +168,7 @@ fun GeminiSplitFAB(
     secondaryActions: @Composable RowScope.() -> Unit = {},
     expandedTools: @Composable ColumnScope.() -> Unit = {}
 ) {
+    val colors = MaterialTheme.colorScheme
     val rainbowBrush = geminiGradientEffect()
     val fabIconRotation by animateFloatAsState(
         targetValue = if (isExpanded) 45f else 0f,
@@ -222,15 +225,15 @@ fun GeminiSplitFAB(
                             .height(56.dp)
                             .width(130.dp),
                         shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
-                        color = Color(0xFF121212),
+                        color = colors.surface,
                         border = BorderStroke(2.5.dp, rainbowBrush),
                         shadowElevation = 12.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Buscar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Buscar", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 Spacer(Modifier.width(8.dp))
-                                Icon(Icons.Default.Search, null, tint = Color.White.copy(0.8f), modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.Search, null, tint = colors.onSurface.copy(0.8f), modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -247,18 +250,18 @@ fun GeminiSplitFAB(
                     },
                     modifier = Modifier.size(56.dp),
                     shape = if (isSearchActive || isSecondaryPanelVisible) CircleShape else RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp, topEnd = 28.dp, bottomEnd = 28.dp),
-                    color = Color(0xFF121212),
+                    color = colors.surface,
                     border = BorderStroke(2.5.dp, rainbowBrush),
                     shadowElevation = 12.dp
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         if (isSecondaryPanelVisible || isSearchActive) {
-                            Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(26.dp))
+                            Icon(Icons.Default.Close, "Cerrar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
                         } else {
                             Icon(
                                 Icons.Default.Settings,
                                 "Ajustes",
-                                tint = Color.White,
+                                tint = colors.onSurface,
                                 modifier = Modifier.size(26.dp).rotate(fabIconRotation)
                             )
                         }
@@ -277,6 +280,7 @@ fun GeminiTopSearchBar(
     placeholderText: String = "Buscar...",
     focusRequester: FocusRequester = remember { FocusRequester() }
 ) {
+    val colors = MaterialTheme.colorScheme
     val rainbowBrush = geminiGradientEffect()
     // Obtenemos el controlador del teclado para mostrarlo automáticamente
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -289,16 +293,16 @@ fun GeminiTopSearchBar(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFF121212), // Fondo oscuro
-        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp), // Forma asimétrica como el FAB
+        color = colors.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
         shadowElevation = 12.dp,
-        border = BorderStroke(2.5.dp, rainbowBrush) // Borde arcoíris
+        border = BorderStroke(2.5.dp, rainbowBrush)
     ) {
         Row(modifier = Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Default.Search,
                 null,
-                tint = Color.White.copy(0.8f),
+                tint = colors.onSurface.copy(0.8f),
                 modifier = Modifier.padding(start = 24.dp).size(20.dp)
             )
 
@@ -310,17 +314,161 @@ fun GeminiTopSearchBar(
                     .weight(1f)
                     .padding(start = 12.dp)
                     .focusRequester(focusRequester),
-                textStyle = TextStyle(color = Color.White, fontSize = 17.sp),
+                textStyle = TextStyle(color = colors.onSurface, fontSize = 17.sp),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (searchQuery.isEmpty()) {
-                            Text(placeholderText, color = Color.Gray, fontSize = 16.sp)
+                            Text(placeholderText, color = colors.onSurfaceVariant, fontSize = 16.sp)
                         }
                         inner()
                     }
                 }
             )
+        }
+    }
+}
+
+/**
+ * Barra de búsqueda con botón de configuración reutilizable
+ * FAB en la parte inferior derecha que se expande hacia arriba al buscar
+ * Mismo estilo visual que el HomeScreen
+ */
+@Composable
+fun SearchBarWithSettings(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    isSearchActive: Boolean,
+    onSearchToggle: () -> Unit,
+    onSettingsClick: () -> Unit = {},
+    placeholderText: String = "Buscar...",
+    modifier: Modifier = Modifier,
+    content: @Composable (PaddingValues) -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val rainbowBrush = geminiGradientEffect()
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // Contenido principal
+        content(PaddingValues(bottom = 80.dp))
+
+        // Barra de búsqueda expandida (aparece arriba cuando está activa)
+        if (isSearchActive) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .zIndex(10f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = colors.surface,
+                        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                        shadowElevation = 12.dp,
+                        border = BorderStroke(2.5.dp, rainbowBrush)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                null,
+                                tint = Color.White.copy(0.8f),
+                                modifier = Modifier.padding(start = 24.dp).size(20.dp)
+                            )
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = onSearchQueryChange,
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = 12.dp)
+                                    .focusRequester(focusRequester),
+                                textStyle = TextStyle(color = Color.White, fontSize = 17.sp),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                decorationBox = { inner ->
+                                    Box(contentAlignment = Alignment.CenterStart) {
+                                        if (searchQuery.isEmpty()) {
+                                            Text(placeholderText, color = Color.Gray, fontSize = 16.sp)
+                                        }
+                                        inner()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    focusRequester.requestFocus()
+                    keyboardController?.show()
+                }
+
+                // Botón de Cerrar (X)
+                Surface(
+                    modifier = Modifier.size(56.dp).clickable {
+                        onSearchToggle()
+                        onSearchQueryChange("")
+                        keyboardController?.hide()
+                    },
+                    shape = CircleShape,
+                    color = colors.surface,
+                    border = BorderStroke(2.5.dp, rainbowBrush),
+                    shadowElevation = 12.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, "Cerrar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                    }
+                }
+            }
+        }
+
+        // FABs en la parte inferior derecha (solo cuando NO está buscando)
+        if (!isSearchActive) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+                    .zIndex(10f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Botón de Configuración/Engranaje
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    onClick = onSettingsClick,
+                    shape = CircleShape,
+                    color = colors.surface,
+                    border = BorderStroke(2.5.dp, rainbowBrush),
+                    shadowElevation = 12.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Settings, "Configuración", tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                    }
+                }
+
+                // Botón de Búsqueda
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    onClick = onSearchToggle,
+                    shape = CircleShape,
+                    color = colors.surface,
+                    border = BorderStroke(2.5.dp, rainbowBrush),
+                    shadowElevation = 12.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Search, "Buscar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                    }
+                }
+            }
         }
     }
 }
