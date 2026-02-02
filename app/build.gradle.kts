@@ -56,7 +56,9 @@ dependencies {
     implementation(libs.play.services.location)
 
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
-
+    implementation(libs.androidx.ui)
+    implementation("androidx.compose.material3:material3:1.3.1")
+    implementation(libs.androidx.compose.animation)
 
 
     testImplementation(libs.junit)
@@ -70,6 +72,11 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // Retrofit
     implementation(libs.retrofit)

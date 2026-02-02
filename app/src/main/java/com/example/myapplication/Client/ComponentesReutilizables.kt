@@ -1,16 +1,21 @@
 package com.example.myapplication.Client
 
+import android.R.attr.scaleX
+import android.R.attr.scaleY
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
@@ -22,11 +27,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+//import androidx.compose.ui.platform.LocalContentColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.DpOffset
@@ -35,101 +49,219 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.myapplication.R
 import com.example.myapplication.ui.theme.getAppColors
+import androidx.compose.material3.MaterialTheme
+//import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 
 // =================================================================================
-// --- COMPONENTES REUTILIZABLES PARA EL FAB Y SUS HERRAMIENTAS ---
+// --- COMPONENTES REUTILIZABLES PARA EL EFECTO GEMINI Y FAB ---
 // =================================================================================
 
+/**
+ * Efecto de gradiente animado estilo Gemini.
+ */
 @Composable
-fun ToolItem(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        FloatingActionButton(
-            onClick = onClick,
-            containerColor = color,
-            modifier = Modifier.size(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp, pressedElevation = 4.dp)
+fun geminiGradientEffect(): Brush {
+    val infiniteTransition = rememberInfiniteTransition(label = "geminiAnim")
+    val offsetAnim by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1500f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "offset"
+    )
+
+    return Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF4285F4), Color(0xFF9B51E0), Color(0xFFE91E63), Color(0xFF4285F4)
+        ),
+        start = Offset(offsetAnim - 500f, offsetAnim - 500f),
+        end = Offset(offsetAnim, offsetAnim)
+    )
+}
+
+/**
+ * Botón de acción pequeño con ícono y texto DENTRO del botón.
+ */
+@Composable
+fun SmallActionFab(
+    icon: ImageVector,
+    label: String,
+    iconColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(width = 64.dp, height = 56.dp), // Ancho para que entre el texto, alto como el FAB
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF1E1E1E), // Fondo oscuro
+        shadowElevation = 6.dp
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(vertical = 6.dp, horizontal = 4.dp)
         ) {
-            Icon(icon, null, tint = Color.Black)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor, // Color personalizado para el ícono
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .size(24.dp)
+            )
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+/**
+ * Herramienta pequeña para el menú expandido del FAB.
+ */
+@Composable
+fun SmallFabTool(label: String, icon: ImageVector, isSelected: Boolean = false, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(14.dp),
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.size(48.dp),
+            shadowElevation = 6.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else LocalContentColor.current
+                )
+            }
         }
         Spacer(Modifier.height(4.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
+/**
+ * Estructura base para un FAB dividido estilo Gemini.
+ */
 @Composable
-fun SplitFloatingActionButton(
-    modifier: Modifier = Modifier,
-    isSearchExpanded: Boolean,
-    isToolsExpanded: Boolean,
-    onSearchClick: (Boolean) -> Unit,
-    onToolsClick: (Boolean) -> Unit,
-    searchContent: @Composable () -> Unit,
-    horizontalTools: @Composable RowScope.() -> Unit,
-    verticalTools: @Composable ColumnScope.() -> Unit
+fun GeminiSplitFAB(
+    isExpanded: Boolean,
+    isSearchActive: Boolean,
+    isSecondaryPanelVisible: Boolean = false,
+    onToggleExpand: () -> Unit,
+    onActivateSearch: () -> Unit,
+    onCloseSearch: () -> Unit,
+    onCloseSecondaryPanel: () -> Unit = {},
+    secondaryActions: @Composable RowScope.() -> Unit = {},
+    expandedTools: @Composable ColumnScope.() -> Unit = {}
 ) {
-    Box(modifier = modifier, contentAlignment = Alignment.BottomEnd) {
+    val rainbowBrush = geminiGradientEffect()
+    val fabIconRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 45f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "fabRotation"
+    )
+
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(16.dp) // --- AUMENTADO --- Espacio entre los botones y el FAB principal
+    ) {
+        // --- ACCIONES RÁPIDAS (IZQUIERDA) ---
         AnimatedVisibility(
-            visible = isToolsExpanded && !isSearchExpanded,
-            enter = fadeIn() + slideInVertically { it / 2 } + scaleIn(transformOrigin = TransformOrigin(0.5f, 1f)),
-            exit = fadeOut() + slideOutVertically { it / 2 } + scaleOut(transformOrigin = TransformOrigin(0.5f, 1f)),
-            modifier = Modifier.padding(bottom = 72.dp)
+            visible = !isSecondaryPanelVisible && !isSearchActive,
+            enter = fadeIn() + slideInHorizontally(),
+            exit = fadeOut() + slideOutHorizontally()
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.End) { verticalTools() }
-        }
-        
-        AnimatedVisibility(
-            visible = isToolsExpanded && !isSearchExpanded,
-            enter = fadeIn() + slideInHorizontally { it / 2 } + scaleIn(transformOrigin = TransformOrigin(1f, 0.5f)),
-            exit = fadeOut() + slideOutHorizontally { it / 2 } + scaleOut(transformOrigin = TransformOrigin(1f, 0.5f)),
-            modifier = Modifier.padding(end = 72.dp)
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) { horizontalTools() }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { // --- AUMENTADO --- Espacio entre los botones de acción
+                secondaryActions()
+            }
         }
 
-        Surface(
-            modifier = Modifier
-                .height(56.dp)
-                .width(animateDpAsState(if (isSearchExpanded) 340.dp else 180.dp, label = "fabWidth").value),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxHeight().clickable { onSearchClick(!isSearchExpanded) }.padding(start = 16.dp, end = 8.dp),
-                    contentAlignment = Alignment.CenterStart
+        // --- BLOQUE PRINCIPAL (DERECHA) ---
+        Column(horizontalAlignment = Alignment.End) {
+            // Herramientas que aparecen arriba cuando se expande
+            AnimatedVisibility(
+                visible = isExpanded && !isSecondaryPanelVisible && !isSearchActive,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(bottom = 16.dp)
                 ) {
-                    AnimatedContent(
-                        targetState = isSearchExpanded, label = "SearchContent",
-                        transitionSpec = { fadeIn(animationSpec = tween(200, 150)) togetherWith fadeOut(animationSpec = tween(150)) }
-                    ) { searchActive ->
-                        if (searchActive) {
-                            searchContent()
-                        } else {
+                    expandedTools()
+                }
+            }
+
+            // El Botón Dividido
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Parte Izquierda: Buscar
+                AnimatedVisibility(
+                    visible = !isSearchActive,
+                    enter = expandHorizontally() + fadeIn(),
+                    exit = shrinkHorizontally() + fadeOut()
+                ) {
+                    Surface(
+                        onClick = onActivateSearch,
+                        modifier = Modifier
+                            .height(56.dp)
+                            .width(130.dp),
+                        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
+                        color = Color(0xFF121212),
+                        border = BorderStroke(2.5.dp, rainbowBrush),
+                        shadowElevation = 12.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Search, contentDescription = "Buscar")
+                                Text("Buscar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Buscar", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Search, null, tint = Color.White.copy(0.8f), modifier = Modifier.size(20.dp))
                             }
                         }
                     }
                 }
 
-                VerticalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-                Box(
-                    modifier = Modifier.size(56.dp).clickable { 
-                        if (isSearchExpanded) onSearchClick(false) else onToolsClick(!isToolsExpanded)
+                // Parte Derecha: Ajustes / Cerrar
+                Surface(
+                    onClick = {
+                        when {
+                            isSecondaryPanelVisible -> onCloseSecondaryPanel()
+                            isSearchActive -> onCloseSearch()
+                            else -> onToggleExpand()
+                        }
                     },
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.size(56.dp),
+                    shape = if (isSearchActive || isSecondaryPanelVisible) CircleShape else RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp, topEnd = 28.dp, bottomEnd = 28.dp),
+                    color = Color(0xFF121212),
+                    border = BorderStroke(2.5.dp, rainbowBrush),
+                    shadowElevation = 12.dp
                 ) {
-                    Crossfade(targetState = isSearchExpanded || isToolsExpanded, label = "ToolsIcon") { isExpanded ->
-                         Icon(
-                            imageVector = if (isExpanded) Icons.Default.Close else Icons.Default.Tune,
-                            contentDescription = if(isExpanded) "Cerrar" else "Herramientas"
-                        )
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isSecondaryPanelVisible || isSearchActive) {
+                            Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(26.dp))
+                        } else {
+                            Icon(
+                                Icons.Default.Settings,
+                                "Ajustes",
+                                tint = Color.White,
+                                modifier = Modifier.size(26.dp).rotate(fabIconRotation)
+                            )
+                        }
                     }
                 }
             }
@@ -137,61 +269,174 @@ fun SplitFloatingActionButton(
     }
 }
 
-// =================================================================================
-// --- NUEVO COMPONENTE REUTILIZABLE ---
-// =================================================================================
 
 @Composable
-fun FavoriteCardItem(
-    provider: PrestadorProfileFalso,
-    isSelectionMode: Boolean,
-    isSelected: Boolean,
-    onSelect: () -> Unit
+fun GeminiTopSearchBar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    placeholderText: String = "Buscar...",
+    focusRequester: FocusRequester = remember { FocusRequester() }
 ) {
-    val cardColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+    val rainbowBrush = geminiGradientEffect()
+    // Obtenemos el controlador del teclado para mostrarlo automáticamente
+    val keyboardController = LocalSoftwareKeyboardController.current
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = isSelectionMode, onClick = onSelect),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        border = border
+    // Efecto para solicitar foco y mostrar el teclado cuando aparece
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xFF121212), // Fondo oscuro
+        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp), // Forma asimétrica como el FAB
+        shadowElevation = 12.dp,
+        border = BorderStroke(2.5.dp, rainbowBrush) // Borde arcoíris
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isSelectionMode) {
-                Checkbox(checked = isSelected, onCheckedChange = { onSelect() }, modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-            }
-            AsyncImage(
-                model = provider.profileImageUrl,
-                contentDescription = "Foto de perfil",
-                fallback = painterResource(id = R.drawable.iconapp),
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
+        Row(modifier = Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Search,
+                null,
+                tint = Color.White.copy(0.8f),
+                modifier = Modifier.padding(start = 24.dp).size(20.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = "${provider.name} ${provider.lastName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(text = provider.services.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, "Rating", tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
-                    Text(text = "${provider.rating}", style = MaterialTheme.typography.labelSmall)
+
+            BasicTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                singleLine = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp)
+                    .focusRequester(focusRequester),
+                textStyle = TextStyle(color = Color.White, fontSize = 17.sp),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (searchQuery.isEmpty()) {
+                            Text(placeholderText, color = Color.Gray, fontSize = 16.sp)
+                        }
+                        inner()
+                    }
                 }
-            }
-            if (!isSelectionMode) {
-                Icon(imageVector = Icons.Default.Favorite, contentDescription = "Favorito", tint = Color.Red)
-            }
+            )
         }
     }
 }
 
+// =================================================================================
+//                      GEMINI FAB CON SCRIM Y LOADER GELATINA ACTUALIZADOS
+// =================================================================================
+// --- COMPONENTE 1: SCRIM ANIMADO (MEJORADO) ---
+@Composable
+fun GeminiFABWithScrim(
+    bottomPadding: PaddingValues,
+    showScrim: Boolean,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        // Animación de entrada y salida del degradado
+        AnimatedVisibility(
+            visible = showScrim,
+            enter = fadeIn(animationSpec = tween(800)),
+            exit = fadeOut(animationSpec = tween(800)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp) // Altura suficiente para cubrir los botones
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 1f) // Negro profundo pero translúcido
+                            )
+                        )
+                    )
+            )
+        }
+
+        // Contenedor de botones (FAB)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottomPadding) // Respeta la altura del NavigationBar
+                .navigationBarsPadding() // Mejora: Asegura que no choque con gestos del sistema
+                .padding(bottom = 10.dp, end = 10.dp),
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            content()
+        }
+    }
+}
+
+// --- COMPONENTE 2: CARGADOR M3 (GELATINA) ---
+@Composable
+fun M3JellyLoader(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    size: Dp = 48.dp
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "jelly")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing)), label = "rot"
+    )
+    val shapeValue by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "morph"
+    )
+
+    Box(
+        modifier = modifier.size(size).graphicsLayer {
+            rotationZ = rotation
+            scaleX = 1f + (0.15f * shapeValue)
+            scaleY = 1f - (0.15f * shapeValue)
+        },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val path = Path().apply {
+                val segments = 12
+                val innerRadius = size.toPx() * 0.42f
+                val outerRadius = size.toPx() * 0.48f
+                val angleStep = (2 * Math.PI / segments).toFloat()
+                for (i in 0 until segments) {
+                    val angle = i * angleStep
+                    val x = center.x + Math.cos(angle.toDouble()).toFloat() * outerRadius
+                    val y = center.y + Math.sin(angle.toDouble()).toFloat() * outerRadius
+                    if (i == 0) moveTo(x, y) else lineTo(x, y)
+                    val midAngle = angle + angleStep / 2
+                    val mx = center.x + Math.cos(midAngle.toDouble()).toFloat() * innerRadius
+                    val my = center.y + Math.sin(midAngle.toDouble()).toFloat() * innerRadius
+                    lineTo(mx, my)
+                }
+                close()
+            }
+            drawPath(path, color = color)
+        }
+    }
+}
+
+
+
+@Composable
+fun ContainedJellyLoader(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(80.dp)
+            .graphicsLayer { clip = true; shape = androidx.compose.foundation.shape.CircleShape }
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+            //.graphicsLayer { clip = true; shape = CircleShape }
+            //.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        M3JellyLoader(size = 44.dp)
+    }
+}
 
 // =================================================================================
 // --- OTROS COMPONENTES REUTILIZABLES ---
@@ -225,7 +470,7 @@ fun ServiceTag(text: String, color: Color) {
 )
 @Composable
 fun PrestadorCard(
-    provider: PrestadorProfileFalso,
+    provider: UserFalso,
     onClick: () -> Unit, // Navegar al perfil
     onChat: (() -> Unit)? = null,
     onDeleteRequest: (() -> Unit)? = null,
@@ -241,6 +486,15 @@ fun PrestadorCard(
 
     val activeColor = Color(0xFF10B981) // Verde
     val inactiveColor = appColors.textSecondaryColor
+
+    // Extraer datos de la empresa principal
+    val mainCompany = provider.companies.firstOrNull()
+    val companyName = mainCompany?.name ?: ""
+    val services = mainCompany?.services ?: emptyList()
+    val works24h = mainCompany?.works24h ?: false
+    val doesHomeVisits = mainCompany?.doesHomeVisits ?: false
+    val hasPhysicalLocation = mainCompany?.hasPhysicalLocation ?: false
+    val email = provider.emails.firstOrNull() ?: ""
 
     // Menú Contextual (Long Press)
     Box {
@@ -309,9 +563,9 @@ fun PrestadorCard(
                     }
 
                     // Nombre de empresa
-                    provider.companyName?.takeIf { it.isNotEmpty() }?.let {
+                    if (companyName.isNotEmpty()) {
                         Text(
-                            text = it,
+                            text = companyName,
                             style = MaterialTheme.typography.bodySmall,
                             color = appColors.textSecondaryColor
                         )
@@ -339,23 +593,22 @@ fun PrestadorCard(
                             imageVector = Icons.Default.Schedule,
                             contentDescription = "24hs",
                             modifier = Modifier.size(20.dp),
-                            tint = if (provider.works24h) activeColor else inactiveColor
+                            tint = if (works24h) activeColor else inactiveColor
                         )
                         Icon(
                             imageVector = Icons.Default.Home, 
                             contentDescription = "Visita a Domicilio",
                             modifier = Modifier.size(20.dp),
-                            tint = if (provider.doesHomeVisits) activeColor else inactiveColor
+                            tint = if (doesHomeVisits) activeColor else inactiveColor
                         )
                         Icon(
                             imageVector = Icons.Default.Storefront,
                             contentDescription = "Local Físico",
                             modifier = Modifier.size(20.dp),
-                            tint = if (provider.hasPhysicalLocation) activeColor else inactiveColor
+                            tint = if (hasPhysicalLocation) activeColor else inactiveColor
                         )
 
                         // [MODIFICADO] Icono de Favorito Visible
-                        //Spacer(modifier = Modifier.weight(1f)) // Empuja el favorito a la derecha
                         IconButton(
                             onClick = { showFavoriteDialog = true },
                             modifier = Modifier.size(24.dp)
@@ -462,7 +715,7 @@ fun PrestadorCard(
                             }
                         }
                         Text(
-                            text = provider.email,
+                            text = email,
                             style = MaterialTheme.typography.bodyMedium,
                             color = appColors.textSecondaryColor
                         )
@@ -478,7 +731,7 @@ fun PrestadorCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    provider.services.forEach { service ->
+                    services.forEach { service ->
                         ServiceTag(text = service, color = MaterialTheme.colorScheme.surfaceVariant)
                     }
                 }
@@ -491,9 +744,9 @@ fun PrestadorCard(
                 Text("Disponibilidad y Modalidad", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                RowItemDetail(icon = Icons.Default.Schedule, text = "Disponible 24hs", isActive = provider.works24h)
-                RowItemDetail(icon = Icons.Default.Home, text = "Visitas a Domicilio", isActive = provider.doesHomeVisits)
-                RowItemDetail(icon = Icons.Default.Storefront, text = "Local Físico", isActive = provider.hasPhysicalLocation)
+                RowItemDetail(icon = Icons.Default.Schedule, text = "Disponible 24hs", isActive = works24h)
+                RowItemDetail(icon = Icons.Default.Home, text = "Visitas a Domicilio", isActive = doesHomeVisits)
+                RowItemDetail(icon = Icons.Default.Storefront, text = "Local Físico", isActive = hasPhysicalLocation)
 
                 Spacer(modifier = Modifier.height(32.dp))
                 

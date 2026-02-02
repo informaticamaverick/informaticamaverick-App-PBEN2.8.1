@@ -32,7 +32,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.example.myapplication.ui.screens.ProfileMode
 import com.example.myapplication.ui.theme.getAppColors
 import java.text.SimpleDateFormat
 import java.util.*
@@ -42,21 +44,31 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CrearLicScreen(
     onBack: () -> Unit,
+    viewModel: ProfileSharedViewModel = hiltViewModel() // <-- OBTENER VIEWMODEL
 ) {
-    // We will now use the sample data directly
     val categories = CategorySampleDataFalso.categories
-    val user = UserSampleDataFalso.findUserByUsername("maxinanterne")!! // Get a sample user
+    
+    // --- ESTADOS (AHORA DESDE EL VIEWMODEL) ---
+    val profileMode by viewModel.profileMode.collectAsState()
+    val userState by viewModel.userState.collectAsState()
 
-    CrearLicScreenContent(
-        onBack = onBack,
-        categories = categories,
-        user = user
-    )
+    // Solo mostramos el contenido si hay usuario cargado
+    if (userState != null) {
+        CrearLicScreenContent(
+            onBack = onBack,
+            categories = categories,
+            user = userState!!, // <-- PASAR USUARIO REAL
+            profileMode = profileMode
+        )
+    } else {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,7 +76,8 @@ fun CrearLicScreen(
 fun CrearLicScreenContent(
     onBack: () -> Unit,
     categories: List<CategoryItem>,
-    user: UserFalso
+    user: UserEntity, // <-- RECIBE UserEntity
+    profileMode: ProfileMode // Recibe el modo actual
 ) {
     val coroutineScope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState()
@@ -81,11 +94,8 @@ fun CrearLicScreenContent(
         }
     }
 
-
-    //Manejar  boton atras del sistema
     BackHandler {
         if (showFakeAd) {
-            // If the ad is showing, navigate back home.
             onBack()
         } else {
             onBack()
@@ -116,12 +126,19 @@ fun CrearLicScreenContent(
     var categorySearchQuery by remember { mutableStateOf("") }
     var isCategorySearchFocused by remember { mutableStateOf(false) }
 
-    // Estados para dirección
-    var address by remember { mutableStateOf(user.direccionCasa ?: "") }
+    // --- LÓGICA DE DIRECCIÓN MODIFICADA ---
+    var address by remember { mutableStateOf("") }
     var locationExpanded by remember { mutableStateOf(false) }
 
-
-    // Colores adaptativos
+    // Efecto para actualizar la dirección por defecto cuando el modo cambia
+    LaunchedEffect(profileMode, user) {
+        address = if (profileMode == ProfileMode.CLIENTE) {
+            user.personalAddresses.firstOrNull()?.fullString() ?: ""
+        } else {
+            user.companies.firstOrNull()?.branches?.firstOrNull()?.address?.fullString() ?: ""
+        }
+    }
+    
     val colors = getAppColors()
 
     // Filtrar categorías según búsqueda
@@ -251,7 +268,7 @@ fun CrearLicScreenContent(
                         OutlinedTextField(
                             value = address,
                             onValueChange = { address = it },
-                            label = { Text("Dirección") },
+                            label = { Text("Dirección del Proyecto") },
                             trailingIcon = {
                                 Box {
                                     IconButton(onClick = { locationExpanded = true }) {
@@ -261,28 +278,34 @@ fun CrearLicScreenContent(
                                         expanded = locationExpanded,
                                         onDismissRequest = { locationExpanded = false }
                                     ) {
-                                        user.direccionCasa?.let {
-                                            DropdownMenuItem(
-                                                text = { Text("Casa: $it") },
-                                                onClick = {
-                                                    address = it
-                                                    locationExpanded = false
+                                        // --- LÓGICA DE DIRECCIÓN MODIFICADA ---
+                                        if (profileMode == ProfileMode.CLIENTE) {
+                                            user.personalAddresses.forEach { addr ->
+                                                DropdownMenuItem(
+                                                    text = { Text("Casa: ${addr.fullString()}") },
+                                                    onClick = {
+                                                        address = addr.fullString()
+                                                        locationExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        } else {
+                                            user.companies.forEach { company ->
+                                                company.branches.forEach { branch ->
+                                                    DropdownMenuItem(
+                                                        text = { Text("${company.name}: ${branch.address.fullString()}") },
+                                                        onClick = {
+                                                            address = branch.address.fullString()
+                                                            locationExpanded = false
+                                                        }
+                                                    )
                                                 }
-                                            )
-                                        }
-                                        user.direccionTrabajo?.let {
-                                            DropdownMenuItem(
-                                                text = { Text("Trabajo: $it") },
-                                                onClick = {
-                                                    address = it
-                                                    locationExpanded = false
-                                                }
-                                            )
+                                            }
                                         }
                                         DropdownMenuItem(
-                                            text = { Text("Ubicación actual") },
+                                            text = { Text("Otra ubicación") },
                                             onClick = {
-                                                address = "Ubicación en tiempo real" // Placeholder
+                                                address = "" // Limpiar para que el usuario escriba
                                                 locationExpanded = false
                                             }
                                         )
@@ -884,15 +907,15 @@ fun InfoBannerContent() {
     }
 }
 
-
 @Preview(showBackground = true)
 @Composable
 fun CrearLicScreenPreview() {
-    MyApplicationTheme {
-        CrearLicScreenContent(
-            onBack = {},
-            categories = CategorySampleDataFalso.categories,
-            user = UserSampleDataFalso.findUserByUsername("maxinanterne")!!
-        )
-    }
+    // MyApplicationTheme {
+        // CrearLicScreenContent(
+        //     onBack = {},
+        //     categories = CategorySampleDataFalso.categories,
+        //     user = UserSampleDataFalso.currentUser,
+        //     profileMode = ProfileMode.CLIENTE
+        // )
+    // }
 }

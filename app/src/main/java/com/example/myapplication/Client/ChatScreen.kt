@@ -410,10 +410,12 @@ fun ChatListView(
     var providersList by remember { mutableStateOf(SampleDataFalso.prestadores.take(10)) }
 
     // Estado para el diálogo de eliminación
-    var providerToDelete by remember { mutableStateOf<PrestadorProfileFalso?>(null) }
+    var providerToDelete by remember { mutableStateOf<UserFalso?>(null) }
 
     // Obtenemos las categorías (profesiones) de forma dinámica de los prestadores en el chat.
-    val categories = remember(providersList) { providersList.map { it.services.first() }.distinct() }
+    val categories = remember(providersList) { 
+        providersList.mapNotNull { it.companies.firstOrNull()?.services?.firstOrNull() }.distinct() 
+    }
 
     var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
 
@@ -422,7 +424,10 @@ fun ChatListView(
         if (selectedCategories.isEmpty()) {
             providersList
         } else {
-            providersList.filter { it.services.first() in selectedCategories }
+            providersList.filter { 
+                val service = it.companies.firstOrNull()?.services?.firstOrNull()
+                service != null && service in selectedCategories
+            }
         }
     }
 
@@ -485,7 +490,7 @@ fun ChatListView(
                         },
                         label = { Text(category) },
                         leadingIcon = if (isSelected) {
-                            {
+                            @Composable {
                                 Icon(
                                     imageVector = Icons.Default.Done,
                                     contentDescription = "Seleccionado",
@@ -603,7 +608,7 @@ fun DateLabel(date: String) {
 
 @Composable
 fun ChatConversationView(
-    provider: PrestadorProfileFalso,
+    provider: UserFalso,
     messages: List<Message>,
     inputText: String,
     onInputChange: (String) -> Unit,
@@ -791,7 +796,7 @@ fun ChatConversationView(
 
 @Composable
 fun ChatHeader(
-    provider: PrestadorProfileFalso,
+    provider: UserFalso,
     onBack: () -> Unit,
     appColors: com.example.myapplication.ui.theme.AppColors
 ) {
@@ -1960,4 +1965,3 @@ fun ActionContent(
         }
     }
 }
-
