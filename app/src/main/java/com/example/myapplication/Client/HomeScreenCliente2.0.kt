@@ -60,6 +60,7 @@ import androidx.compose.ui.util.lerp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
 import com.example.myapplication.Client.*
 import com.example.myapplication.Model.OpenMeteoResponse
@@ -70,6 +71,10 @@ import com.example.myapplication.ViewModel.WeatherViewModel
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.example.myapplication.Data.Repository.ForecastDay
+import com.example.myapplication.Data.Repository.WeatherRepository
 
 // ==================================================================================
 // --- SECCIÓN: MODELOS DE DATOS ---
@@ -191,7 +196,9 @@ fun HomeScreenComplete(
         windSpeed = windSpeed,
         humidity = humidity,
         cityName = cityName,
-        onRefreshLocation = { locationViewModel.fetchLocation() }
+        onRefreshLocation = { locationViewModel.fetchLocation() },
+        latitude = latitude,
+        longitude = longitude
     )
 }
 
@@ -211,7 +218,9 @@ fun HomeScreenContent(
     windSpeed: String = "15 km/h",
     humidity: String = "60%",
     cityName: String = "Tucumán",
-    onRefreshLocation: () -> Unit = {}
+    onRefreshLocation: () -> Unit = {},
+    latitude: Double? = null,
+    longitude: Double? = null
 ) {
     val colors = MaterialTheme.colorScheme
     val isSystemInDarkMode = isSystemInDarkTheme()
@@ -221,6 +230,61 @@ fun HomeScreenContent(
     var showFavorites by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var refreshTrigger by remember { mutableStateOf(0) }
+    var allCategoryExpanded by remember { mutableStateOf(true)}
+    
+    // Weather API - Variables locales modificables
+    var currentTemperature by remember { mutableStateOf(temperature) }
+    var currentWeatherEmoji by remember { mutableStateOf(weatherEmoji) }
+    var currentWeatherDescription by remember { mutableStateOf(weatherDescription) }
+    var currentWindSpeed by remember { mutableStateOf(windSpeed) }
+    var currentHumidity by remember { mutableStateOf(humidity) }
+    var currentCityName by remember { mutableStateOf(cityName) }
+    
+    val weatherRepository = remember { WeatherRepository() }
+    val coroutineScope = rememberCoroutineScope()
+    var forecastDays by remember { mutableStateOf<List<ForecastDay>>(emptyList()) }
+    
+    // Actualizar nombre de ciudad cuando cambie
+    LaunchedEffect(cityName) {
+        if (cityName.isNotEmpty()) {
+            currentCityName = cityName
+        }
+    }
+    
+    // Cargar datos del clima usando ubicación GPS real
+    LaunchedEffect(latitude, longitude) {
+        android.util.Log.d("WeatherDebug", "LaunchedEffect triggered - Lat: $latitude, Lon: $longitude")
+        
+        // Esperar a que haya coordenadas GPS disponibles
+        if (latitude != null && longitude != null) {
+            android.util.Log.d("WeatherDebug", "Fetching weather for coordinates: $latitude, $longitude")
+            
+            coroutineScope.launch {
+                try {
+                    // Usar coordenadas reales del GPS
+                    val weatherData = weatherRepository.getCurrentWeather(latitude, longitude)
+                    android.util.Log.d("WeatherDebug", "Weather data received: $weatherData")
+                    
+                    weatherData?.let { data ->
+                        currentTemperature = data.temperature
+                        currentWeatherEmoji = data.weatherEmoji
+                        currentWeatherDescription = data.weatherDescription
+                        currentWindSpeed = data.windSpeed
+                        currentHumidity = data.humidity
+                        // NO sobrescribir el nombre de ciudad, usar el del GPS
+                        android.util.Log.d("WeatherDebug", "Weather updated: ${currentCityName}, ${data.temperature}")
+                    } ?: android.util.Log.e("WeatherDebug", "Weather data is null")
+                    
+                    forecastDays = weatherRepository.getForecast(latitude, longitude)
+                    android.util.Log.d("WeatherDebug", "Forecast days: ${forecastDays.size}")
+                } catch (e: Exception) {
+                    android.util.Log.e("WeatherDebug", "Error fetching weather: ${e.message}", e)
+                }
+            }
+        } else {
+            android.util.Log.w("WeatherDebug", "Latitude or longitude is null")
+        }
+    }
     
     val keyboardController = LocalSoftwareKeyboardController.current
     
@@ -234,11 +298,6 @@ fun HomeScreenContent(
         refreshTrigger++
     }
 
-    val scrimAlpha by animateFloatAsState(
-        targetValue = if (isFabMenuExpanded || isSearchActive || showFavorites || showWeatherDetails) 0.6f else 0f,
-        animationSpec = tween(durationMillis = 200),
-        label = "scrim"
-    )
     
     val onCategoryClick: (String) -> Unit = { categoryName ->
         navController.navigate("result_busqueda/$categoryName")
@@ -263,10 +322,10 @@ fun HomeScreenContent(
                     profileMode = profileMode,
                     user = userState, // <-- PASAR USUARIO REAL
                     onModeToggle = onModeToggle, // <-- ACCIÓN CENTRALIZADA
-                    temperature = temperature,
-                    weatherEmoji = weatherEmoji,
-                    cityName = cityName,
-                    gpsLocation = cityName, // Pasar ubicación GPS
+                    temperature = currentTemperature,
+                    weatherEmoji = currentWeatherEmoji,
+                    cityName = currentCityName,
+                    gpsLocation = currentCityName, // Pasar ubicación GPS
                     onWeatherClick = { showWeatherDetails = !showWeatherDetails },
                     onRefreshLocation = onRefreshLocation
                 )
@@ -292,32 +351,15 @@ fun HomeScreenContent(
                     items(regularCategories) { superCat ->
                         SuperCategorySection(
                             superCategory = superCat,
-                            onCategoryClick = onCategoryClick
+                            onCategoryClick = onCategoryClick,
+                            globalExpandState = allCategoryExpanded
                         )
                         Spacer(modifier = Modifier.height(1.dp)) // [MODIFICABLE] Separación entre filas de categorías
                     }
                 }
             }
 
-            // --- CAPA 2: SCRIM (FONDO OSCURO INTERACTIVO) ---
-            if (scrimAlpha > 0f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = scrimAlpha)) // [MODIFICABLE] Color y opacidad del fondo
-                        .zIndex(1f)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            // Al tocar fuera, cerramos todo
-                            isFabMenuExpanded = false
-                            if (isSearchActive) closeSearch()
-                            showFavorites = false
-                            showWeatherDetails = false
-                        }
-                )
-            }
+
             
             // --- CAPA 2.5: PANEL EXPANDIDO DEL CLIMA (SOBREPUESTO) ---
             AnimatedVisibility(
@@ -344,12 +386,13 @@ fun HomeScreenContent(
                     .zIndex(2f)
             ) {
                 WeatherExpandedCard(
-                    temperature = temperature,
-                    weatherEmoji = weatherEmoji,
-                    weatherDescription = weatherDescription,
-                    windSpeed = windSpeed,
-                    humidity = humidity,
-                    cityName = cityName
+                    temperature = currentTemperature,
+                    weatherEmoji = currentWeatherEmoji,
+                    weatherDescription = currentWeatherDescription,
+                    windSpeed = currentWindSpeed,
+                    humidity = currentHumidity,
+                    cityName = currentCityName,
+                    forecastDays = forecastDays
                 )
             }
 
@@ -471,14 +514,21 @@ fun HomeScreenContent(
 
                     // Herramientas que salen hacia arriba
                     expandedTools = {
-                        SmallFabTool(label = "Filtros", icon = Icons.Default.FilterList, onClick = {})
-                        // [NUEVO] Botón de Actualizar / Refresh
+                        SmallFabTool(label = if (allCategoryExpanded)
+                            "Colapsar" else "Expandir",
+                            icon = if (allCategoryExpanded)
+                                Icons.Default.UnfoldLess else Icons.Default.UnfoldLess,
+                            onClick = {
+                                allCategoryExpanded = !allCategoryExpanded
+                            }
+                        )
+
                         SmallFabTool(
-                            label = "Actualizar", 
-                            icon = Icons.Default.Refresh, 
-                            onClick = { 
+                            label = "Actualizar",
+                            icon = Icons.Default.Refresh,
+                            onClick = {
                                 isFabMenuExpanded = false
-                                refreshTrigger++ // Dispara la recarga y barajado
+                                refreshTrigger++
                             }
                         )
                     }
@@ -514,8 +564,8 @@ fun TopHeaderSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp) // Padding reducido para más espacio
-                .height(IntrinsicSize.Min), // Para que todos los hijos tengan la misma altura
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -530,7 +580,7 @@ fun TopHeaderSection(
             }
 
             // --- 2. COLUMNA CENTRAL: UBICACIÓN Y SELECTOR ---
-            Box(modifier = Modifier.weight(1.3f)) { // Peso ligeramente mayor
+            Box(modifier = Modifier.weight(1.3f)) {
                 LocationSelector(
                     user = user, 
                     mode = profileMode,
@@ -563,25 +613,27 @@ fun WeatherWidget(
     Card(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(onClick = onClick), // Hacer clickeable
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f) // Fondo blanco semitransparente
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 0.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.Start
         ) {
-            // Mostrar emoji del clima en lugar de ícono fijo
+            Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = weatherEmoji,
                 style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(32.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Column {
                 Text(
                     text = temperature,
@@ -598,6 +650,35 @@ fun WeatherWidget(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ForecastDay(day: String, emoji: String, temp: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 2.dp)
+    ) {
+        Text(
+            text = day,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = emoji,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = temp,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 11.sp
+        )
     }
 }
 
@@ -1336,10 +1417,15 @@ fun ProviderPromoCard(item: BannerContent.ProviderPromo, onClick: () -> Unit, on
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SuperCategorySection(superCategory: SuperCategory, onCategoryClick: (String) -> Unit) {
+fun SuperCategorySection(superCategory: SuperCategory, onCategoryClick: (String) -> Unit, globalExpandState: Boolean = true) {
     val totalItems = superCategory.items.size
-    var isExpanded by remember { mutableStateOf(true) } // Estado para contraer/expandir la fila
+    var isExpanded by remember { mutableStateOf(globalExpandState) }
     val pagerState = rememberPagerState(initialPage = Int.MAX_VALUE / 2, pageCount = { Int.MAX_VALUE })
+
+    //Sincornizar con el estado global
+    LaunchedEffect(globalExpandState) {
+        isExpanded = globalExpandState
+    }
     
     // Cálculo para mostrar "1/10"
     val currentRealIndex = (pagerState.currentPage % totalItems) + 1
@@ -1595,7 +1681,8 @@ fun WeatherExpandedCard(
     weatherDescription: String,
     windSpeed: String,
     humidity: String,
-    cityName: String = "Tucumán"
+    cityName: String = "Tucumán",
+    forecastDays: List<ForecastDay> = emptyList()
 ) {
     val colors = MaterialTheme.colorScheme
     
@@ -1653,12 +1740,11 @@ fun WeatherExpandedCard(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Información adicional en tarjetas compactas
+            // Información adicional: Viento y Humedad
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Viento
                 WeatherInfoCard(
                     icon = Icons.Default.Air,
                     label = "Viento",
@@ -1666,7 +1752,6 @@ fun WeatherExpandedCard(
                     modifier = Modifier.weight(1f)
                 )
                 
-                // Humedad
                 WeatherInfoCard(
                     icon = Icons.Default.WaterDrop,
                     label = "Humedad",
@@ -1674,7 +1759,68 @@ fun WeatherExpandedCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Pronóstico extendido de 5 días
+            Text(
+                text = "Pronóstico extendido",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onSurface
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                if (forecastDays.isEmpty()) {
+                    // Datos por defecto mientras carga
+                    ForecastDayItem("Lun", "☀️", "28°/18°")
+                    ForecastDayItem("Mar", "🌤️", "26°/17°")
+                    ForecastDayItem("Mié", "⛅", "24°/16°")
+                    ForecastDayItem("Jue", "🌧️", "22°/15°")
+                    ForecastDayItem("Vie", "⛈️", "20°/14°")
+                } else {
+                    forecastDays.forEach { day ->
+                        ForecastDayItem(day.day, day.emoji, day.temp)
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+fun ForecastDayItem(day: String, emoji: String, temp: String) {
+    val colors = MaterialTheme.colorScheme
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(vertical = 4.dp)
+    ) {
+        Text(
+            text = day,
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant,
+            fontSize = 11.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = emoji,
+            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 24.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = temp,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = colors.onSurface,
+            fontSize = 10.sp
+        )
     }
 }
 

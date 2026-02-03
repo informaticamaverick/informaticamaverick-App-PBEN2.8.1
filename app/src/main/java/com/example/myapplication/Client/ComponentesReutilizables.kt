@@ -622,13 +622,18 @@ fun PrestadorCard(
     onClick: () -> Unit, // Navegar al perfil
     onChat: (() -> Unit)? = null,
     onDeleteRequest: (() -> Unit)? = null,
-    actionContent: @Composable (() -> Unit)? = null
+    actionContent: @Composable (() -> Unit)? = null,
+    viewMode: String = "Detallada", // Vista detallada
+    showDates: Boolean = true, // Mostart fechas
+    showAvatars: Boolean = true, // Mostrat avatar
+    showPreviews: Boolean = true, // Mostrar previews
+    showBadges: Boolean = true, // Mostrar badges
 ) {
     val appColors = getAppColors()
     var showDetailSheet by remember { mutableStateOf(false) } // Sheet para mostrar detalle expandido
     var showContextMenu by remember { mutableStateOf(false) }
     var showFavoriteDialog by remember { mutableStateOf(false) }
-    
+
     // Estado local para favoritos (solo para visualización inmediata)
     var isFavoriteLocal by remember { mutableStateOf(provider.isFavorite) }
 
@@ -664,28 +669,30 @@ fun PrestadorCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Sección de Perfil (Foto) - ÚNICO lugar que lleva al perfil completo
-                Box(
-                    modifier = Modifier
-                        .clickable(onClick = onClick) 
-                        .padding(end = 16.dp)
-                ) {
-                    AsyncImage(
-                        model = provider.profileImageUrl,
-                        contentDescription = "Foto de perfil",
-                        fallback = painterResource(id = R.drawable.iconapp),
+                if (showAvatars) {
+                    Box(
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    if (provider.isOnline) {
-                        Badge(
+                            .clickable(onClick = onClick)
+                            .padding(end = 16.dp)
+                    ) {
+                        AsyncImage(
+                            model = provider.profileImageUrl,
+                            contentDescription = "Foto de perfil",
+                            fallback = painterResource(id = R.drawable.iconapp),
                             modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .size(16.dp)
-                                .border(2.dp, appColors.surfaceColor, CircleShape),
-                            containerColor = Color(0xFF10B981)
+                                .size(64.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
                         )
+                        if (provider.isOnline && showBadges) {
+                            Badge(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .size(16.dp)
+                                    .border(2.dp, appColors.surfaceColor, CircleShape),
+                                containerColor = Color(0xFF10B981)
+                            )
+                        }
                     }
                 }
 
@@ -699,7 +706,7 @@ fun PrestadorCard(
                             fontWeight = FontWeight.Bold,
                             color = appColors.textPrimaryColor
                         )
-                        if (provider.isVerified) {
+                        if (provider.isVerified && showBadges) {
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 Icons.Filled.Verified,
@@ -711,7 +718,7 @@ fun PrestadorCard(
                     }
 
                     // Nombre de empresa
-                    if (companyName.isNotEmpty()) {
+                    if (companyName.isNotEmpty() && showPreviews) {
                         Text(
                             text = companyName,
                             style = MaterialTheme.typography.bodySmall,
@@ -719,7 +726,7 @@ fun PrestadorCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                     }
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // [MODIFICADO] Fila inferior con Iconos Booleanos y Rating y favorito
@@ -729,32 +736,46 @@ fun PrestadorCard(
                     ) {
                         // Rating
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.Default.Star,
+                                null,
+                                tint = Color(0xFFFFD700),
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(modifier = Modifier.width(2.dp))
-                            Text(text = "${provider.rating}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "${provider.rating}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                        
-                        VerticalDivider(modifier = Modifier.height(12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-                        // Iconos Booleanos (Más compactos)
-                        Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = "24hs",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (works24h) activeColor else inactiveColor
+                        VerticalDivider(
+                            modifier = Modifier.height(12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant
                         )
-                        Icon(
-                            imageVector = Icons.Default.Home, 
-                            contentDescription = "Visita a Domicilio",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (doesHomeVisits) activeColor else inactiveColor
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Storefront,
-                            contentDescription = "Local Físico",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (hasPhysicalLocation) activeColor else inactiveColor
-                        )
+
+                        if (showBadges) {
+                            // Iconos Booleanos (Más compactos)
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = "24hs",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (works24h) activeColor else inactiveColor
+                            )
+                            Icon(
+                                imageVector = Icons.Default.Home,
+                                contentDescription = "Visita a Domicilio",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (doesHomeVisits) activeColor else inactiveColor
+                            )
+                            Icon(
+                                imageVector = Icons.Default.Storefront,
+                                contentDescription = "Local Físico",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (hasPhysicalLocation) activeColor else inactiveColor
+                            )
+                        }
 
                         // [MODIFICADO] Icono de Favorito Visible
                         IconButton(
@@ -778,7 +799,7 @@ fun PrestadorCard(
                         .padding(start = 8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send, 
+                        imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Enviar Mensaje",
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -795,7 +816,7 @@ fun PrestadorCard(
             DropdownMenuItem(
                 text = { Text("Ver Perfil Completo") },
                 leadingIcon = { Icon(Icons.Default.Person, null) },
-                onClick = { 
+                onClick = {
                     showContextMenu = false
                     onClick() // Navegar al perfil
                 }
@@ -803,14 +824,14 @@ fun PrestadorCard(
             HorizontalDivider()
             DropdownMenuItem(
                 text = { Text(if (isFavoriteLocal) "Quitar de Favoritos" else "Añadir a Favoritos") },
-                leadingIcon = { 
+                leadingIcon = {
                     Icon(
-                        imageVector = if (isFavoriteLocal) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, 
+                        imageVector = if (isFavoriteLocal) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = null,
                         tint = if (isFavoriteLocal) Color.Red else LocalContentColor.current
-                    ) 
+                    )
                 },
-                onClick = { 
+                onClick = {
                     showContextMenu = false
                     showFavoriteDialog = true
                 }
@@ -820,177 +841,210 @@ fun PrestadorCard(
 
     // Detalle Expandido (BottomSheet Moderno)
     if (showDetailSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showDetailSheet = false },
-            sheetState = rememberModalBottomSheetState(),
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp,
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 32.dp) // Espacio extra abajo
+            ModalBottomSheet(
+                onDismissRequest = { showDetailSheet = false },
+                sheetState = rememberModalBottomSheetState(),
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
             ) {
-                // Encabezado Detalle
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(
-                        model = provider.profileImageUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        // [MODIFICADO] Nombre con icono de verificación en BottomSheet
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "${provider.name} ${provider.lastName}",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (provider.isVerified) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    Icons.Filled.Verified,
-                                    "Perfil Verificado",
-                                    tint = appColors.accentBlue,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = email,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = appColors.textSecondaryColor
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(bottom = 32.dp) // Espacio extra abajo
+                ) {
+                    // Encabezado Detalle
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(
+                            model = provider.profileImageUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
                         )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            // [MODIFICADO] Nombre con icono de verificación en BottomSheet
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${provider.name} ${provider.lastName}",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (provider.isVerified) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        Icons.Filled.Verified,
+                                        "Perfil Verificado",
+                                        tint = appColors.accentBlue,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = email,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = appColors.textSecondaryColor
+                            )
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                // Categorías / Servicios (Texto)
-                Text("Servicios Ofrecidos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(12.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    services.forEach { service ->
-                        ServiceTag(text = service, color = MaterialTheme.colorScheme.surfaceVariant)
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Categorías / Servicios (Texto)
+                    Text(
+                        "Servicios Ofrecidos",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        services.forEach { service ->
+                            ServiceTag(
+                                text = service,
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                // Detalles Booleanos
-                Text("Disponibilidad y Modalidad", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                RowItemDetail(icon = Icons.Default.Schedule, text = "Disponible 24hs", isActive = works24h)
-                RowItemDetail(icon = Icons.Default.Home, text = "Visitas a Domicilio", isActive = doesHomeVisits)
-                RowItemDetail(icon = Icons.Default.Storefront, text = "Local Físico", isActive = hasPhysicalLocation)
+                    // Detalles Booleanos
+                    Text(
+                        "Disponibilidad y Modalidad",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                // Botón Acción Principal en Detalle
-                Button(
-                    onClick = { 
-                        showDetailSheet = false
-                        onClick() // Ir a perfil completo
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Ver Perfil Completo")
+                    RowItemDetail(
+                        icon = Icons.Default.Schedule,
+                        text = "Disponible 24hs",
+                        isActive = works24h
+                    )
+                    RowItemDetail(
+                        icon = Icons.Default.Home,
+                        text = "Visitas a Domicilio",
+                        isActive = doesHomeVisits
+                    )
+                    RowItemDetail(
+                        icon = Icons.Default.Storefront,
+                        text = "Local Físico",
+                        isActive = hasPhysicalLocation
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Botón Acción Principal en Detalle
+                    Button(
+                        onClick = {
+                            showDetailSheet = false
+                            onClick() // Ir a perfil completo
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Ver Perfil Completo")
+                    }
                 }
             }
         }
-    }
 
-    // Alerta de Favoritos
-    if (showFavoriteDialog) {
-        AlertDialog(
-            onDismissRequest = { showFavoriteDialog = false },
-            icon = { Icon(Icons.Default.Favorite, null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text(if (isFavoriteLocal) "Quitar de Favoritos" else "Añadir a Favoritos") },
-            text = { Text(if (isFavoriteLocal) "¿Estás seguro de que quieres eliminar a este prestador de tus favoritos?" else "¿Quieres añadir a este prestador a tu lista de favoritos?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    // TODO: Lógica real para actualizar favorito en ViewModel/BD
-                    isFavoriteLocal = !isFavoriteLocal
-                    SampleDataFalso.toggleFavorite(provider.id) // Actualizar dato falso
-                    showFavoriteDialog = false
-                }) {
-                    Text("Confirmar")
+        // Alerta de Favoritos
+        if (showFavoriteDialog) {
+            AlertDialog(
+                onDismissRequest = { showFavoriteDialog = false },
+                icon = {
+                    Icon(
+                        Icons.Default.Favorite,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                title = { Text(if (isFavoriteLocal) "Quitar de Favoritos" else "Añadir a Favoritos") },
+                text = { Text(if (isFavoriteLocal) "¿Estás seguro de que quieres eliminar a este prestador de tus favoritos?" else "¿Quieres añadir a este prestador a tu lista de favoritos?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        // TODO: Lógica real para actualizar favorito en ViewModel/BD
+                        isFavoriteLocal = !isFavoriteLocal
+                        SampleDataFalso.toggleFavorite(provider.id) // Actualizar dato falso
+                        showFavoriteDialog = false
+                    }) {
+                        Text("Confirmar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showFavoriteDialog = false }) {
+                        Text("Cancelar")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFavoriteDialog = false }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
-}
-
-@Composable
-fun RowItemDetail(icon: ImageVector, text: String, isActive: Boolean) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 6.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (isActive) Color(0xFF10B981) else Color.Gray.copy(alpha = 0.5f),
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (isActive) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.5f),
-            textDecoration = if (!isActive) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
-        )
-    }
-}
-
-/**
- * Un menú flotante genérico que muestra un FAB y despliega un menú desplegable al hacer clic.
- *
- * @param icon El icono para mostrar en el FAB.
- * @param options Una lista de pares donde el primero es el texto de la opción y el segundo es la acción a ejecutar.
- */
-@Composable
-fun GenericFloatingMenu(
-    icon: ImageVector,
-    options: List<Pair<String, () -> Unit>>
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box {
-        FloatingActionButton(onClick = { expanded = !expanded }) {
-            Icon(icon, contentDescription = null)
+            )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
+    }
+
+    @Composable
+    fun RowItemDetail(icon: ImageVector, text: String, isActive: Boolean) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 6.dp)
         ) {
-            options.forEach { (label, action) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        action()
-                        expanded = false
-                    }
-                )
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isActive) Color(0xFF10B981) else Color.Gray.copy(alpha = 0.5f),
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isActive) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.5f),
+                textDecoration = if (!isActive) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+            )
+        }
+    }
+
+    /**
+     * Un menú flotante genérico que muestra un FAB y despliega un menú desplegable al hacer clic.
+     *
+     * @param icon El icono para mostrar en el FAB.
+     * @param options Una lista de pares donde el primero es el texto de la opción y el segundo es la acción a ejecutar.
+     */
+    @Composable
+    fun GenericFloatingMenu(
+        icon: ImageVector,
+        options: List<Pair<String, () -> Unit>>
+    ) {
+        var expanded by remember { mutableStateOf(false) }
+
+        Box {
+            FloatingActionButton(onClick = { expanded = !expanded }) {
+                Icon(icon, contentDescription = null)
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { (label, action) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            action()
+                            expanded = false
+                        }
+                    )
+                }
             }
         }
     }
-}
+
+

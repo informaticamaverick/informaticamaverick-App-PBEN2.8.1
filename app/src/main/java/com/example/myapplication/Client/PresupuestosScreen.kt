@@ -1,6 +1,8 @@
 package com.example.myapplication.Client
 
 import android.hardware.lights.Light
+import android.os.Environment
+import java.io.File
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -62,6 +64,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 
@@ -141,8 +144,8 @@ fun CategoryFilterDialog(
 
 @Composable
 fun StatusFilterDialog(
-    selectedStatus: EstadoLicitacion?,
-    onStatusSelected: (EstadoLicitacion?) -> Unit,
+    selectedStatus: String?,
+    onStatusSelected: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -179,7 +182,7 @@ fun StatusFilterDialog(
                 }
                 
                 // Opciones de estado
-                EstadoLicitacion.values().forEach { estado ->
+                listOf("Pendiente", "Activa", "Adjudicada", "Terminada", "Cancelada").forEach { estado ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -195,10 +198,10 @@ fun StatusFilterDialog(
                         Box(
                             modifier = Modifier
                                 .size(12.dp)
-                                .background(estado.color, CircleShape)
+                                .background(Color.Blue, CircleShape)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(estado.displayName, color = colors.onSurface)
+                        Text(estado, color = colors.onSurface)
                     }
                 }
                 
@@ -235,7 +238,7 @@ fun PresupuestosScreen(
     val showVerticalMenu = menuState == 1
     
     // Estados de filtros
-    var selectedStatus by remember { mutableStateOf<EstadoLicitacion?>(null) }
+    var selectedStatus by remember { mutableStateOf<String?>(null) }
     var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sortAscending by remember { mutableStateOf(true) }
     
@@ -259,9 +262,9 @@ fun PresupuestosScreen(
     var notifyStatusChanges by remember { mutableStateOf(true) }
     var notifyDeadlines by remember { mutableStateOf(true) }
 
-    val allPresupuestos = remember { ClientBudgetDataFalso.presupuestos }
-    val licitacionesAgrupadas = allPresupuestos.filter { it.esLicitacion }.groupBy { it.nombre }
-    val presupuestosGenerales = allPresupuestos.filter { !it.esLicitacion }
+    val allPresupuestos = remember { PresupuestoSampleDataFalso.presupuestos }
+    val licitacionesAgrupadas = allPresupuestos.filter { it.categoria == "Presupuestos de Licitaciones" }.groupBy { it.nombre }
+    val presupuestosGenerales = allPresupuestos.filter { it.categoria != "Presupuestos de Licitaciones" }
 
     var selectedLicitacionBudgets by remember { mutableStateOf<List<PresupuestoFalso>>(emptyList()) }
     var showBudgetSheet by remember { mutableStateOf(false) }
@@ -1014,7 +1017,7 @@ fun PresupuestosScreen(
 fun LicitacionesTabContent(
     licitaciones: Map<String, List<PresupuestoFalso>>,
     searchQuery: String,
-    selectedStatus: EstadoLicitacion?,
+    selectedStatus: String?,
     selectedCategories: Set<String>,
     sortAscending: Boolean,
     viewMode: String,
@@ -1028,13 +1031,13 @@ fun LicitacionesTabContent(
 ) {
     val allCategories = licitaciones.values.flatten().map { it.servicioCategoria }.distinct()
     
-    // Filtro por período de tiempo basado en fechaRecepcion
+    // Filtro por período de tiempo basado en fecha
     val periodMatch: (PresupuestoFalso) -> Boolean = { presupuesto ->
         when (timePeriod) {
             "Semana" -> {
                 try {
                     val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
-                    val fecha = format.parse(presupuesto.fechaRecepcion)
+                    val fecha = format.parse(presupuesto.fecha)
                     val weekAgo = java.util.Calendar.getInstance().apply {
                         add(java.util.Calendar.DAY_OF_YEAR, -7)
                     }
@@ -1046,7 +1049,7 @@ fun LicitacionesTabContent(
             "Mes" -> {
                 try {
                     val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
-                    val fecha = format.parse(presupuesto.fechaRecepcion)
+                    val fecha = format.parse(presupuesto.fecha)
                     val monthAgo = java.util.Calendar.getInstance().apply {
                         add(java.util.Calendar.MONTH, -1)
                     }
@@ -1058,7 +1061,7 @@ fun LicitacionesTabContent(
             "3 Meses" -> {
                 try {
                     val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
-                    val fecha = format.parse(presupuesto.fechaRecepcion)
+                    val fecha = format.parse(presupuesto.fecha)
                     val threeMonthsAgo = java.util.Calendar.getInstance().apply {
                         add(java.util.Calendar.MONTH, -3)
                     }
@@ -1076,15 +1079,16 @@ fun LicitacionesTabContent(
     // También prioriza las licitaciones activas que tienen nuevos presupuestos ('isNew').
     // El ordenamiento por fecha ('sortAscending') se aplica como un criterio secundario.
     val statusOrder = mapOf(
-        EstadoLicitacion.ACTIVA to 1,
-        EstadoLicitacion.ADJUDICADA to 2,
-        EstadoLicitacion.TERMINADA to 3,
-        EstadoLicitacion.CANCELADA to 4
+        "Activa" to 1,
+        "Adjudicada" to 2,
+        "Terminada" to 3,
+        "Cancelada" to 4,
+        "Pendiente" to 5
     )
 
     val filteredAndSortedLicitaciones = licitaciones.filter { (nombre, presupuestos) ->
         val first = presupuestos.first()
-        val statusMatch = selectedStatus == null || first.estadoLicitacion == selectedStatus
+        val statusMatch = selectedStatus == null || first.status == selectedStatus
         val categoryMatch = selectedCategories.isEmpty() || selectedCategories.contains(first.servicioCategoria)
         val searchMatch = nombre.contains(searchQuery, ignoreCase = true) ||
                 presupuestos.any { it.servicioCategoria.contains(searchQuery, ignoreCase = true) }
@@ -1092,11 +1096,10 @@ fun LicitacionesTabContent(
         statusMatch && categoryMatch && searchMatch && periodFilterMatch
     }.entries.sortedWith(
         compareBy<Map.Entry<String, List<PresupuestoFalso>>> { (_, budgets) ->
-            val hasNew = budgets.any { it.isNew }
-            val status = budgets.first().estadoLicitacion
-            if (status == EstadoLicitacion.ACTIVA && hasNew) 0 else 1
+            val status = budgets.first().status
+            if (status == "Activa") 0 else 1
         }.thenBy { (_, budgets) ->
-            statusOrder[budgets.first().estadoLicitacion] ?: 5
+            statusOrder[budgets.first().status] ?: 5
         }
     )
 
@@ -1113,9 +1116,8 @@ fun LicitacionesTabContent(
                     key = { _, item -> item.key }
                 ) { index, (nombre, presupuestos) ->
                     val licitacionInfo = presupuestos.first()
-                    val hasNew = presupuestos.any { it.isNew }
                     // Para licitaciones adjudicadas, obtener el prestador y su presupuesto
-                    val presupuestoAdjudicado = if (licitacionInfo.estadoLicitacion == EstadoLicitacion.ADJUDICADA) {
+                    val presupuestoAdjudicado = if (licitacionInfo.status == "Adjudicada") {
                         presupuestos.firstOrNull()
                     } else null
 
@@ -1124,10 +1126,10 @@ fun LicitacionesTabContent(
                         licitacionNombre = nombre,
                         fechaInicio = licitacionInfo.fechaInicioLicitacion ?: "-",
                         fechaFin = licitacionInfo.fechaFinLicitacion ?: "-",
-                        status = licitacionInfo.estadoLicitacion.displayName,
-                        statusColor = licitacionInfo.estadoLicitacion.color,
+                        status = licitacionInfo.status,
+                        statusColor = Color.Blue,
                         presupuestosCount = presupuestos.size,
-                        hasNewBudgets = hasNew,
+                        falseBudgets = false,
                         viewMode = viewMode,
                         showDates = showDates,
                         showOfferCount = showOfferCount,
@@ -1267,12 +1269,12 @@ fun CategoryFilterSplitButton(
 
 @Composable
 fun StatusFilterSplitButton(
-    selectedStatus: EstadoLicitacion?,
-    onStatusSelected: (EstadoLicitacion?) -> Unit
+    selectedStatus: String?,
+    onStatusSelected: (String?) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val isSelected = selectedStatus != null
-    val containerColor = if (isSelected) selectedStatus.color else MaterialTheme.colorScheme.surfaceVariant
+    val containerColor = if (isSelected) Color.Blue else MaterialTheme.colorScheme.surfaceVariant
     val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
     val elevation by animateDpAsState(targetValue = if (expanded) 8.dp else 2.dp, label = "elevation")
 
@@ -1302,10 +1304,11 @@ fun StatusFilterSplitButton(
                         Icon(
                             imageVector = if (isSelected) {
                                 when (selectedStatus) {
-                                    EstadoLicitacion.ACTIVA -> Icons.Default.PlayCircle
-                                    EstadoLicitacion.TERMINADA -> Icons.Default.CheckCircle
-                                    EstadoLicitacion.ADJUDICADA -> Icons.Default.WorkspacePremium
-                                    EstadoLicitacion.CANCELADA -> Icons.Default.Cancel
+                                    "Activa" -> Icons.Default.PlayCircle
+                                    "Terminada" -> Icons.Default.CheckCircle
+                                    "Adjudicada" -> Icons.Default.WorkspacePremium
+                                    "Cancelada" -> Icons.Default.Cancel
+                                    else -> Icons.Default.FilterList
                                 }
                             } else Icons.Default.FilterList,
                             contentDescription = null,
@@ -1313,7 +1316,7 @@ fun StatusFilterSplitButton(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = selectedStatus?.displayName ?: "Estado",
+                            text = selectedStatus ?: "Estado",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -1363,13 +1366,13 @@ fun StatusFilterSplitButton(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 color = Color.Gray
             )
-            EstadoLicitacion.entries.forEach { status ->
+            listOf("Pendiente", "Activa", "Adjudicada", "Terminada", "Cancelada").forEach { status ->
                 DropdownMenuItem(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(status.color))
+                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color.Blue))
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(status.displayName)
+                            Text(status)
                         }
                     },
                     onClick = {
@@ -1399,7 +1402,7 @@ fun GeneralesTabContent(
 ) {
     val filteredPresupuestos = presupuestos.filter {
         it.nombre.contains(searchQuery, ignoreCase = true) ||
-                it.prestadorNombre.contains(searchQuery, ignoreCase = true)
+                it.empresaNombre.contains(searchQuery, ignoreCase = true)
     }
 
     if (filteredPresupuestos.isEmpty()) {
@@ -1413,8 +1416,8 @@ fun GeneralesTabContent(
                 PresupuestoGeneralCard(
                     presupuesto = presupuesto,
                     onClick = { onPresupuestoClick(presupuesto) },
-                    onProfileClick = { onProfileClick(presupuesto.prestadorId) },
-                    onChatClick = { onChatClick(presupuesto.prestadorId) },
+                    onProfileClick = { onProfileClick(presupuesto.empresaId) },
+                    onChatClick = { onChatClick(presupuesto.empresaId) },
                     onPreviewClick = { onPresupuestoClick(presupuesto) }
                 )
             }
@@ -1425,12 +1428,13 @@ fun GeneralesTabContent(
 
 
 // Mapeo de estados de licitación a temas de carpeta
-fun getThemeForStatus(status: EstadoLicitacion): FolderTheme {
+fun getThemeForStatus(status: String): FolderTheme {
     return when (status) {
-        EstadoLicitacion.ACTIVA -> FolderTheme.Active
-        EstadoLicitacion.ADJUDICADA -> FolderTheme.Adjudicated
-        EstadoLicitacion.TERMINADA -> FolderTheme.Finished
-        EstadoLicitacion.CANCELADA -> FolderTheme.Cancelled
+        "Activa" -> FolderTheme.Active
+        "Adjudicada" -> FolderTheme.Adjudicated
+        "Terminada" -> FolderTheme.Finished
+        "Cancelada" -> FolderTheme.Cancelled
+        else -> FolderTheme.Active // Valor por defecto
     }
 }
 
@@ -1630,7 +1634,7 @@ fun LicitacionArchiveroCard(
     status: String,
     statusColor: Color,
     presupuestosCount: Int,
-    hasNewBudgets: Boolean,
+    falseBudgets: Boolean,
     viewMode: String = "Compacta",
     showDates: Boolean = true,
     showOfferCount: Boolean = true,
@@ -1656,7 +1660,7 @@ fun LicitacionArchiveroCard(
             status = status,
             theme = theme,
             presupuestosCount = presupuestosCount,
-            hasNewBudgets = hasNewBudgets,
+            falseBudgets = falseBudgets,
             showBadges = showBadges,
             showOfferCount = showOfferCount,
             onClick = onClick
@@ -1669,7 +1673,7 @@ fun LicitacionArchiveroCard(
             status = status,
             theme = theme,
             presupuestosCount = presupuestosCount,
-            hasNewBudgets = hasNewBudgets,
+            falseBudgets = falseBudgets,
             showDates = showDates,
             showBadges = showBadges,
             showOfferCount = showOfferCount,
@@ -1685,7 +1689,7 @@ fun LicitacionArchiveroCard(
             status = status,
             theme = theme,
             presupuestosCount = presupuestosCount,
-            hasNewBudgets = hasNewBudgets,
+            falseBudgets = falseBudgets,
             showDates = showDates,
             showBadges = showBadges,
             showOfferCount = showOfferCount,
@@ -1706,7 +1710,7 @@ fun LicitacionArchiveroViewDetallada(
     status: String,
     theme: FolderTheme,
     presupuestosCount: Int,
-    hasNewBudgets: Boolean,
+    falseBudgets: Boolean,
     showDates: Boolean,
     showBadges: Boolean,
     showOfferCount: Boolean,
@@ -1853,7 +1857,7 @@ fun LicitacionArchiveroViewDetallada(
                         Column(horizontalAlignment = Alignment.End) {
 
                             // Indicador de nuevos ingresos cuando está contraída
-                            if (!isExpanded && hasNewBudgets && showBadges && !theme.isCancelled) {
+                            if (!isExpanded && falseBudgets && showBadges && !theme.isCancelled) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     PulsingDotIndicator(
@@ -2029,7 +2033,7 @@ fun LicitacionArchiveroViewDetallada(
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
                                                     Text(
-                                                        text = presupuestoAdjudicado?.prestadorNombre ?: "Por definir",
+                                                        text = presupuestoAdjudicado?.empresaNombre ?: "Por definir",
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = theme.badgeTextColor,
@@ -2086,7 +2090,7 @@ fun LicitacionArchiveroViewDetallada(
                                         }
 
                                         // Indicador de nuevos ingresos
-                                        if (hasNewBudgets && showBadges && !theme.isCancelled) {
+                                        if (falseBudgets && showBadges && !theme.isCancelled) {
                                             Spacer(modifier = Modifier.height(6.dp))
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 // COMPONENTE ANIMADO
@@ -2102,7 +2106,7 @@ fun LicitacionArchiveroViewDetallada(
                                                     color = Color(0xFFBE123C)
                                                 )
                                             } // Cierre Row "Nuevos Ingresos"
-                                        } // Cierre if hasNewBudgets
+                                        } // Cierre if falseBudgets
                                     } // Cierre Column (línea 2018)
                                 } // Cierre if showOfferCount (línea 2017)
                             } // Cierre Row Footer principal (línea 1918)
@@ -2120,7 +2124,7 @@ fun LicitacionCompactaView(
     status: String,
     theme: FolderTheme,
     presupuestosCount: Int,
-    hasNewBudgets: Boolean,
+    falseBudgets: Boolean,
     showBadges: Boolean,
     showOfferCount: Boolean,
     onClick: () -> Unit
@@ -2184,7 +2188,7 @@ fun LicitacionCompactaView(
                 // Contador de ofertas
                 if (showOfferCount) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (hasNewBudgets && showBadges) {
+                        if (falseBudgets && showBadges) {
                             Box(
                                 modifier = Modifier
                                     .size(6.dp)
@@ -2222,7 +2226,7 @@ fun LicitacionTarjetaView(
     status: String,
     theme: FolderTheme,
     presupuestosCount: Int,
-    hasNewBudgets: Boolean,
+    falseBudgets: Boolean,
     showDates: Boolean,
     showBadges: Boolean,
     showOfferCount: Boolean,
@@ -2343,7 +2347,7 @@ fun LicitacionTarjetaView(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (hasNewBudgets && showBadges) {
+                        if (falseBudgets && showBadges) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
@@ -2400,7 +2404,7 @@ fun PresupuestoGeneralCard(
     onChatClick: () -> Unit,
     onPreviewClick: () -> Unit   // nuevo parametro
 ) {
-    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
+    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.empresaId) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -2413,7 +2417,7 @@ fun PresupuestoGeneralCard(
             Box {
                 Image(
                     painter = rememberAsyncImagePainter(model = provider?.profileImageUrl),
-                    contentDescription = "Logo de ${presupuesto.prestadorNombre}",
+                    contentDescription = "Logo de ${presupuesto.empresaNombre}",
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
@@ -2435,7 +2439,7 @@ fun PresupuestoGeneralCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(presupuesto.nombre, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("De: ${presupuesto.prestadorNombre}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text("De: ${presupuesto.empresaNombre}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     if (provider?.isVerified == true) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
@@ -2452,7 +2456,7 @@ fun PresupuestoGeneralCard(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    "S/ ${presupuesto.precioTotal}",
+                    "S/ ${presupuesto.precio}",
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -2469,7 +2473,7 @@ fun PresupuestoGeneralCard(
                             )
                         }
                         Text(
-                            "Enviado: ${formatDateShort(presupuesto.fechaRecepcion)}",
+                            "Enviado: ${formatDateShort(presupuesto.fecha)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.Gray,
                             fontSize = 10.sp
@@ -2521,9 +2525,9 @@ fun LicitacionDetailSheetContent(
     var sortAscending by remember { mutableStateOf(true) }
 
     val sortedBudgets = if (sortAscending) {
-        budgets.sortedBy { it.precioTotal }
+        budgets.sortedBy { it.precio.replace("$", "").replace(".", "").replace(",", "").toDoubleOrNull() ?: 0.0 }
     } else {
-        budgets.sortedByDescending { it.precioTotal }
+        budgets.sortedByDescending { it.precio.replace("$", "").replace(".", "").replace(",", "").toDoubleOrNull() ?: 0.0 }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -2537,8 +2541,8 @@ fun LicitacionDetailSheetContent(
                 PresupuestoGeneralCard(
                     presupuesto = budget,
                     onClick = { onBudgetClick(budget) },
-                    onProfileClick = { onProfileClick(budget.prestadorId) },
-                    onChatClick = { onChatClick(budget.prestadorId) },
+                    onProfileClick = { onProfileClick(budget.empresaId) },
+                    onChatClick = { onChatClick(budget.empresaId) },
                     onPreviewClick = { onBudgetClick(budget) }
                 )
             }
@@ -2580,7 +2584,7 @@ fun BudgetPreviewPDFDialog(
     presupuesto: PresupuestoFalso,
     onDismiss: () -> Unit
 ) {
-    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
+    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.empresaId) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -2643,7 +2647,7 @@ fun BudgetPreviewPDFDialog(
                                     letterSpacing = 1.sp
                                 )
                                 Text(
-                                    presupuesto.prestadorNombre,
+                                    presupuesto.empresaNombre,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -2680,11 +2684,11 @@ fun BudgetPreviewPDFDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                             InfoRow("Categoría:", presupuesto.servicioCategoria)
                             Spacer(modifier = Modifier.height(8.dp))
-                            InfoRow("Fecha de Recepción:", presupuesto.fechaRecepcion)
+                            InfoRow("Fecha de Recepción:", presupuesto.fecha)
 
                             if (presupuesto.esLicitacion) {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                InfoRow("Estado:", presupuesto.estadoLicitacion.displayName)
+                                InfoRow("Estado:", presupuesto.status)
                                 presupuesto.fechaInicioLicitacion?.let {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     InfoRow("Fecha de Inicio:", it)
@@ -2716,11 +2720,11 @@ fun BudgetPreviewPDFDialog(
                             Spacer(modifier = Modifier.height(12.dp))
 
                             // Simulación de items (datos de ejemplo)
-                            CostItemRow("Materiales", presupuesto.precioTotal * 0.6)
+                            CostItemRow("Materiales", presupuesto.precio * 0.6)
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            CostItemRow("Mano de obra", presupuesto.precioTotal * 0.3)
+                            CostItemRow("Mano de obra", presupuesto.precio * 0.3)
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            CostItemRow("Gastos varios", presupuesto.precioTotal * 0.1)
+                            CostItemRow("Gastos varios", presupuesto.precio * 0.1)
                         }
                     }
                 }
@@ -2747,7 +2751,7 @@ fun BudgetPreviewPDFDialog(
                                     letterSpacing = 1.sp
                                 )
                                 Text(
-                                    "S/ ${String.format("%.2f", presupuesto.precioTotal)}",
+                                    "S/ ${String.format("%.2f", presupuesto.precio)}",
                                     color = Color.White,
                                     fontSize = 32.sp,
                                     fontWeight = FontWeight.Bold
@@ -2825,7 +2829,8 @@ fun BudgetPreviewPDFDialog(
     presupuesto: PresupuestoFalso,
     onDismiss: () -> Unit
 ) {
-    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
+    val context = LocalContext.current // Necesario para abrir el PDF
+    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.empresaId) }
 
     val items = listOf(
         PresupuestoItemDisplay("1", "Fuente 12v", "$ 18.000,00", "$ 18.000,00"),
@@ -2899,7 +2904,9 @@ fun BudgetPreviewPDFDialog(
                         A4ItemsTable(items)
 
                         // Footer (sin espacio adicional)
-                        A4FooterSection(presupuesto.precioTotal)
+                        A4FooterSection(
+                            presupuesto.precio.replace("$", "").replace(".", "").replace(",", "").toDoubleOrNull() ?: 0.0
+                        )
                     }
                 }
 
@@ -2969,7 +2976,72 @@ fun BudgetPreviewPDFDialog(
                 // --- BOTÓN DESCARGAR PDF ---
                 IconButton(
                     onClick = {
-                        // TODO: Implementar descarga de PDF
+                        try {
+                            // Crear nombre del archivo
+                            val fileName = "Presupuesto_${presupuesto.nombre.replace(" ", "_")}_${System.currentTimeMillis()}.pdf"
+                            
+                            // Guardar en Descargas
+                            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                            val file = File(downloadsDir, fileName)
+                            
+                            // Crear PDF simple con texto
+                            val pdfDocument = android.graphics.pdf.PdfDocument()
+                            val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create()
+                            val page = pdfDocument.startPage(pageInfo)
+                            
+                            val canvas = page.canvas
+                            val paint = android.graphics.Paint()
+                            paint.textSize = 16f
+                            paint.color = android.graphics.Color.BLACK
+                            
+                            // Escribir contenido
+                            var yPosition = 50f
+                            canvas.drawText("PRESUPUESTO", 50f, yPosition, paint)
+                            yPosition += 30
+                            canvas.drawText("Título: ${presupuesto.nombre}", 50f, yPosition, paint)
+                            yPosition += 25
+                            canvas.drawText("Proveedor: ${provider?.name ?: "N/A"}", 50f, yPosition, paint)
+                            yPosition += 25
+                            canvas.drawText("Precio: ${presupuesto.precio}", 50f, yPosition, paint)
+                            yPosition += 25
+                            canvas.drawText("Servicio: ${presupuesto.servicioCategoria}", 50f, yPosition, paint)
+                            yPosition += 25
+                            canvas.drawText("Fecha: ${presupuesto.fecha}", 50f, yPosition, paint)
+                            
+                            pdfDocument.finishPage(page)
+                            
+                            // Guardar archivo
+                            val outputStream = java.io.FileOutputStream(file)
+                            pdfDocument.writeTo(outputStream)
+                            outputStream.close()
+                            pdfDocument.close()
+                            
+                            // Notificar al usuario
+                            android.widget.Toast.makeText(
+                                context,
+                                "PDF guardado en Descargas: $fileName",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                            
+                            // Abrir el archivo (opcional)
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.provider",
+                                file
+                            )
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                            intent.setDataAndType(uri, "application/pdf")
+                            intent.flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            context.startActivity(intent)
+                            
+                        } catch (e: Exception) {
+                            android.util.Log.e("PDFDownload", "Error: ${e.message}", e)
+                            android.widget.Toast.makeText(
+                                context,
+                                "Error al descargar PDF: ${e.message}",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     },
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -3068,7 +3140,7 @@ fun A4HeaderSection(provider: UserFalso?, presupuesto: PresupuestoFalso) {
             ) {
                 Text("N° ${presupuesto.id.takeLast(8)}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Slate800)
             }
-            Text(presupuesto.fechaRecepcion, fontSize = 10.sp, color = Slate600, fontWeight = FontWeight.Medium)
+            Text(presupuesto.fecha, fontSize = 10.sp, color = Slate600, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -3569,7 +3641,7 @@ fun LicitacionesTabContent(
     onPresupuestoClick: (PresupuestoFalso) -> Unit
 ) {
     // --- ESTADOS DE FILTRADO ---
-    var selectedStatus by remember { mutableStateOf<EstadoLicitacion?>(null) }
+    var selectedStatus by remember { mutableStateOf<status?>(null) }
     var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sortAscending by remember { mutableStateOf(true) }
 
@@ -3578,16 +3650,16 @@ fun LicitacionesTabContent(
 
     // Lógica de ordenamiento por prioridad de estado
     val statusOrder = mapOf(
-        EstadoLicitacion.ACTIVA to 1,
-        EstadoLicitacion.ADJUDICADA to 2,
-        EstadoLicitacion.TERMINADA to 3,
-        EstadoLicitacion.CANCELADA to 4
+        "Activa" to 1,
+        "Adjudicada" to 2,
+        "Terminada" to 3,
+        "Cancelada" to 4
     )
 
     // Filtrado y ordenamiento de la lista
     val filteredAndSortedLicitaciones = licitaciones.filter { (nombre, presupuestos) ->
         val first = presupuestos.first()
-        val statusMatch = selectedStatus == null || first.estadoLicitacion == selectedStatus
+        val statusMatch = selectedStatus == null || first.status == selectedStatus
         val categoryMatch = selectedCategories.isEmpty() || selectedCategories.contains(first.servicioCategoria)
         val searchMatch = nombre.contains(searchQuery, ignoreCase = true) ||
                 presupuestos.any { it.servicioCategoria.contains(searchQuery, ignoreCase = true) }
@@ -3595,12 +3667,12 @@ fun LicitacionesTabContent(
     }.entries.sortedWith(
         compareBy<Map.Entry<String, List<PresupuestoFalso>>> { (_, budgets) ->
             // Prioridad 1: Activas con nuevos presupuestos
-            val hasNew = budgets.any { it.isNew }
-            val status = budgets.first().estadoLicitacion
-            if (status == EstadoLicitacion.ACTIVA && hasNew) 0 else 1
+            val false = budgets.any { it.isNew }
+            val status = budgets.first().status
+            if (status == "Activa" && false) 0 else 1
         }.thenBy { (_, budgets) ->
             // Prioridad 2: Estado de la licitación
-            statusOrder[budgets.first().estadoLicitacion] ?: 5
+            statusOrder[budgets.first().status] ?: 5
         }
     )
 
@@ -3639,18 +3711,18 @@ fun LicitacionesTabContent(
                     key = { _, item -> item.key } // Clave única: Nombre de licitación
                 ) { index, (nombre, presupuestos) ->
                     val licitacionInfo = presupuestos.first()
-                    val hasNew = presupuestos.any { it.isNew }
-                    val presupuestoAdjudicado = if (licitacionInfo.estadoLicitacion == EstadoLicitacion.ADJUDICADA) presupuestos.firstOrNull() else null
+                    val false = presupuestos.any { it.isNew }
+                    val presupuestoAdjudicado = if (licitacionInfo.status == "Adjudicada") presupuestos.firstOrNull() else null
 
                     LicitacionArchiveroCard(
                         categoriaNombre = licitacionInfo.servicioCategoria,
                         licitacionNombre = nombre,
                         fechaInicio = licitacionInfo.fechaInicioLicitacion ?: "-",
                         fechaFin = licitacionInfo.fechaFinLicitacion ?: "-",
-                        status = licitacionInfo.estadoLicitacion.displayName,
-                        statusColor = licitacionInfo.estadoLicitacion.color,
+                        status = licitacionInfo.status,
+                        statusColor = Color.Blue,
                         presupuestosCount = presupuestos.size,
-                        hasNewBudgets = hasNew,
+                        falseBudgets = false,
                         onClick = { onLicitacionClick(presupuestos) },
                         presupuestoAdjudicado = presupuestoAdjudicado,
                         onAdjudicadoClick = { presupuestoAdjudicado?.let { onPresupuestoClick(it) } }
@@ -3676,7 +3748,7 @@ fun GeneralesTabContent(
     // Filtrado simple por nombre o prestador
     val filtered = presupuestos.filter {
         it.nombre.contains(searchQuery, ignoreCase = true) ||
-        it.prestadorNombre.contains(searchQuery, ignoreCase = true)
+        it.empresaNombre.contains(searchQuery, ignoreCase = true)
     }
 
     if (filtered.isEmpty()) {
@@ -3690,8 +3762,8 @@ fun GeneralesTabContent(
                 PresupuestoGeneralCard(
                     presupuesto = p,
                     onClick = { onPresupuestoClick(p) },
-                    onProfileClick = { onProfileClick(p.prestadorId) },
-                    onChatClick = { onChatClick(p.prestadorId) }, // Corrección aplicada aquí
+                    onProfileClick = { onProfileClick(p.empresaId) },
+                    onChatClick = { onChatClick(p.empresaId) }, // Corrección aplicada aquí
                     onPreviewClick = { onPresupuestoClick(p) }
                 )
             }
@@ -3735,17 +3807,17 @@ fun CategoryFilterSplitButton(allCategories: List<String>, selectedCategories: S
 }
 
 @Composable
-fun StatusFilterSplitButton(selectedStatus: EstadoLicitacion?, onStatusSelected: (EstadoLicitacion?) -> Unit) {
+fun StatusFilterSplitButton(selectedStatus: String?, onStatusSelected: (String?) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val isSelected = selectedStatus != null
-    val containerColor = if (isSelected) selectedStatus.color else MaterialTheme.colorScheme.surfaceVariant
+    val containerColor = if (isSelected) Color.Blue else MaterialTheme.colorScheme.surfaceVariant
     val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box {
         Surface(shape = RoundedCornerShape(16.dp), color = containerColor, contentColor = contentColor, modifier = Modifier.height(44.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.clickable { expanded = true }.padding(start = 12.dp, end = 8.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                    Text(text = selectedStatus?.displayName ?: "Estado", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(text = selectedStatus? ?: "Estado", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Box(modifier = Modifier.width(1.dp).height(24.dp).background(contentColor.copy(alpha = 0.3f)))
                 Box(modifier = Modifier.clickable { if (isSelected) onStatusSelected(null) else expanded = true }.padding(horizontal = 10.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -3754,8 +3826,8 @@ fun StatusFilterSplitButton(selectedStatus: EstadoLicitacion?, onStatusSelected:
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            EstadoLicitacion.entries.forEach { status ->
-                DropdownMenuItem(text = { Text(status.displayName) }, onClick = { onStatusSelected(status); expanded = false })
+            status.entries.forEach { status ->
+                DropdownMenuItem(text = { Text(status) }, onClick = { onStatusSelected(status); expanded = false })
             }
         }
     }
@@ -3793,7 +3865,7 @@ fun PulsingDotIndicator(dotSize: Dp = 8.dp, color: Color = Color(0xFFE11D48)) {
  * Muestra resumen, estado y alertas de nuevos presupuestos.
  */
 @Composable
-fun LicitacionArchiveroCard(categoriaNombre: String, licitacionNombre: String, fechaInicio: String, fechaFin: String, status: String, statusColor: Color, presupuestosCount: Int, hasNewBudgets: Boolean, onClick: () -> Unit, presupuestoAdjudicado: PresupuestoFalso?, onAdjudicadoClick: () -> Unit) {
+fun LicitacionArchiveroCard(categoriaNombre: String, licitacionNombre: String, fechaInicio: String, fechaFin: String, status: String, statusColor: Color, presupuestosCount: Int, falseBudgets: Boolean, onClick: () -> Unit, presupuestoAdjudicado: PresupuestoFalso?, onAdjudicadoClick: () -> Unit) {
     var isExpanded by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth().clickable { isExpanded = !isExpanded }, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -3811,12 +3883,12 @@ fun LicitacionArchiveroCard(categoriaNombre: String, licitacionNombre: String, f
             AnimatedVisibility(visible = isExpanded) {
                 Column(modifier = Modifier.padding(top = 12.dp)) {
                     Text("Desde: $fechaInicio - Hasta: $fechaFin", fontSize = 12.sp, color = Color.Gray)
-                    if (presupuestoAdjudicado != null) Text("Adjudicado a: ${presupuestoAdjudicado.prestadorNombre}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp).clickable { onAdjudicadoClick() })
+                    if (presupuestoAdjudicado != null) Text("Adjudicado a: ${presupuestoAdjudicado.empresaNombre}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp).clickable { onAdjudicadoClick() })
                     Button(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Ver $presupuestosCount Presupuestos") }
                 }
             }
             // Indicador de "Nuevos"
-            if (!isExpanded && hasNewBudgets) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) { PulsingDotIndicator(dotSize = 6.dp); Spacer(Modifier.width(4.dp)); Text("Nuevos", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE123C)) }
+            if (!isExpanded && falseBudgets) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) { PulsingDotIndicator(dotSize = 6.dp); Spacer(Modifier.width(4.dp)); Text("Nuevos", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE123C)) }
         }
     }
 }
@@ -3826,17 +3898,17 @@ fun LicitacionArchiveroCard(categoriaNombre: String, licitacionNombre: String, f
  */
 @Composable
 fun PresupuestoGeneralCard(presupuesto: PresupuestoFalso, onClick: () -> Unit, onProfileClick: () -> Unit, onChatClick: () -> Unit, onPreviewClick: () -> Unit) {
-    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.prestadorId) }
+    val provider = remember { SampleDataFalso.getPrestadorById(presupuesto.empresaId) }
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Image(painter = rememberAsyncImagePainter(model = provider?.profileImageUrl), contentDescription = null, modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onProfileClick), contentScale = ContentScale.Crop)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(presupuesto.nombre, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text(presupuesto.prestadorNombre, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(presupuesto.empresaNombre, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("S/ ${presupuesto.precioTotal}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("S/ ${presupuesto.precio}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Row {
                     IconButton(onClick = onPreviewClick) { Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.primary) }
                     IconButton(onClick = onChatClick) { Icon(Icons.AutoMirrored.Filled.Send, null, tint = MaterialTheme.colorScheme.primary) }
@@ -3861,7 +3933,7 @@ fun LicitacionDetailSheetContent(budgets: List<PresupuestoFalso>, onProfileClick
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Detalle de Presupuestos", style = MaterialTheme.typography.titleLarge, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 16.dp))
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(budgets) { b -> PresupuestoGeneralCard(presupuesto = b, onClick = { onBudgetClick(b) }, onProfileClick = { onProfileClick(b.prestadorId) }, onChatClick = { onChatClick(b.prestadorId) }, onPreviewClick = { onBudgetClick(b) }) }
+            items(budgets) { b -> PresupuestoGeneralCard(presupuesto = b, onClick = { onBudgetClick(b) }, onProfileClick = { onProfileClick(b.empresaId) }, onChatClick = { onChatClick(b.empresaId) }, onPreviewClick = { onBudgetClick(b) }) }
         }
     }
 }
