@@ -185,7 +185,7 @@ fun AppNavigation() {
                 PresupuestosScreen(
                     onBack = { navController.popBackStack() },
                     onChatClick = { prestadorId ->
-                        navController.navigate("chat_conversation/$prestadorId")
+                        navController.navigate("chat?providerId=$prestadorId")
                     },
                     onProfileClick = { prestadorId ->
                         navController.navigate("perfil_prestador/$prestadorId")
@@ -284,7 +284,7 @@ fun AppNavigation() {
                     categoryName = category,
                     onBack = { navController.popBackStack() },
                     onNavigateToProviderProfile = { providerId -> navController.navigate("perfil_prestador/$providerId") },
-                    onNavigateToChat = { providerId -> navController.navigate("chat_conversation/$providerId") }
+                    onNavigateToChat = { providerId -> navController.navigate("chat?providerId=$providerId") }
                 )
             }
             

@@ -3,7 +3,10 @@ package com.example.myapplication.Client
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -25,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
@@ -32,6 +36,7 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailUnread
@@ -90,7 +95,11 @@ import coil.request.ImageRequest
 import androidx.core.content.FileProvider
 import java.io.File
 import android.media.MediaRecorder
+import android.media.MediaPlayer
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import android.os.Build
+import androidx.collection.emptyLongSet
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -100,18 +109,21 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusModifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
+import coil.request.Disposable
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -121,11 +133,6 @@ fun ChatScreen(
     navController: NavHostController? = null,
     onInConversationChange: (Boolean) -> Unit = {}
 ) {
-    // Manejar botón atrás del sistema
-    BackHandler {
-        onBack()
-    }
-
     // Colores adaptativos
     val appColors = getAppColors()
 
@@ -135,6 +142,17 @@ fun ChatScreen(
     // Notificar cuando cambia el estado de conversación
     LaunchedEffect(activeChatUserId) {
         onInConversationChange(activeChatUserId != null)
+    }
+
+    // Manejar botón atrás del sistema
+    BackHandler {
+        if (activeChatUserId != null) {
+            // si hay conversacion activa, cerrarla (volver a lista de chats)
+            activeChatUserId = null
+        } else {
+            // si esta en la lista de chats, salir de chatscreen
+            onBack()
+        }
     }
 
     // Estado para los mensajes de la conversación activa
@@ -557,47 +575,6 @@ fun ChatListView(
                             horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Opción: Modo de Vista
-                            Surface(
-                                modifier = Modifier.size(64.dp),
-                                onClick = { 
-                                    viewMode = when(viewMode) {
-                                        "Compacta" -> "Detallada"
-                                        "Detallada" -> "Tarjetas"
-                                        else -> "Compacta"
-                                    }
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = appColors.surfaceColor,
-                                shadowElevation = 6.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.ViewModule,
-                                        "Modo Vista",
-                                        tint = appColors.textPrimaryColor,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = when(viewMode) {
-                                            "Compacta" -> "Comp"
-                                            "Detallada" -> "Det"
-                                            "Tarjetas" -> "Card"
-                                            else -> "Vista"
-                                        },
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = appColors.textPrimaryColor,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                            
                             // Opción: Alertas
                             Surface(
                                 modifier = Modifier.size(64.dp),
@@ -1232,7 +1209,7 @@ fun ChatListView(
             items(filteredProviders, key = { it.id }) { provider ->
                 PrestadorCard(
                     provider = provider,
-                    onClick = { 
+                    onClick = {
                         navController?.navigate("perfil_prestador/${provider.id}")
                     },
                     // onLongClick eliminado
@@ -1244,7 +1221,10 @@ fun ChatListView(
                             onMessageClick = { onChatClick(provider.id) },
                             onDeleteRequest = { providerToDelete = provider }
                         )
-                    }
+                    },
+                    showAvatars = showAvatars,
+                    showPreviews = showPreviews,
+                    showBadges = showBadges
                 )
             }
         }
@@ -1687,6 +1667,165 @@ fun buildAnnotatedStringWithLinks(text: String, linkColor: Color): AnnotatedStri
     }
 }
 
+// Función para formatear la duración del audio
+fun formatAudioDuration(millis: Int): String {
+    val seconds = millis / 1000
+    val minutes = seconds / 60
+    val remainingSeconds = seconds % 60
+    return String.format("%d:%02d", minutes, remainingSeconds)
+}
+
+// Componente para mostrar mensajes de audio
+@Composable
+fun AudioMessageBubble(
+    message: Message,
+    appColors: com.example.myapplication.ui.theme.AppColors,
+    isFromMe: Boolean
+) {
+    val context = LocalContext.current
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableStateOf(0) }
+    var duration by remember { mutableStateOf(0) }
+    
+    // Actualizar posición mientras reproduce
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            mediaPlayer?.let {
+                currentPosition = it.currentPosition
+            }
+            delay(100)
+        }
+    }
+    
+    // Limpiar MediaPlayer cuando se destruye el composable
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayer?.release()
+        }
+    }
+    
+    fun togglePlayPause() {
+        if (isPlaying) {
+            // Pausar
+            mediaPlayer?.pause()
+            isPlaying = false
+        } else {
+            // Reproducir
+            if (mediaPlayer == null) {
+                try {
+                    mediaPlayer = MediaPlayer().apply {
+                        setDataSource(message.imageUri)
+                        prepare()
+                        duration = this.duration
+                        setOnCompletionListener {
+                            isPlaying = false
+                            currentPosition = 0
+                        }
+                        start()
+                    }
+                    isPlaying = true
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            } else {
+                mediaPlayer?.start()
+                isPlaying = true
+            }
+        }
+    }
+    
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isFromMe) Arrangement.End else Arrangement.Start
+    ) {
+        Surface(
+            modifier = Modifier.widthIn(min = 200.dp, max = 280.dp),
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomStart = if (isFromMe) 16.dp else 4.dp,
+                bottomEnd = if (isFromMe) 4.dp else 16.dp
+            ),
+            color = if (isFromMe) appColors.accentBlue else appColors.surfaceColor,
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Botón Play/Pause
+                IconButton(
+                    onClick = { togglePlayPause() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pausar" else "Reproducir",
+                        tint = if (isFromMe) Color.White else appColors.accentBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
+                // Barra de progreso y duración
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .align(Alignment.Bottom)
+                ) {
+                    // Barra de progreso
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (isFromMe) Color.White.copy(alpha = 0.3f) else Color.Gray.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(
+                                    if (duration > 0) currentPosition.toFloat() / duration else 0f
+                                )
+                                .background(if (isFromMe) Color.White else appColors.accentBlue)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Tiempo
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = formatAudioDuration(currentPosition),
+                            fontSize = 11.sp,
+                            color = if (isFromMe) Color.White.copy(alpha = 0.8f) else appColors.textSecondaryColor
+                        )
+                        Text(
+                            text = formatAudioDuration(duration),
+                            fontSize = 11.sp,
+                            color = if (isFromMe) Color.White.copy(alpha = 0.8f) else appColors.textSecondaryColor
+                        )
+                    }
+                }
+                
+                // Icono de micrófono
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Audio",
+                    tint = if (isFromMe) Color.White.copy(alpha = 0.7f) else appColors.textSecondaryColor,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .alpha(0.7f)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun MessageBubble(
     message: Message,
@@ -1712,57 +1851,69 @@ fun MessageBubble(
             appColors = appColors
         )
     } else if (message.imageUri != null) {
-        // Mensaje con imagen
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = if (isFromMe) Arrangement.End else Arrangement.Start
-        ) {
-            Surface(
-                modifier = Modifier.widthIn(max = 280.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = if (isFromMe) appColors.accentBlue else appColors.surfaceColor,
-                shadowElevation = 1.dp
+        //Detectar si es audio o imagen
+        val isAudio = message.text == "[Audio]" && message.imageUri.endsWith(".m4a")
+
+        if (isAudio) {
+            // Mensaje de audio
+            AudioMessageBubble(
+                message = message,
+                appColors = appColors,
+                isFromMe = isFromMe
+            )
+        } else {
+            //Mensaje con imagen
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (isFromMe) Arrangement.End else
+                Arrangement.Start
             ) {
-                Column(
-                    modifier = Modifier.padding(8.dp)
+                Surface(
+                    modifier = Modifier.widthIn(max = 280.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isFromMe) appColors.accentBlue else appColors.surfaceColor,
+                    shadowElevation = 1.dp
                 ) {
-                    // Mostrar la imagen
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(Uri.parse(message.imageUri))
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Imagen enviada",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    
-                    // Texto si hay
-                    if (message.text.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
+                    Column(
+                        modifier = Modifier.padding(8.dp)
+                    ) {
+                        //Mostrar la imagen
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(Uri.parse(message.imageUri))
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Imagen enviada",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        //Texto si hay
+                        if (message.text.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = message.text,
+                                fontSize = 14.sp,
+                                color = if (isFromMe) Color.White else
+                                appColors.textPrimaryColor
+                            )
+                        }
+                        // Hora
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = message.text,
-                            fontSize = 14.sp,
-                            color = if (isFromMe) Color.White else appColors.textPrimaryColor
+                            text = formatTime(message.timestamp),
+                            fontSize = 11.sp,
+                            color = if (isFromMe) Color.White.copy(alpha = 0.7f) else appColors.textSecondaryColor,
+                            modifier = Modifier.align(Alignment.End)
                         )
                     }
-                    
-                    // Hora
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = formatTime(message.timestamp),
-                        fontSize = 11.sp,
-                        color = if (isFromMe) Color.White.copy(alpha = 0.7f) else appColors.textSecondaryColor,
-                        modifier = Modifier.align(Alignment.End)
-                    )
                 }
             }
         }
     } else {
-        // Mensaje normal de texto
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = if (isFromMe) Arrangement.End else Arrangement.Start
@@ -2071,7 +2222,7 @@ fun MessageInputBar(
                 }
             } else {
                 // UI de grabación (slide to cancel)
-                Row(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(appColors.surfaceColor)
@@ -2086,36 +2237,25 @@ fun MessageInputBar(
                                         val dragAmountX = change.position.x - change.previousPosition.x
                                         if (dragAmountX < 0) {
                                             dragOffsetX = (dragOffsetX + dragAmountX).coerceAtLeast(-300f)
-                                            isDraggingToCancel = dragOffsetX < -150f
+                                            isDraggingToCancel = dragOffsetX < -120f
                                         }
                                         
                                         // Detectar cuando se suelta el dedo
                                         if (change.changedToUp()) {
-                                            if (dragOffsetX < -200f) {
+                                            if (dragOffsetX < -180f) {
                                                 // Activar animación de cancelación
                                                 isCancelling = true
                                                 
                                                 coroutineScope.launch {
-                                                    // FASE 1: Micrófono cae dentro del tacho (200ms)
-                                                    delay(200)
-                                                    
-                                                    // FASE 2: Tapa se cierra (150ms)
+                                                    // Animación de papelera tragándose el micrófono
+                                                    delay(300)
                                                     trashLidClosed = true
-                                                    delay(150)
-                                                    
-                                                    // FASE 3: Todo se esconde hacia abajo (200ms)
                                                     delay(200)
-                                                    
-                                                    // Marcar que la animación terminó
                                                     animationCompleted = true
-                                                    
-                                                    // Cancelar el audio PRIMERO para cambiar la UI
                                                     onCancelAudio?.invoke()
-                                                    
-                                                    // Esperar a que el Crossfade termine su transición (300ms)
                                                     delay(300)
                                                     
-                                                    // AHORA SÍ resetear todos los estados
+                                                    // Resetear estados
                                                     isCancelling = false
                                                     isDraggingToCancel = false
                                                     trashLidClosed = false
@@ -2133,71 +2273,102 @@ fun MessageInputBar(
                                     }
                                 }
                             }
+                        }
+                ) {
+                    // PAPELERA A LA IZQUIERDA (animada)
+                    val trashScale by animateFloatAsState(
+                        targetValue = when {
+                            isCancelling -> 0f
+                            dragOffsetX < -180f -> 1.3f
+                            dragOffsetX < -120f -> 1.1f
+                            else -> 0.8f
                         },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "trashScale"
+                    )
+                    
+                    val trashColor by animateColorAsState(
+                        targetValue = if (dragOffsetX < -180f) Color.Red else Color(0xFF757575),
+                        label = "trashColor"
+                    )
+                    
+                    val trashAlpha by animateFloatAsState(
+                        targetValue = if (dragOffsetX < -50f) 1f else 0.3f,
+                        label = "trashAlpha"
+                    )
+                    
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Cancelar",
+                        tint = trashColor,
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .size(32.dp)
+                            .graphicsLayer {
+                                scaleX = trashScale
+                                scaleY = trashScale
+                                alpha = trashAlpha
+                            }
+                    )
+                    
+                    // CONTENIDO CENTRAL (deslizable)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.Center)
+                            .graphicsLayer {
+                                translationX = dragOffsetX
+                            },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(80.dp)
+                        // Espaciador para empujar el contenido a la derecha
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        // CENTRO: Indicador desliza para cancelar
+                        val textAlpha by animateFloatAsState(
+                            targetValue = if (isDraggingToCancel || isCancelling) 0.2f else 1f,
+                            label = "textAlpha"
+                        )
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.alpha(textAlpha)
                         ) {
-                            // LADO IZQUIERDO: Micrófono rojo pulsante con contador
-                            Row(
-                                modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .padding(start = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Icono de micrófono pulsante
-                                val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-                                val pulseScale by infiniteTransition.animateFloat(
-                                    initialValue = 1f,
-                                    targetValue = 1.15f,
-                                    animationSpec = infiniteRepeatable(
-                                        animation = tween(800),
-                                        repeatMode = RepeatMode.Reverse
-                                    ),
-                                    label = "pulse"
-                                )
-                                
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = "Grabando",
-                                    tint = Color.Red,
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .graphicsLayer(
-                                            scaleX = pulseScale,
-                                            scaleY = pulseScale
-                                        )
-                                )
-                                
-                                Text(
-                                    text = String.format("%d:%02d", recordingTime / 60, recordingTime % 60),
-                                    color = appColors.textPrimaryColor,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            
-                            // CENTRO: Texto desliza para cancelar
-                            val textAlpha by animateFloatAsState(
-                                targetValue = if (isDraggingToCancel || isCancelling) 0.3f else 1f,
-                                label = "textAlpha"
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = null,
+                                tint = appColors.textSecondaryColor,
+                                modifier = Modifier.size(20.dp)
                             )
-                            
                             Text(
-                                text = "◄ Desliza para cancelar",
+                                text = "Desliza para cancelar",
                                 color = appColors.textSecondaryColor,
-                                fontSize = 14.sp,
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .alpha(textAlpha)
+                                fontSize = 14.sp
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        // DERECHA: Tiempo y micrófono pulsante
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            // Tiempo de grabación
+                            Text(
+                                text = String.format("%d:%02d", recordingTime / 60, recordingTime % 60),
+                                color = appColors.textPrimaryColor,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                             
-                            // LADO DERECHO: Micrófono en círculo rojo pulsante
+                            // Micrófono pulsante
                             val infiniteTransition = rememberInfiniteTransition(label = "pulse")
                             val pulseScale by infiniteTransition.animateFloat(
                                 initialValue = 1f,
@@ -2206,19 +2377,17 @@ fun MessageInputBar(
                                     animation = tween(800),
                                     repeatMode = RepeatMode.Reverse
                                 ),
-                                label = "pulse"
+                                label = "pulseScale"
                             )
                             
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .padding(end = 16.dp)
-                                    .size(40.dp)
-                                    .graphicsLayer(
-                                        scaleX = pulseScale,
+                                    .size(48.dp)
+                                    .graphicsLayer {
+                                        scaleX = pulseScale
                                         scaleY = pulseScale
-                                    )
-                                    .background(Color.Red, CircleShape),
+                                    }
+                                    .background(Color.Red, shape = CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -2234,6 +2403,7 @@ fun MessageInputBar(
             }
         }
     }
+}
 
 @Preview(showBackground = true)
 @Composable

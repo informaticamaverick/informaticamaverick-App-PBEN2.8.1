@@ -2,10 +2,12 @@ package com.example.myapplication.Client
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
@@ -94,25 +96,25 @@ fun CalendarScreen(
 
     // Lista mutable de visitas (para poder modificar el estado)
     var visits by remember { mutableStateOf(SAMPLE_VISITS) }
-    
+
     // Estados para FABs y búsqueda
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    
+
     // Estado cíclico del menú: 0 = Filtros, 1 = Menú config, 2 = Todo oculto
     var menuState by remember { mutableIntStateOf(0) }
     val showSettingsMenu = menuState == 0
     val showVerticalMenu = menuState == 1
-    
+
     // Estados para filtros
     var filterStatus by remember { mutableStateOf<VisitStatus?>(null) }
     var sortByTime by remember { mutableStateOf(true) } // true = Horario, false = Servicio
-    
+
     // Estados del menú de configuración
     var showNotificationsDialog by remember { mutableStateOf(false) }
     var showDataVisibilityDialog by remember { mutableStateOf(false) }
     var showTimePeriodDialog by remember { mutableStateOf(false) }
-    
+
     // Preferencias de usuario
     var viewMode by remember { mutableStateOf("Detallada") } // "Compacta", "Detallada", "Tarjetas"
     var timePeriod by remember { mutableStateOf("Todo") } // "Semana", "Mes", "3 Meses", "Todo"
@@ -128,8 +130,31 @@ fun CalendarScreen(
 
     // Filtrar eventos del día seleccionado con búsqueda y filtros
     val selectedDateStr = dateFormat.format(selectedDate.time)
-    val eventsForSelectedDay = remember(selectedDateStr, visits, searchQuery, filterStatus, sortByTime) {
-        var filtered = visits.filter { it.date == selectedDateStr }
+
+    // Filtrar visitas por período de tiempo
+    val filteredVisitsByPeriod = remember(visits, timePeriod) {
+        val currentCalendar = Calendar.getInstance()
+        val cutoffDate = Calendar.getInstance().apply {
+            when(timePeriod) {
+                "Semana" -> add(Calendar.DAY_OF_YEAR, -7)
+                "Mes" -> add(Calendar.MONTH, -1)
+                "3 Meses" -> add(Calendar.MONTH, -3)
+                else -> add(Calendar.YEAR, -100) // "Todo" - mostrar todo
+            }
+        }
+        
+        visits.filter { visit ->
+            try {
+                val visitDate = dateFormat.parse(visit.date)
+                visitDate != null && !visitDate.before(cutoffDate.time)
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+    
+    val eventsForSelectedDay = remember(selectedDateStr, filteredVisitsByPeriod, searchQuery, filterStatus, sortByTime) {
+        var filtered = filteredVisitsByPeriod.filter { it.date == selectedDateStr }
         
         // Filtro por búsqueda
         if (searchQuery.isNotEmpty()) {
@@ -154,15 +179,16 @@ fun CalendarScreen(
         filtered
     }
 
-    // Días que tienen eventos (para mostrar indicador)
-    val daysWithEvents = visits.filter { it.status != VisitStatus.CANCELLED }.map { it.date }.toSet()
+    // Días que tienen eventos (para mostrar indicador) - usar visitas filtradas
+    val daysWithEvents = filteredVisitsByPeriod.filter { it.status != VisitStatus.CANCELLED }.map { it.date }.toSet()
 
     // Estado para controlar si la lista de eventos está expandida
     var isExpanded by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()
+        .background(colors.backgroundColor)) {
         Scaffold(
-            containerColor = Color.Transparent,
+            containerColor = colors.backgroundColor,
             topBar = {
                 TopAppBar(
                     title = {
@@ -182,8 +208,8 @@ fun CalendarScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = colors.textSecondaryColor,
-                        titleContentColor = colors.backgroundColor,
+                        containerColor = colors.surfaceColor,
+                        titleContentColor = colors.textPrimaryColor,
                     )
                 )
             },
@@ -205,47 +231,6 @@ fun CalendarScreen(
                             horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Opción: Modo de Vista
-                            Surface(
-                                modifier = Modifier.size(64.dp),
-                                onClick = { 
-                                    viewMode = when(viewMode) {
-                                        "Compacta" -> "Detallada"
-                                        "Detallada" -> "Tarjetas"
-                                        else -> "Compacta"
-                                    }
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = materialColors.surface,
-                                shadowElevation = 6.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.ViewModule,
-                                        "Modo Vista",
-                                        tint = materialColors.onSurface,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = when(viewMode) {
-                                            "Compacta" -> "Comp"
-                                            "Detallada" -> "Det"
-                                            "Tarjetas" -> "Card"
-                                            else -> "Vista"
-                                        },
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = materialColors.onSurface,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                            
                             // Opción: Alertas
                             Surface(
                                 modifier = Modifier.size(64.dp),
@@ -1162,12 +1147,16 @@ fun EventCard(
     onCancelClick: (String) -> Unit,
     onRescheduleClick: (String) -> Unit
 ) {
+    var isExpanded by remember { mutableStateOf(false) }
+    
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { isExpanded = !isExpanded },
         shape = RoundedCornerShape(16.dp),
         color = colors.surfaceColor,
         shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, colors.dividerColor) // Borde añadido
+        border = BorderStroke(1.dp, colors.dividerColor)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -1181,13 +1170,13 @@ fun EventCard(
                 // Columna de hora
                 Column(
                     modifier = Modifier
-                        .width(60.dp)
+                        .width(70.dp)
                         .padding(end = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = event.time,
-                        fontSize = 18.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (event.status == VisitStatus.CANCELLED) {
                             colors.textSecondaryColor
@@ -1306,54 +1295,80 @@ fun EventCard(
                         )
                     }
                 }
+                
+                // Icono indicador de expandir/colapsar
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Colapsar" else "Expandir",
+                    tint = colors.textSecondaryColor,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
-            // Botones de acción (solo si no está cancelado)
-            if (event.status != VisitStatus.CANCELLED) {
-                HorizontalDivider(
-                    color = colors.dividerColor,
-                    thickness = 0.5.dp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+            // Botones de acción con animación expandible
+            AnimatedVisibility(
+                visible = isExpanded && event.status != VisitStatus.CANCELLED,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column {
+                    HorizontalDivider(
+                        color = colors.dividerColor,
+                        thickness = 0.5.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Botón Reprogramar
-                    Button(
-                        onClick = { onRescheduleClick(event.id) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.backgroundColor,
-                            contentColor = colors.accentBlue
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "Reprogramar",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                        // Botón Reprogramar
+                        Button(
+                            onClick = { onRescheduleClick(event.id) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.backgroundColor,
+                                contentColor = colors.accentBlue
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Reprogramar",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
-                    // Botón Cancelar
-                    Button(
-                        onClick = { onCancelClick(event.id) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.backgroundColor,
-                            contentColor = Color(0xFFEF4444)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "Cancelar",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // Botón Cancelar
+                        Button(
+                            onClick = { onCancelClick(event.id) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.backgroundColor,
+                                contentColor = Color(0xFFEF4444)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Cancelar",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

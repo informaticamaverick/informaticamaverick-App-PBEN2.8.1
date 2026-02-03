@@ -595,7 +595,7 @@ fun PromoScreen(
         }
     }
 
-    val filteredListItems = remember(selectedCategories, promosState, searchQuery, onlyWithDiscount, sortByDiscount) {
+    val filteredListItems = remember(selectedCategories, promosState, searchQuery, onlyWithDiscount, sortByDiscount, timePeriod) {
         var filtered = if (selectedCategories.isEmpty()) {
             listItems
         } else {
@@ -662,6 +662,32 @@ fun PromoScreen(
                     is PromoListItem.ProviderPromoItem -> {
                         val sortedPromos = item.providerPromotions.promotions.sortedByDescending { it.discount ?: 0 }
                         PromoListItem.ProviderPromoItem(item.providerPromotions.copy(promotions = sortedPromos))
+                    }
+                }
+            }
+        }
+        
+        // Filtro por período de tiempo
+        val currentDate = java.util.Calendar.getInstance()
+        if (timePeriod != "Todo") {
+            val daysToSubtract = when (timePeriod) {
+                "Semana" -> 7
+                "Mes" -> 30
+                "3 Meses" -> 90
+                else -> 0
+            }
+            if (daysToSubtract > 0) {
+                val cutoffDate = java.util.Calendar.getInstance().apply {
+                    add(java.util.Calendar.DAY_OF_YEAR, -daysToSubtract)
+                }
+                filtered = filtered.mapNotNull { item ->
+                    when (item) {
+                        is PromoListItem.AdItem -> item
+                        is PromoListItem.ProviderPromoItem -> {
+                            // En una app real, cada promoción tendría fecha de creación
+                            // Por ahora, dejamos pasar todas las promociones
+                            item
+                        }
                     }
                 }
             }
@@ -1203,7 +1229,7 @@ floatingActionButtonPosition = FabPosition.End
                                     providerPromotions = providerPromo,
                                     promosState = promosState,
                                     onLikeClick = ::handleLikeClick,
-                                    onMessageClick = { navController.navigate("chat/$it") },
+                                    onMessageClick = { navController.navigate("chat?providerId=$it") },
                                     onProfileClick = { navController.navigate("perfil_prestador/$it") },
                                     onImageClick = { selectedPromotion = it }
                                 )
@@ -1215,7 +1241,7 @@ floatingActionButtonPosition = FabPosition.End
                                 if (promotion.id % 2 != 0) {
                                     PromotionCardVertical(
                                         promotion = updatedPromotion,
-                                        onMessageClick = { navController.navigate("chat/$it") },
+                                        onMessageClick = { navController.navigate("chat?providerId=$it") },
                                         onProfileClick = { navController.navigate("perfil_prestador/$it") },
                                         onImageClick = { selectedPromotion = it },
                                         onLikeClick = onLike
@@ -1223,7 +1249,7 @@ floatingActionButtonPosition = FabPosition.End
                                 } else {
                                     PromotionCard(
                                         promotion = updatedPromotion,
-                                        onMessageClick = { navController.navigate("chat/$it") },
+                                        onMessageClick = { navController.navigate("chat?providerId=$it") },
                                         onProfileClick = { navController.navigate("perfil_prestador/$it") },
                                         onImageClick = { selectedPromotion = it },
                                         onLikeClick = onLike
@@ -1247,7 +1273,7 @@ floatingActionButtonPosition = FabPosition.End
                     providerPromotions = currentProvider,
                     promosState = promosState,
                     onLikeClick = ::handleLikeClick,
-                    onMessageClick = { navController.navigate("chat/$it") },
+                    onMessageClick = { navController.navigate("chat?providerId=$it") },
                     onProfileClick = { navController.navigate("perfil_prestador/$it") },
                     onImageClick = { selectedPromotion = it }
                 )
@@ -1258,7 +1284,7 @@ floatingActionButtonPosition = FabPosition.End
             FullScreenPromotionView(
                 promotion = it,
                 onDismiss = { selectedPromotion = null },
-                onMessageClick = { navController.navigate("chat/$it") },
+                onMessageClick = { navController.navigate("chat?providerId=$it") },
                 onProfileClick = { navController.navigate("perfil_prestador/$it") },
                 onLikeClick = { handleLikeClick(it.id) }
             )
