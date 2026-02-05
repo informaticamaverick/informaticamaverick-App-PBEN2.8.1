@@ -15,7 +15,7 @@
       </SelectionState>
       <SelectionState runConfigName="prestador">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-01-27T12:03:20.764921100Z">
+        <DropdownSelection timestamp="2026-02-03T21:28:57.427309400Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\maxin\.android\avd\Pixel_9_Pro.avd" />

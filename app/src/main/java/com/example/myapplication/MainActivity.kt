@@ -21,15 +21,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.myapplication.Admin.AdminInitScreen
+import com.example.myapplication.presentation.admin.AdminInitScreen
 // Se importa la navegación del cliente y se le da un alias para evitar conflictos.
-import com.example.myapplication.Client.AppNavigation as ClientAppNavigation
-import com.example.myapplication.Client.PerfilUsuarioScreen
-import com.example.myapplication.Login.LoginScreen
-import com.example.myapplication.Profile.CompleteProfileScreen
+import com.example.myapplication.presentation.client.AppNavigation as ClientAppNavigation
+import com.example.myapplication.presentation.auth.LoginScreen
+import com.example.myapplication.presentation.profile.CompleteProfileScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -90,6 +87,7 @@ fun RootNavigation() {
             ) + fadeOut(animationSpec = tween(300))
         }
     ) {
+        // 1. PANTALLA DE LOGIN
         composable("login") {
             LoginScreen(
                 onLoginSuccess = { hasProfile, userName ->
@@ -108,6 +106,7 @@ fun RootNavigation() {
             )
         }
 
+        // 2. COMPLETAR PERFIL (Primer uso)
         composable(
             route = "complete_profile/{userName}",
             arguments = listOf(
@@ -130,25 +129,13 @@ fun RootNavigation() {
             )
         }
 
-        // La ruta "main_screen" ahora carga toda la navegación del cliente.
+        // 3. PANTALLA PRINCIPAL (Contiene Home, Perfil, Chat, etc.)
+        // Aquí es donde vive ClientAppNavigation, que YA INCLUYE el PerfilUsuarioScreen correctamente configurado.
         composable("main_screen") {
             ClientAppNavigation()
         }
 
-        composable("client_profile") {
-            PerfilUsuarioScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                onLogout = {
-                    Firebase.auth.signOut()
-                    navController.navigate("login") {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
-            )
-        }
-
+        // 4. PANTALLA ADMIN (Opcional)
         composable("admin_init") {
             AdminInitScreen(
                 onBack = {
