@@ -10,6 +10,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -43,14 +46,22 @@ import coil.compose.AsyncImage
 import com.example.myapplication.R
 import com.example.myapplication.ui.theme.getAppColors
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.shadow
 //import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
+import com.example.myapplication.data.model.fake.CategoryItem
 import com.example.myapplication.data.model.fake.SampleDataFalso
 import com.example.myapplication.data.model.fake.UserFalso
+import com.example.myapplication.ui.screens.SuperCategory
 
 // =================================================================================
 // --- COMPONENTES REUTILIZABLES PARA EL EFECTO GEMINI Y FAB ---
@@ -74,7 +85,7 @@ fun geminiGradientEffect(): Brush {
 
     return Brush.linearGradient(
         colors = listOf(
-            Color(0xFF4285F4), Color(0xFF9B51E0), Color(0xFFE91E63), Color(0xFF4285F4)
+            Color(0xFF2197F5), Color(0xFF9B51E0), Color(0xFFE91E63), Color(0xFF4285F4)
         ),
         start = Offset(offsetAnim - 500f, offsetAnim - 500f),
         end = Offset(offsetAnim, offsetAnim)
@@ -97,7 +108,8 @@ fun SmallActionFab(
         modifier = Modifier.size(width = 64.dp, height = 56.dp),
         shape = RoundedCornerShape(16.dp),
         color = colors.surface,
-        shadowElevation = 6.dp
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
     ) {
         Box(
             modifier = Modifier.fillMaxSize().padding(vertical = 6.dp, horizontal = 4.dp)
@@ -514,6 +526,7 @@ fun GeminiFABWithScrim(
         ) {
             content()
         }
+
     }
 }
 
@@ -1044,3 +1057,162 @@ fun PrestadorCard(
     }
 
 
+// =========================================================
+// 1. LA VISTA DE LA CARPETA (El Popup)
+// =========================================================
+@Composable
+fun FolderExpandedView(
+    superCategory: SuperCategory,
+    onDismiss: () -> Unit,
+    onCategoryClick: (String) -> Unit
+) {
+    // Animación de entrada
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
+    Popup(
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.8f)) // Fondo oscuro
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedVisibility(
+                visible = visible,
+                // Efecto "Pop" elástico
+                enter = scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = 0.6f)) + fadeIn(),
+                exit = scaleOut(targetScale = 0.8f) + fadeOut()
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f) // Ancho casi total
+                        .fillMaxHeight(0.85f) // Alto casi total
+                        .padding(16.dp)
+                        .clickable(enabled = false) {}, // Evita cerrar al tocar dentro
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF15191C)), // Gris muy oscuro
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
+                        // --- CABECERA ---
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                superCategory.title,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.background(Color.White.copy(0.1f), CircleShape)
+                            ) {
+                                Icon(Icons.Default.Close, null, tint = Color.White)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // --- GRILLA (AQUÍ ESTÁ LA MAGIA) ---
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2), // 2 Columnas
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),   // Espacio vertical chico
+                            horizontalArrangement = Arrangement.spacedBy(8.dp), // Espacio horizontal chico
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            items(superCategory.items) { item ->
+                                // LLAMAMOS A LA NUEVA TARJETA COMPACTA
+                                CompactCategoryCard(
+                                    item = item,
+                                    onClick = { onCategoryClick(item.name) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================
+// 2. LA TARJETA COMPACTA (Estilo Premium Mini)
+// =========================================================
+@Composable
+fun CompactCategoryCard(item: CategoryItem, onClick: () -> Unit) {
+    // Estados para etiquetas
+    var showNewMenu by remember { mutableStateOf(false) }
+
+    Card(
+        shape = RoundedCornerShape(16.dp), // Bordes menos redondos para aprovechar espacio
+        colors = CardDefaults.cardColors(containerColor = item.color),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(85.dp) // <--- ALTURA REDUCIDA (Antes 140dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(0.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Fila Principal
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // NOMBRE (Texto ajustado)
+                Box(modifier = Modifier.weight(0.65f)) {
+                    Text(
+                        text = item.name.uppercase(),
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp, // Fuente chica
+                        lineHeight = 13.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.shadow(4.dp)
+                    )
+                }
+
+                // DIVISOR
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(40.dp)
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.White, Color.Transparent)))
+                )
+
+                // ICONO
+                Box(modifier = Modifier.weight(0.35f), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = item.icon,
+                        fontSize = 32.sp // Icono chico
+                    )
+                }
+            }
+
+            // ETIQUETA NUEVO (Si corresponde)
+            if (item.isNew) {
+                Surface(
+                    color = Color(0xFFFFD600),
+                    shape = RoundedCornerShape(bottomEnd = 8.dp),
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    Text("NUEVO", fontSize = 7.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(4.dp))
+                }
+            }
+        }
+    }
+}
+
+// --- CARPETA INTELIGENTE INVENTO----------------------------------------------------------- ---

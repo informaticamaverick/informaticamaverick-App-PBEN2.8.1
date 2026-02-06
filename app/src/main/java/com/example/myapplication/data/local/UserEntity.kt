@@ -94,8 +94,8 @@ fun User.toEntity(): UserEntity {
         isSubscribed = isSubscribed,
         isVerified = isVerified,
         isOnline = isOnline,
-        isFavorite = isFavorite,
-        rating = rating,
+       isFavorite = isFavorite,
+       rating = rating,
         favoriteProviderIds = favoriteProviderIds,
         createdAt = createdAt
     )

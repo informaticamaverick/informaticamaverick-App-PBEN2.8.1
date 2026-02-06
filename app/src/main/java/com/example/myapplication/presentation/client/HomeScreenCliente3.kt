@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
@@ -28,6 +29,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -64,6 +67,8 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.launch
 import com.example.myapplication.data.repository.ForecastDay
 import com.example.myapplication.data.repository.WeatherRepository
@@ -81,6 +86,8 @@ import com.example.myapplication.presentation.components.SmallActionFab
 import com.example.myapplication.presentation.components.SmallFabTool
 import com.example.myapplication.presentation.components.geminiGradientEffect
 import com.example.myapplication.data.model.fake.UserSampleDataFalso
+import com.example.myapplication.presentation.components.CompactCategoryCard
+import com.example.myapplication.presentation.components.FolderExpandedView
 
 // ==================================================================================
 // --- SECCIÓN: MODELOS DE DATOS ---
@@ -140,7 +147,7 @@ fun HomeScreenComplete(
             locationViewModel.fetchLocation()
         }
     }
-    
+    var selectedSuperCategory by remember { mutableStateOf<SuperCategory?>(null) }
     // --- ESTADOS DE LA UI ---
     val userState by viewModel.userState.collectAsState()
     
@@ -211,7 +218,7 @@ fun HomeScreenComplete(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreenContent(
@@ -255,6 +262,22 @@ fun HomeScreenContent(
     val coroutineScope = rememberCoroutineScope()
     var forecastDays by remember { mutableStateOf<List<ForecastDay>>(emptyList()) }
 
+    var selectedSuperCategory by remember { mutableStateOf<SuperCategory?>(null) }
+
+    // BARRA ALEATORIA: Barajamos las categorías basándonos en el refreshTrigger
+    val superCategories = remember(refreshTrigger) {
+        val allCategories = CategorySampleDataFalso.categories
+        allCategories.groupBy { it.superCategory }
+            .map { SuperCategory(it.key, it.value) }
+            .shuffled() // <-- ORDEN ALEATORIO
+    }
+    
+    // --- GENERADOR DE DATOS DE BANNER (Anuncios/Promos) ---
+    val generatedData = remember(refreshTrigger) {
+        generateFakeBannerAndCategories()
+    }
+    val bannerItems = generatedData.first
+
     // Actualizar nombre de ciudad cuando cambie
     LaunchedEffect(cityName) {
         if (cityName.isNotEmpty()) {
@@ -289,12 +312,6 @@ fun HomeScreenContent(
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val generatedData = remember(refreshTrigger) {
-        generateFakeBannerAndCategories()
-    }
-    val bannerItems = generatedData.first
-    val regularCategories = generatedData.second
-
     LaunchedEffect(Unit) {
         refreshTrigger++
     }
@@ -312,58 +329,139 @@ fun HomeScreenContent(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color(0xFF0A0E14) // Fondo ultra oscuro para resaltar el Glassmorphism
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
 
-            // --- CAPA 1: CONTENIDO DE FONDO (SCROLLABLE) ---
+            // --- CONTENEDOR PRINCIPAL: COLUMNA (Banner Fijo + Grid Scrollable) ---
             Column(modifier = Modifier.fillMaxSize()) {
-                TopHeaderSection(
-                    navController = navController,
-                    user = userState, // <-- PASAR USUARIO REAL
-                    temperature = currentTemperature,
-                    weatherEmoji = currentWeatherEmoji,
-                    cityName = currentCityName,
-                    gpsLocation = currentCityName, // Pasar ubicación GPS
-                    manualSelection = manualSelectedAddress, // Pasar selección manual
-                    onWeatherClick = { showWeatherDetails = !showWeatherDetails },
-                    onRefreshLocation = {
-                         manualSelectedAddress = null // Resetear selección manual al refrescar
-                         onRefreshLocation()
-                    },
-                    onAddressSelected = { selectedAddr -> manualSelectedAddress = selectedAddr }, // Callback
-                    onLogout = onLogout // Callback
-                )
+                
+                // 1. ESPACIADOR TRANSPARENTE (Detrás del TopBar Flotante)
+                // Esto empuja el banner hacia abajo para que no quede tapado
+                Spacer(modifier = Modifier.height(115.dp)) // Ajustado para que el Banner empiece justo debajo del TopBar
 
-                // Banner de Novedades (Carrusel Superior Mixto)
+                // 2. BANNER DE NOVEDADES (FIJO / NO SCROLL)
+                // Se coloca aquí en la columna, fuera del Grid, para que permanezca fijo.
                 if (bannerItems.isNotEmpty()) {
-                    AutoPlayingBannerSection(
-                        bannerItems = bannerItems,
-                        onCategoryClick = onCategoryClick,
-                        navController = navController
-                    )
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        AutoPlayingBannerSection(
+                            bannerItems = bannerItems,
+                            onCategoryClick = onCategoryClick,
+                            navController = navController
+                        )
+                    }
                 }
 
-                // Lista Vertical de Categorías
-                LazyColumn(
+                // 3. BENTO GRID (SCROLLABLE)
+                // El resto del contenido que sí se mueve
+                LazyVerticalStaggeredGrid(
+                    columns = StaggeredGridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = 8.dp,
-                        // [MODIFICABLE] Espacio inferior para que el contenido no quede tapado por el FAB/BottomBar
-                        bottom = paddingValues.calculateBottomPadding() + 80.dp
-                    )
+                        top = 4.dp, // Poco padding arriba porque ya tenemos el banner
+                        start = 12.dp,
+                        end = 12.dp,
+                        bottom = paddingValues.calculateBottomPadding() + 100.dp
+                    ),
+                    verticalItemSpacing = 12.dp,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(regularCategories) { superCat ->
-                        SuperCategorySection(
+                    // Super Categorías como Tarjetas Bento (Tamaño y Orden Aleatorio)
+                    itemsIndexed(superCategories) { index, superCat ->
+                        
+                        // Lógica de Tamaño basada en Cantidad de Servicios
+                        val count = superCat.items.size
+                        val height = when {
+                            count <= 3 -> 140.dp  // Pequeño
+                            count in 4..7 -> 180.dp // Mediano
+                            count in 8..11 -> 230.dp // Grande
+                            else -> 280.dp        // Extra Grande (12+)
+                        }
+                        
+                        // Emoji basado en el título
+                        val categoryEmoji = getCategoryEmoji(superCat.title)
+
+                        BentoSuperCategoryCard(
                             superCategory = superCat,
-                            onCategoryClick = onCategoryClick,
-                            globalExpandState = allCategoryExpanded
+                            emoji = categoryEmoji,
+                            height = height,
+                            onClick = { selectedSuperCategory = superCat } // Esto activa el popup
                         )
-                        Spacer(modifier = Modifier.height(1.dp)) // [MODIFICABLE] Separación entre filas de categorías
                     }
                 }
             }
 
+            // --- CAPA HEADER (Glassmorphism) ---
+            // [MODIFICADO] Separamos el fondo desenfocado del contenido para evitar texto borroso
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+            ) {
+                // Fondo desenfocado (Layer trasero) - NO BORROSO para el texto, solo fondo
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        // Usamos un fondo semitransparente oscuro para simular el vidrio
+                        .background(Color.Black.copy(alpha = 0.65f))
+                )
+
+                // Contenido del Header (Layer frontal - NO BORROSO)
+                Box(modifier = Modifier.statusBarsPadding()) {
+                    TopHeaderSection(
+                        navController = navController,
+                        user = userState,
+                        temperature = currentTemperature,
+                        weatherEmoji = currentWeatherEmoji,
+                        cityName = currentCityName,
+                        gpsLocation = currentCityName,
+                        manualSelection = manualSelectedAddress,
+                        onWeatherClick = { showWeatherDetails = !showWeatherDetails },
+                        onRefreshLocation = {
+                             manualSelectedAddress = null
+                             onRefreshLocation()
+                        },
+                        onAddressSelected = { selectedAddr -> manualSelectedAddress = selectedAddr },
+                        onLogout = onLogout
+                    )
+                }
+            }
+
+            // --- CAPA 2: "LA CARPETA" (Popup de Subcategorías) ---
+            if (selectedSuperCategory != null) {
+              // Asegúrate de que esta línea NO esté roja.
+              // Si está roja, presiona Alt+Enter para importar la función nueva.
+                 FolderExpandedView(
+                  superCategory = selectedSuperCategory!!,
+                     onDismiss = { selectedSuperCategory = null },
+                        onCategoryClick = {
+                          selectedSuperCategory = null
+                          onCategoryClick(it)
+                                }
+                            )
+                        }
+
+/**
+                        superCategory = selectedSuperCategory!!,
+                        onDismiss = { selectedSuperCategory = null },
+                        onCategoryClick = { categoryName ->
+                            selectedSuperCategory = null // Cerramos el popup
+                            onCategoryClick(categoryName) // Navegamos
+                        }
+                    )
+                }
+
+
+                 *
+                 FolderExpandedView(
+                    superCategory = selectedSuperCategory!!,
+                    onDismiss = { selectedSuperCategory = null },
+                    onCategoryClick = { 
+                        selectedSuperCategory = null
+                        onCategoryClick(it)
+                    }
+                )**/
 
 
             // --- CAPA 2.5: PANEL EXPANDIDO DEL CLIMA (SOBREPUESTO) + SCRIM ---
@@ -578,6 +676,239 @@ fun HomeScreenContent(
 }
 
 // ==================================================================================
+// --- HELPER: EMOJIS POR CATEGORÍA ---
+// ==================================================================================
+fun getCategoryEmoji(title: String): String {
+    return when {
+        title.contains("Hogar", ignoreCase = true) -> "🏠"
+        title.contains("Tecnología", ignoreCase = true) -> "💻"
+        title.contains("Vehículos", ignoreCase = true) -> "🚗"
+        title.contains("Eventos", ignoreCase = true) -> "🎉"
+        title.contains("Salud", ignoreCase = true) -> "⚕️"
+        title.contains("Enseñanza", ignoreCase = true) -> "📚"
+        title.contains("Construcción", ignoreCase = true) -> "🏗️"
+        title.contains("Mascotas", ignoreCase = true) -> "🐾"
+        title.contains("Belleza", ignoreCase = true) -> "💅"
+        title.contains("Transporte", ignoreCase = true) -> "🚚"
+        title.contains("Gastronomía", ignoreCase = true) -> "🍔"
+        title.contains("Profesionales", ignoreCase = true) -> "👨‍⚖️"
+        else -> "📂"
+    }
+}
+
+// ==================================================================================
+// --- NUEVO COMPONENTE: TARJETA BENTO SUPER CATEGORÍA (VIDRIO EMPAÑADO) ---
+// ==================================================================================
+@Composable
+fun BentoSuperCategoryCard(
+    superCategory: SuperCategory,
+    emoji: String, // Emoji personalizado
+    height: androidx.compose.ui.unit.Dp,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(28.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent) // Transparente para manejar el fondo manualmente
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            
+            // 1. CAPA DE FONDO: Iconos o "Categorías" borrosas
+            // Simula que hay contenido dentro de la carpeta
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    .blur(radius = 15.dp) // [EFECTO VIDRIO EMPAÑADO]
+            ) {
+                // Dibujamos algunos iconos de las subcategorías en el fondo para dar textura
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    userScrollEnabled = false,
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    items(superCategory.items.take(4)) { item ->
+                        Text(
+                            text = item.icon,
+                            fontSize = 50.sp, // [MODIFICADO] Iconos de fondo más grandes
+                            modifier = Modifier.alpha(0.5f) // [MODIFICADO] Iconos de fondo más visibles
+                        )
+                    }
+                }
+            }
+
+            // 2. CAPA DE GRADIENTE (OVERLAY)
+            // Para asegurar que el texto blanco sea legible sobre cualquier fondo
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.1f),
+                            Color.Black.copy(alpha = 0.6f)
+                        )
+                    )
+                )
+            )
+            
+            // 3. CAPA DE CONTENIDO (TEXTO)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = superCategory.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${superCategory.items.size} servicios",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
+// --- AQUÍ ESTÁ EL CAMBIO ---
+            // ICONO PRINCIPAL CON FONDO CUADRADO REDONDEADO
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)                // Margen respecto al borde de la tarjeta
+                    .size(60.dp)                   // [1] Tamaño fijo para que sea cuadrado
+                    .clip(RoundedCornerShape(26.dp)) // [2] Recorte redondeado (Squircle)
+                    .background(Color.White.copy(alpha = 0.2f)), // [3] Fondo semitransparente (Glassmorphism)
+                contentAlignment = Alignment.Center
+            ){}
+
+
+
+            // ICONO PRINCIPAL (EMOJI DE SUPERCATEGORÍA) EN LUGAR DE CARPETA
+            Text(
+                text = emoji,
+                fontSize = 40.sp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .alpha(0.8f) // Un poco de transparencia para que se mezcle lindo
+            )
+        }
+    }
+}
+
+// ==================================================================================
+// --- COMPONENTE: VISTA DE CARPETA EXPANDIDA (GLASSMORPHISM) ---
+// ==================================================================================
+
+@Composable
+fun FolderExpandedView(
+    superCategory: SuperCategory,
+    onDismiss: () -> Unit,
+    onCategoryClick: (String) -> Unit
+) {
+    // ... (Tu código de animación y Popup sigue igual) ...
+
+    // DENTRO DE LA CARD GRANDE DEL POPUP:
+    Column(modifier = Modifier.padding(16.dp).fillMaxSize()) { // Padding reducido a 16dp
+
+        // ... (Tu cabecera con el Título sigue igual) ...
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // GRILLA OPTIMIZADA
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2), // 2 COLUMNAS
+            modifier = Modifier.weight(1f),
+            // Espacio entre tarjetas reducido para aprovechar lugar
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(superCategory.items) { item ->
+                // USAMOS LA NUEVA TARJETA COMPACTA
+                CompactCategoryCard(
+                    item = item,
+                    onClick = { onCategoryClick(item.name) }
+                )
+            }
+        }
+    }
+    // ...
+}
+
+
+/**
+@Composable
+fun FolderExpandedView(
+    superCategory: SuperCategory,
+    onDismiss: () -> Unit,
+    onCategoryClick: (String) -> Unit
+) {
+    Popup(
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f)) // Scrim
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            // Animación de la "Carpeta" abriéndose
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(16.dp)
+                    .clickable(enabled = false) {}, // Evitar que el clic cierre la carpeta
+                shape = RoundedCornerShape(32.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1C1E)),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            superCategory.title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, null, tint = Color.White)
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Grid de subcategorías estilo Bento moderno
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(superCategory.items) { item ->
+                            CategoryCard(item = item, onClick = { onCategoryClick(item.name) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+**/
+// ==================================================================================
 // --- SECCIÓN: COMPONENTES DEL TOP BAR (REFACTORIZADO) ---
 // ==================================================================================
 @Composable
@@ -592,11 +923,13 @@ fun TopHeaderSection(
     onWeatherClick: () -> Unit = {},
     onRefreshLocation: () -> Unit = {},
     onAddressSelected: (String) -> Unit = {}, // Callback pasado desde HomeScreenContent
-    onLogout: () -> Unit = {} // Callback pasado desde HomeScreenContent
+    onLogout: () -> Unit = {}, // Callback pasado desde HomeScreenContent
+    backgroundBrush: Brush? = null // Nuevo parámetro
 ) {
     val isDarkMode = isSystemInDarkTheme()
     // Definimos el color Matte Black para modo oscuro
-    val topBarBackgroundColor = if (isDarkMode) Color(0xFF121212) else MaterialTheme.colorScheme.surface
+    // [MODIFICADO] Usamos Color.Transparent para el Surface padre porque el Box contenedor ya tiene el fondo
+    val topBarBackgroundColor = Color.Transparent 
     
     // Gradiente blanco semi-transparente para las tarjetas
     val cardGradientBrush = Brush.verticalGradient(
@@ -613,7 +946,6 @@ fun TopHeaderSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 8.dp)
                 .height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1240,7 +1572,9 @@ fun SearchResultsPanel(
                         }
                     }
                     items(prefixMatches) { category ->
-                        Box(modifier = Modifier.height(115.dp)) {
+                        Box(modifier = Modifier
+                            //.fillMaxSize()
+                            .height(80.dp)) {
                             CategoryCard(item = category, onClick = { onCategoryClick(category.name) })
                         }
                     }
@@ -1270,7 +1604,7 @@ fun SearchResultsPanel(
                         }
                     }
                     items(approximateMatches) { category ->
-                        Box(modifier = Modifier.height(115.dp)) {
+                        Box(modifier = Modifier.height(70.dp)) {
                             CategoryCard(item = category, onClick = { onCategoryClick(category.name) })
                         }
                     }
@@ -1405,17 +1739,37 @@ fun AutoPlayingBannerSection(
 
     // Efecto de Auto-play: Cambia de página cada 4.5 segundos
     LaunchedEffect(pagerState.currentPage) {
-        delay(4500)
+        delay(3500)
         pagerState.animateScrollToPage(
             page = pagerState.currentPage + 1,
             animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
         )
     }
 
-    Column(modifier = Modifier.padding(vertical = 1.dp)) {
+    Column(modifier = Modifier
+        .padding(vertical = 0.5.dp)
+                                    // 1. [OPCIONAL] Un fondo muy sutil para diferenciar toda la sección
+        //.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+
+        // 2. [CLAVE] Dibujamos la línea o contorno inferior
+        .drawBehind {
+            val strokeWidth = 1.dp.toPx() // Grosor de la línea
+            val y = size.height - strokeWidth / 2
+
+            drawLine(
+                color = Color.LightGray.copy(alpha = 0.5f), // Color del borde
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = strokeWidth
+            )
+        }
+        // 3. [IMPORTANTE] Un poco de padding extra abajo para que el borde no pegue con las tarjetas
+        .padding(bottom = 8.dp)
+    ) {
+
         // Título del Banner
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -1445,7 +1799,7 @@ fun AutoPlayingBannerSection(
             // Escala: 1.0 (100%) si está en el centro, baja hasta 0.9 (90%) si está a los lados
             val scale = lerp(
                 start = 0.9f,
-                stop = 1.0f,
+                stop = 1.1f,
                 fraction = 1f - pageOffset.coerceIn(0f, 1f)
             )
 
@@ -1731,9 +2085,178 @@ fun SuperCategorySection(superCategory: SuperCategory, onCategoryClick: (String)
 }
 
 // ==================================================================================
-// --- SECCIÓN: TARJETA DE CATEGORÍA (DISEÑO) ---
+// --- SECCIÓN: TARJETAS DE CATEGORÍAS (DISEÑO) ---
 // ==================================================================================
+/**
+ * Tarjeta de Categoría con diseño Horizontal Premium (Estilo Bento + Glassmorphism).
+ * * @param item Objeto que contiene nombre, icono, color y estados (nuevo/alerta).
+ * @param onClick Acción al presionar la tarjeta.
+ */
+@Composable
+fun CategoryCard(item: CategoryItem, onClick: () -> Unit) {
+    // Estados para los menús contextuales de las etiquetas
+    var showNewMenu by remember { mutableStateOf(false) }
+    var showPrestadorMenu by remember { mutableStateOf(false) }
 
+    Card(
+        shape = RoundedCornerShape(32.dp),
+        colors = CardDefaults.cardColors(containerColor = item.color),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+
+            // --- CAPA 1: TEXTURA DE FONDO (Icono gigante difuminado) ---
+            Text(
+                text = item.icon,
+                fontSize = 100.sp,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .offset(x = 40.dp)
+                    .graphicsLayer {
+                        alpha = 0.3f
+                        rotationZ = 20f
+                    }
+                    .blur(radius = 35.dp)
+            )
+
+            // --- CAPA 2: GRADIENTE DE PROFUNDIDAD LATERAL ---
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.75f), // Oscuro tras el texto
+                                Color.Black.copy(alpha = 0.2f),
+                                Color.Transparent // Claro tras el icono
+                            ),
+                            startX = 0f,
+                            endX = 800f // Controla donde termina la sombra
+                        )
+                    )
+            )
+
+            // --- CAPA 3: CONTENIDO EN FILA (ROW) ---
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // IZQUIERDA: Nombre de la Categoría (60%)
+                Box(modifier = Modifier.weight(0.6f)) {
+                    Text(
+                        text = item.name.uppercase(),
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        lineHeight = 20.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().shadow(8.dp)
+                    )
+                }
+
+                // CENTRO: Divisor Vertical Minimalista
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(70.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.White.copy(0.9f), Color.Transparent)
+                            )
+                        )
+                )
+
+                // DERECHA: Icono Principal Nítido (40%)
+                Box(
+                    modifier = Modifier.weight(0.4f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = item.icon,
+                        fontSize = 80.sp, // Tamaño masivo
+                        modifier = Modifier
+                            .offset(x = 20.dp) // Ajuste del offset para la nueva proporción
+                            .graphicsLayer {
+                                shadowElevation = 30f // Sombra profunda para relieve
+                                rotationZ = 5f // Inclinación dinámica
+                            }
+                    )
+                }
+            }
+
+            // --- CAPA 4: ETIQUETAS (NUEVO / ALERTA) ---
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 16.dp, start = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (item.isNew) {
+                    Box {
+                        Surface(
+                            color = Color(0xFFFFD600),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.clickable { showNewMenu = true }
+                        ) {
+                            Text(
+                                "NUEVO",
+                                color = Color.Black,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        DropdownMenu(expanded = showNewMenu, onDismissRequest = { showNewMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("¡Esta categoría es nueva!") },
+                                onClick = { showNewMenu = false }
+                            )
+                        }
+                    }
+                }
+
+                if (item.isNewPrestador) {
+                    Box {
+                        Surface(
+                            color = MaterialTheme.colorScheme.error,
+                            shape = CircleShape,
+                            modifier = Modifier.size(24.dp).clickable { showPrestadorMenu = true },
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.PriorityHigh,
+                                    null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        DropdownMenu(expanded = showPrestadorMenu, onDismissRequest = { showPrestadorMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Hay nuevos prestadores disponibles") },
+                                onClick = { showPrestadorMenu = false }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+/**
 @Composable
 fun CategoryCard(item: CategoryItem, onClick: () -> Unit) {
     // Estados para los menús contextuales de las etiquetas
@@ -1744,17 +2267,32 @@ fun CategoryCard(item: CategoryItem, onClick: () -> Unit) {
         shape = RoundedCornerShape(20.dp), // [MODIFICABLE] Redondez de las esquinas
         colors = CardDefaults.cardColors(containerColor = item.color), // Color viene del modelo
         modifier = Modifier.fillMaxSize().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        //clip = true // Importante para que el blur no se "desborde"
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Fondo con gradiente negro transparente para leer mejor el texto blanco
+
+            // CAPA 1: Icono de fondo borroso
+            Text(
+                text = item.icon,
+                fontSize = 120.sp, // Icono de fondo mucho más grande
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .blur(radius = 28.dp) // Efecto de vidrio empañado
+                    .alpha(0.4f) // Transparencia para que no sea muy dominante
+            )
+
+            // CAPA 2: Gradiente oscuro para legibilidad del texto
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.9f)))))
 
-            // ICONO CENTRAL (Emoji o Imagen)
+            // CAPA 3: Contenido principal (Icono y Texto nítidos)
+            // ICONO CENTRAL
             Text(
                 item.icon,
                 fontSize = 65.sp, // [MODIFICABLE] Tamaño del icono
-                modifier = Modifier.align(Alignment.Center)
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .graphicsLayer { shadowElevation = 10f } // Sombra para despegarlo del fondo
             )
 
             // NOMBRE DE LA CATEGORÍA
@@ -1824,7 +2362,7 @@ fun CategoryCard(item: CategoryItem, onClick: () -> Unit) {
         }
     }
 }
-
+**/
 // 4. Generar lista regular (Super Categorías) excluyendo las que ya están en banner si se quisiera,
 // pero generalmente se muestran todas abajo ordenadas.
 // Aquí agrupamos todas por su superCategory.\

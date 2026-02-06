@@ -17,8 +17,8 @@ private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF3B82F6),       // Azul brillante
     secondary = Color(0xFF8B5CF6),     // Púrpura
     tertiary = Color(0xFFFBBF24),      // Amarillo
-    background = Color(0xFF0F172A),    // Azul oscuro profundo
-    surface = Color(0xFF1E293B),       // Azul oscuro para tarjetas
+    background = Color(0xFF121212),    // Negro Mate
+    surface = Color(0xFF1E1E1E),       // Gris oscuro para tarjetas
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color(0xFF1E293B),
@@ -82,6 +82,19 @@ fun MyApplicationTheme(
         content = content
     )
 }
+
+// Estructura de datos para mantener los colores de la app
+data class AppColors(
+    val backgroundColor: Color,
+    val surfaceColor: Color,
+    val textPrimaryColor: Color,
+    val textSecondaryColor: Color,
+    val dividerColor: Color,
+    val accentBlue: Color,
+    val accentYellow: Color,
+    val accentRed: Color,
+    val accentGreen: Color
+)
 
 // Función helper para acceder fácilmente a los colores del tema
 @Composable
