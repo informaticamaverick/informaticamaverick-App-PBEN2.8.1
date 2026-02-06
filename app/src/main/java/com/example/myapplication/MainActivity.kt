@@ -21,7 +21,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.myapplication.presentation.admin.AdminInitScreen
+//import com.example.myapplication.presentation.admin.AdminInitScreen
 // Se importa la navegación del cliente y se le da un alias para evitar conflictos.
 import com.example.myapplication.presentation.client.AppNavigation as ClientAppNavigation
 import com.example.myapplication.presentation.auth.LoginScreen
@@ -135,7 +135,7 @@ fun RootNavigation() {
             ClientAppNavigation()
         }
 
-        // 4. PANTALLA ADMIN (Opcional)
+       /** // 4. PANTALLA ADMIN (Opcional)
         composable("admin_init") {
             AdminInitScreen(
                 onBack = {
@@ -143,5 +143,6 @@ fun RootNavigation() {
                 }
             )
         }
+       **/
     }
 }

@@ -1,5 +1,6 @@
-package com.example.myapplication.presentation.client
 
+package com.example.myapplication.presentation.client
+/**
 import android.content.Intent
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
@@ -3966,4 +3967,5 @@ fun GradientDivider(color: Color, thickness: Dp, modifier: Modifier = Modifier) 
 @Preview(showBackground = true)
 @Composable
 fun PresupuestosScreenPreview() { MyApplicationTheme { PresupuestosScreen(onBack = {}) } }
+**/
 **/

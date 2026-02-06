@@ -1,6 +1,8 @@
+/**
 package com.example.myapplication.data.model.fake
 
 import androidx.compose.runtime.mutableStateListOf
+import com.example.myapplication.data.local.Provider
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.random.Random
@@ -27,7 +29,7 @@ object PresupuestoSampleDataFalso {
     // Lista mutable de presupuestos de ejemplo
     val presupuestos = mutableStateListOf<PresupuestoFalso>().apply {
         // Generar datos basados en los prestadores existentes
-        val prestadores = SampleDataFalso.prestadores
+        val prestadores = Provider
         
         prestadores.forEachIndexed { index, prestador ->
             val isLicitacion = index % 2 == 0
@@ -106,3 +108,4 @@ object PresupuestoSampleDataFalso {
         ))
     }
 }
+**/

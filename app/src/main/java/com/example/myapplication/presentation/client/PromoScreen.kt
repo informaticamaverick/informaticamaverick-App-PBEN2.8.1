@@ -1,5 +1,5 @@
 package com.example.myapplication.presentation.client
-
+/**
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
@@ -1720,3 +1720,4 @@ fun PromoScreenPreview() {
     }
 }
 
+**/

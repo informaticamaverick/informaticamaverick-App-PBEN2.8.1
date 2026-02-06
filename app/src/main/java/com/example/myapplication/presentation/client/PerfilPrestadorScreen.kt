@@ -26,19 +26,29 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import com.example.myapplication.R
-import com.example.myapplication.data.model.fake.Company
-import com.example.myapplication.data.model.fake.Employee
-import com.example.myapplication.data.model.fake.SampleDataFalso
-import com.example.myapplication.data.model.fake.UserFalso
+// --- [COMENTADO] IMPORTACIONES DE DATOS FALSOS ---
+// import com.example.myapplication.data.model.fake.Company
+// import com.example.myapplication.data.model.fake.Employee
+// import com.example.myapplication.data.model.fake.SampleDataFalso
+// import com.example.myapplication.data.model.fake.UserFalso
+
+// --- [SECCIÓN: MODELOS DE DATOS REALES] ---
+import com.example.myapplication.data.model.Provider
+import com.example.myapplication.data.model.CompanyProvider
+import com.example.myapplication.data.model.EmployeeProvider
 import com.example.myapplication.presentation.components.GeminiSplitFAB
 import com.example.myapplication.presentation.components.SmallFabTool
 import com.example.myapplication.ui.theme.MyApplicationTheme
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // =================================================================================
 // --- PANTALLA DE PERFIL DE PRESTADOR (VISTA CLIENTE) ---
@@ -46,60 +56,53 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 
 /**
  * Pantalla que permite al cliente ver el perfil completo de un prestador.
- * Basada en la UI de PerfilUsuarioScreen pero en modo solo lectura.
+ * [ACTUALIZADO] Usa ProviderViewModel para obtener datos reales de Room.
  */
 @Composable
 fun PerfilPrestadorCliente(
     providerId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    providerViewModel: ProviderViewModel = hiltViewModel() 
 ) {
-    // Obtenemos el prestador desde los datos falsos (Usando la estructura UserFalso)
-    val user = remember { SampleDataFalso.getPrestadorUserById(providerId) }
+    // 🔥 [FLUJO DE DATOS REAL] - Escucha cambios en Room
+    // A futuro: Sincronizar desde Firebase para actualizar Room.
+    val providerState by providerViewModel.getProviderById(providerId).collectAsStateWithLifecycle(initialValue = null)
 
-    if (user == null) {
+    if (providerState == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Prestador no encontrado", style = MaterialTheme.typography.titleLarge)
-            Button(onClick = onBack, modifier = Modifier.padding(top = 16.dp)) {
-                Text("Volver")
-            }
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
     }
     
-    // Por defecto mostramos la vista de empresa ya que es un perfil de prestador
-    val isCompanyViewActive = true 
-    
     PerfilPrestadorContent(
-        user = user,
-        isCompanyViewActive = isCompanyViewActive,
+        provider = providerState!!,
+        isCompanyViewActive = true, // Siempre empresa por ser perfil profesional
         onNavigateBack = onBack
     )
 }
 
 /**
  * Contenido principal de la pantalla de perfil del prestador.
+ * [ACTUALIZADO] Mapeo completo a modelos reales.
  */
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PerfilPrestadorContent(
-    user: UserFalso,
+    provider: Provider,
     isCompanyViewActive: Boolean,
     onNavigateBack: () -> Unit
 ) {
-    // --- ESTADOS DE UI ---
-    val lazyListState = rememberLazyListState() // Estado del scroll principal
-    
-    // Estados del FAB Gemini (Boton flotante interactivo)
+    val lazyListState = rememberLazyListState() 
     var isFabExpanded by remember { mutableStateOf(false) }
     var isSearchActive by remember { mutableStateOf(false) }
     
-    // Estado del Pager de Empresas (Para sincronizar con el Header)
-    val companyPagerState = rememberPagerState(pageCount = { user.companies.size })
+    // Estado del Pager de Empresas (Datos reales de Room)
+    val companyPagerState = rememberPagerState(pageCount = { provider.companies.size })
     
-    // Cálculo para la animación de transparencia del TopBar al scrollear
     val density = LocalDensity.current
-    val headerSizePx = with(density) { 320.dp.toPx() } // Ajustado a la nueva altura del header
+    val headerSizePx = with(density) { 320.dp.toPx() }
     val scrollProgress by remember {
         derivedStateOf {
             if (lazyListState.layoutInfo.visibleItemsInfo.isEmpty() || lazyListState.firstVisibleItemIndex > 0) 1f
@@ -110,7 +113,6 @@ fun PerfilPrestadorContent(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            // Barra superior animada que aparece al hacer scroll
             AnimatedTopBarProfileProvider(
                 title = if (isCompanyViewActive) "Perfil Profesional" else "Perfil",
                 scrollProgress = scrollProgress,
@@ -120,7 +122,6 @@ fun PerfilPrestadorContent(
     ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
             
-            // --- CONTENIDO SCROLLABLE PRINCIPAL ---
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
@@ -128,47 +129,42 @@ fun PerfilPrestadorContent(
             ) {
                 // 1. HEADER (Dinamico segun empresa seleccionada)
                 item {
-                    val currentCompany = if (user.companies.isNotEmpty()) user.companies[companyPagerState.currentPage] else null
+                    val currentCompany = if (provider.companies.isNotEmpty()) provider.companies[companyPagerState.currentPage] else null
                     ProfileHeaderProvider(
-                        user = user, 
-                        company = currentCompany,
-                        isCompanyMode = isCompanyViewActive
+                        provider = provider, 
+                        company = currentCompany
                     )
                 }
 
                 // 2. CONTENIDO DE EMPRESA (Principal para el prestador)
-                if (isCompanyViewActive && user.hasCompanyProfile) {
-                    // --- VISTA EMPRESA (CARRUSEL DE EMPRESAS) ---
-                    if (user.companies.isNotEmpty()) {
+                if (isCompanyViewActive && provider.hasCompanyProfile) {
+                    if (provider.companies.isNotEmpty()) {
                         item {
-                            // Pager para navegar entre múltiples empresas
                             HorizontalPager(
                                 state = companyPagerState,
                                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-                                contentPadding = PaddingValues(horizontal = 0.dp), // Full width
                                 verticalAlignment = Alignment.Top
                             ) { page ->
-                                val company = user.companies[page]
+                                val company = provider.companies[page]
                                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                                     Spacer(modifier = Modifier.height(24.dp))
                                     
-                                    // --- TARJETA DE INFORMACIÓN DE LA EMPRESA ---
+                                    // --- [DETALLES DE EMPRESA] ---
                                     ArchiveroSectionProvider(
-                                        title = "Detalles de Empresa", // Título genérico, nombre está en Header
+                                        title = "Detalles de Empresa",
                                         color = MaterialTheme.colorScheme.tertiaryContainer
                                     ) {
                                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                             
-                                            // Info legal básica
+                                            // 🔥 Datos reales de Room
                                             InfoRowProvider(Icons.Default.Domain, "Razón Social", company.razonSocial)
                                             InfoRowProvider(Icons.Default.Badge, "CUIT", company.cuit)
                                             
                                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                                             
-                                            // Servicios ofrecidos (Etiquetas)
+                                            // Servicios ofrecidos (Lista real)
                                             Text("Servicios:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             
-                                            // Usamos FlowRow (Layout experimental, disponible en BOM recientes)
                                             OptIn(ExperimentalLayoutApi::class)
                                             FlowRow(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -189,7 +185,7 @@ fun PerfilPrestadorContent(
 
                                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                                             
-                                            // --- CARACTERÍSTICAS (Iconos booleanos) ---
+                                            // --- CARACTERÍSTICAS (Booleanos de BD) ---
                                             Text("Características:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -203,10 +199,9 @@ fun PerfilPrestadorContent(
                                         }
                                     }
                                     
-                                    // Divider separando info de empresa de las sucursales
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                                     
-                                    // --- CARRUSEL DE SUCURSALES Y EQUIPOS ---
+                                    // --- [SUCURSALES Y EQUIPOS] ---
                                     if (company.branches.isNotEmpty()) {
                                         val branchPagerState = rememberPagerState(pageCount = { company.branches.size })
                                         
@@ -218,9 +213,8 @@ fun PerfilPrestadorContent(
                                             val branch = company.branches[branchPage]
                                             
                                             Column {
-                                                // Tarjeta de Dirección de la Sucursal
                                                 ArchiveroSectionProvider(
-                                                    title = branch.name, // "Casa Central", "Sucursal X"
+                                                    title = branch.name, 
                                                     color = MaterialTheme.colorScheme.primaryContainer
                                                 ) {
                                                     InfoRowProvider(Icons.Default.Place, "Dirección", branch.address.fullString())
@@ -228,7 +222,6 @@ fun PerfilPrestadorContent(
                                                 
                                                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                                                 
-                                                // Sección Equipo de Trabajo
                                                 Text(
                                                     "Equipo de Trabajo", 
                                                     style = MaterialTheme.typography.titleMedium, 
@@ -239,7 +232,7 @@ fun PerfilPrestadorContent(
                                                 
                                                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                                                 
-                                                // Carrusel de Empleados de esta sucursal
+                                                // Equipo real mapeado de BD
                                                 if (branch.employees.isNotEmpty()) {
                                                     LazyRow(
                                                         contentPadding = PaddingValues(vertical = 8.dp),
@@ -252,33 +245,22 @@ fun PerfilPrestadorContent(
                                                 } else {
                                                     Text("Sin personal visible.", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(8.dp))
                                                 }
-                                                
                                                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
                                             }
                                         }
                                         
-                                        // Indicador de Puntos (Dots) para sucursales
                                         if (company.branches.size > 1) {
                                             Spacer(modifier = Modifier.height(8.dp))
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.Center
-                                            ) {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                                 repeat(company.branches.size) { iteration ->
                                                     val color = if (branchPagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else Color.LightGray
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .padding(4.dp)
-                                                            .clip(CircleShape)
-                                                            .background(color)
-                                                            .size(8.dp)
-                                                    )
+                                                    Box(modifier = Modifier.padding(4.dp).clip(CircleShape).background(color).size(8.dp))
                                                 }
                                             }
                                         }
                                     }
 
-                                    // --- ALBUM DE PRODUCTOS ---
+                                    // --- [ALBUM DE TRABAJOS] ---
                                     if (company.productImages.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(16.dp))
                                         HorizontalDivider()
@@ -301,11 +283,12 @@ fun PerfilPrestadorContent(
                                                     elevation = CardDefaults.cardElevation(2.dp),
                                                     modifier = Modifier.size(120.dp)
                                                 ) {
-                                                    Image(
-                                                        painter = rememberAsyncImagePainter(model = imgUrl),
+                                                    AsyncImage(
+                                                        model = imgUrl,
                                                         contentDescription = null,
                                                         contentScale = ContentScale.Crop,
-                                                        modifier = Modifier.fillMaxSize()
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        error = painterResource(id = R.drawable.ic_image)
                                                     )
                                                 }
                                             }
@@ -315,22 +298,12 @@ fun PerfilPrestadorContent(
                                 }
                             }
                             
-                            // Indicador de Puntos (Dots) para Empresas (Si tiene más de una)
-                            if (user.companies.size > 1) {
+                            if (provider.companies.size > 1) {
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    repeat(user.companies.size) { iteration ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                    repeat(provider.companies.size) { iteration ->
                                         val color = if (companyPagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else Color.LightGray
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(4.dp)
-                                                .clip(CircleShape)
-                                                .background(color)
-                                                .size(8.dp)
-                                        )
+                                        Box(modifier = Modifier.padding(4.dp).clip(CircleShape).background(color).size(8.dp))
                                     }
                                 }
                             }
@@ -343,7 +316,6 @@ fun PerfilPrestadorContent(
                         }
                     }
                 } else {
-                    // Fallback si no tiene perfil empresa (aunque no debería pasar para un prestador)
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             Text("Este perfil no tiene información pública de servicios.", color = Color.Gray)
@@ -351,25 +323,20 @@ fun PerfilPrestadorContent(
                     }
                 }
                 
-                item {
-                    Spacer(modifier = Modifier.height(80.dp))
-                }
+                item { Spacer(modifier = Modifier.height(80.dp)) }
             }
 
-            // --- FAB GEMINI (Botón Flotante con herramientas) ---
+            // --- FAB GEMINI ---
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .zIndex(10f),
+                modifier = Modifier.fillMaxSize().padding(16.dp).zIndex(10f),
                 contentAlignment = Alignment.BottomEnd
             ) {
                 GeminiSplitFAB(
                     isExpanded = isFabExpanded,
                     isSearchActive = isSearchActive,
                     onToggleExpand = { isFabExpanded = !isFabExpanded },
-                    onActivateSearch = { /* No search */ },
-                    onCloseSearch = { /* No search */ },
+                    onActivateSearch = { },
+                    onCloseSearch = { },
                     secondaryActions = { },
                     expandedTools = {
                         SmallFabTool("Contactar", Icons.Default.Chat, onClick = {})
@@ -382,56 +349,47 @@ fun PerfilPrestadorContent(
 }
 
 // =================================================================================
-// --- COMPONENTES VISUALES ADAPTADOS (SOLO LECTURA) ---
+// --- COMPONENTES VISUALES REFACTORIZADOS (DATOS REALES) ---
 // =================================================================================
 
 /**
- * Cabecera del perfil (Solo Lectura) - Dinámica para Empresa
+ * Cabecera del perfil (Consumiendo Provider y CompanyProvider reales).
+ * 🔥 A futuro: Firebase Storage para imágenes.
  */
 @Composable
 fun ProfileHeaderProvider(
-    user: UserFalso,
-    company: Company?,
-    isCompanyMode: Boolean
+    provider: Provider,
+    company: CompanyProvider?
 ) {
     var showAboutDialog by remember { mutableStateOf(false) }
 
-    Box(
-        modifier = Modifier.fillMaxWidth().height(320.dp) // Un poco más alto para acomodar más info
-    ) {
-        // Fondo / Portada
-        val bannerUrl = company?.productImages?.firstOrNull() ?: user.bannerImageUrl ?: R.drawable.myeasteregg
-        Image(
-            painter = rememberAsyncImagePainter(model = bannerUrl),
+    Box(modifier = Modifier.fillMaxWidth().height(320.dp)) {
+        // Banner (🔥 Firebase Storage a futuro)
+        val bannerUrl = company?.productImages?.firstOrNull() ?: provider.bannerImageUrl
+        AsyncImage(
+            model = bannerUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            error = painterResource(id = R.drawable.myeasteregg)
         )
         
-        // Overlay Gradiente para legibilidad
         Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(
-            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
         )))
 
-        // Botón "Sobre Nosotros" en el banner
         if (company != null) {
             IconButton(
                 onClick = { showAboutDialog = true },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 40.dp, end = 16.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 16.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)
             ) {
                 Icon(Icons.Default.Info, contentDescription = "Sobre Nosotros", tint = Color.White)
             }
         }
 
-        // Etiqueta PREMIUM
-        if (user.isSubscribed) {
+        if (provider.isSubscribed) {
             Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 40.dp, start = 0.dp),
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 0.dp),
                 color = Color(0xFFFFD700),
                 shape = RoundedCornerShape(bottomEnd = 16.dp, topEnd = 16.dp),
                 shadowElevation = 6.dp
@@ -444,121 +402,75 @@ fun ProfileHeaderProvider(
             }
         }
 
-        // Contenido Central (Avatar y Nombre de Empresa o Usuario)
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 20.dp), 
+            modifier = Modifier.fillMaxSize().padding(bottom = 20.dp), 
             horizontalAlignment = Alignment.CenterHorizontally, 
             verticalArrangement = Arrangement.Bottom
         ) {
             Box {
-                // Avatar (Empresa o Usuario)
-                val avatarModel = if (company != null) company.profileImageUrl ?: R.drawable.iconapp else user.profileImageUrl ?: R.drawable.iconapp
-                Image(
-                    painter = rememberAsyncImagePainter(model = avatarModel),
+                // 🔥 Avatar real de BD
+                val avatarModel = if (company != null) company.photoUrl ?: provider.photoUrl else provider.photoUrl
+                AsyncImage(
+                    model = avatarModel,
                     contentDescription = null,
                     modifier = Modifier.size(100.dp).clip(CircleShape).border(3.dp, Color.White, CircleShape),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(id = R.drawable.iconapp)
                 )
                 
-                // Icono Verificado
-                if (user.isVerified) {
+                if (provider.isVerified) {
                     Icon(
                         imageVector = Icons.Filled.Verified,
                         contentDescription = "Verificado",
                         tint = Color(0xFF1DA1F2),
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .offset(x = 4.dp, y = 4.dp)
-                            .size(28.dp)
-                            .background(Color.White, CircleShape)
-                            .border(2.dp, Color.White, CircleShape)
+                        modifier = Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 4.dp).size(28.dp).background(Color.White, CircleShape).border(2.dp, Color.White, CircleShape)
                     )
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Nombre Principal (Empresa si hay, sino Usuario)
+            // Nombre real de la empresa o persona
             Text(
-                text = company?.name ?: "${user.name} ${user.lastName}", 
+                text = company?.name ?: "${provider.name} ${provider.lastName}", 
                 style = MaterialTheme.typography.headlineSmall, 
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
             
-            // Subtítulo (Usuario dueño si muestra empresa, o titulo profesional)
             if (company != null) {
                 Text(
-                    text = "Por ${user.name} ${user.lastName} ${user.titulo?.let { "- $it" } ?: ""}", 
+                    text = "Por ${provider.name} ${provider.lastName} ${provider.titulo?.let { "- $it" } ?: ""}", 
                     style = MaterialTheme.typography.bodyMedium, 
                     color = Color.White.copy(alpha = 0.8f)
                 )
-                if (user.matricula != null) {
-                     Text(
-                        text = "Matrícula: ${user.matricula}", 
-                        style = MaterialTheme.typography.labelSmall, 
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
+                provider.matricula?.let {
+                     Text(text = "Matrícula: $it", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
                 }
             } else {
-                 user.titulo?.let {
+                 provider.titulo?.let {
                      Text(text = it, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.8f))
                  }
             }
         }
     }
 
-    // Dialogo "Sobre Nosotros"
     if (showAboutDialog && company != null) {
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
             icon = { Icon(Icons.Default.Business, null) },
             title = { Text(company.name) },
-            text = { Text(company.description) },
-            confirmButton = {
-                TextButton(onClick = { showAboutDialog = false }) {
-                    Text("Cerrar")
-                }
-            }
+            text = { Text(company.description) }, // 🔥 Descripción real de BD
+            confirmButton = { TextButton(onClick = { showAboutDialog = false }) { Text("Cerrar") } }
         )
     }
 }
 
+/**
+ * Tarjeta de empleado real (Consumiendo EmployeeProvider).
+ * 🔥 A futuro: Firebase Auth/Database para perfiles de equipo.
+ */
 @Composable
-fun FeatureIcon(icon: ImageVector, label: String, isActive: Boolean) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-                .border(
-                    width = 1.dp,
-                    color = if (isActive) MaterialTheme.colorScheme.primary else Color.Gray,
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isActive) MaterialTheme.colorScheme.primary else Color.Gray,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isActive) MaterialTheme.colorScheme.onSurface else Color.Gray,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
-        )
-    }
-}
-
-@Composable
-fun EmployeeRoundedCardProvider(employee: Employee) {
+fun EmployeeRoundedCardProvider(employee: EmployeeProvider) {
     Card(
         modifier = Modifier.width(200.dp).height(80.dp),
         shape = RoundedCornerShape(12.dp),
@@ -569,55 +481,49 @@ fun EmployeeRoundedCardProvider(employee: Employee) {
             modifier = Modifier.fillMaxSize().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = rememberAsyncImagePainter(model = employee.photoUrl ?: R.drawable.iconapp),
+            AsyncImage(
+                model = employee.photoUrl,
                 contentDescription = null,
                 modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                error = painterResource(id = R.drawable.iconapp)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(verticalArrangement = Arrangement.Center) {
-                Text(
-                    "${employee.name} ${employee.lastName}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
-                Text(
-                    employee.position,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
+                Text("${employee.name} ${employee.lastName}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(employee.position, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
             }
         }
     }
 }
 
-@Composable
-fun ArchiveroSectionProvider(
-    title: String, 
-    color: Color, 
-    content: @Composable () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        // Cabecera de la tarjeta
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(width = 4.dp, height = 18.dp)
-                    .background(color, RoundedCornerShape(2.dp))
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
+// --- [COMPONENTES AUXILIARES INTACTOS] ---
 
-        // Tarjeta de Contenido
+@Composable
+fun FeatureIcon(icon: ImageVector, label: String, isActive: Boolean) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier.size(40.dp).clip(CircleShape)
+                .background(if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.dp, if (isActive) MaterialTheme.colorScheme.primary else Color.Gray, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = if (isActive) MaterialTheme.colorScheme.primary else Color.Gray, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = if (isActive) MaterialTheme.colorScheme.onSurface else Color.Gray, fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
+@Composable
+fun ArchiveroSectionProvider(title: String, color: Color, content: @Composable () -> Unit) {
+    // 🔥 A futuro: Sincronizar secciones dinámicas con Firebase.
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+            Box(modifier = Modifier.size(width = 4.dp, height = 18.dp).background(color, RoundedCornerShape(2.dp)))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        }
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -625,9 +531,7 @@ fun ArchiveroSectionProvider(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             border = BorderStroke(1.dp, color.copy(alpha = 0.5f))
         ) {
-            Box(modifier = Modifier.fillMaxWidth().background(color.copy(alpha = 0.05f)).padding(16.dp)) {
-                content()
-            }
+            Box(modifier = Modifier.fillMaxWidth().background(color.copy(alpha = 0.05f)).padding(16.dp)) { content() }
         }
     }
 }
@@ -661,13 +565,5 @@ fun AnimatedTopBarProfileProvider(title: String, scrollProgress: Float, onBackCl
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
             }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PerfilPrestadorClientePreview() {
-    MyApplicationTheme {
-        PerfilPrestadorCliente(providerId = "1", onBack = {})
     }
 }

@@ -1,4 +1,5 @@
-package com.example.myapplication.ui.screens
+//package com.example.myapplication.ui.screens
+package com.example.myapplication.presentation.client
 
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
@@ -24,10 +26,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -36,14 +41,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -51,140 +55,138 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.util.lerp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.OpenMeteoResponse
 import com.example.myapplication.R
-import com.example.myapplication.presentation.client.LocationViewModel
-import com.example.myapplication.presentation.client.LocationViewModelFactory
-import com.example.myapplication.presentation.client.WeatherViewModel
+import com.example.myapplication.presentation.client.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.launch
 import com.example.myapplication.data.repository.ForecastDay
 import com.example.myapplication.data.repository.WeatherRepository
 import com.example.myapplication.data.local.UserEntity
-import com.example.myapplication.data.model.fake.CategoryItem
-import com.example.myapplication.data.model.fake.CategorySampleDataFalso
-import com.example.myapplication.data.model.fake.SampleDataFalso
-import com.example.myapplication.presentation.client.ProfileSharedViewModel
-import com.example.myapplication.presentation.client.Screen
-import com.example.myapplication.data.model.fake.UserFalso
-import com.example.myapplication.presentation.components.GeminiFABWithScrim
-import com.example.myapplication.presentation.components.GeminiSplitFAB
-import com.example.myapplication.presentation.components.GeminiTopSearchBar
-import com.example.myapplication.presentation.components.SmallActionFab
-import com.example.myapplication.presentation.components.SmallFabTool
-import com.example.myapplication.presentation.components.geminiGradientEffect
-import com.example.myapplication.data.model.fake.UserSampleDataFalso
+import com.example.myapplication.data.local.CategoryEntity
+import com.example.myapplication.data.model.Provider
+import com.example.myapplication.presentation.components.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 
 // ==================================================================================
-// --- SECCIÓN: MODELOS DE DATOS ---
+// --- SECCIÓN: MODELOS DE DATOS UI ---
 // ==================================================================================
 
-/**
- * Define los modos en los que puede estar la interfaz del cliente.
- */
-enum class ProfileMode {
-    CLIENTE, EMPRESA
-}
-
-/**
- * Interfaz sellada para representar los diferentes tipos de items en el banner.
- */
 sealed interface BannerContent {
-    data class Category(val item: CategoryItem) : BannerContent
+    data class Category(val item: CategoryEntity) : BannerContent
     data class GoogleAd(val title: String, val contentDescription: String, val imageUrl: String) : BannerContent
-    data class ProviderPromo(val provider: UserFalso, val promoTitle: String) : BannerContent // UserFalso
+    data class ProviderPromo(val provider: Provider, val promoTitle: String) : BannerContent
 }
 
-/**
- * Representa una "Súper Categoría" (ej: Hogar, Tecnología) que agrupa varias subcategorías.
- */
 data class SuperCategory(
     val title: String,
-    val items: List<CategoryItem>
+    val items: List<CategoryEntity>
 )
+sealed class LocationOption {
+    // 1. Modo GPS
+    data class Gps(val address: String, val locality: String) : LocationOption()
+
+    // 2. Modo Dirección Personal
+    data class Personal(val address: String, val number: String, val locality: String) : LocationOption()
+
+    // 3. Modo Empresa/Sucursal
+    data class Business(val companyName: String, val branchName: String, val address: String, val number: String, val locality: String) : LocationOption()
+}
 
 // ==================================================================================
-// --- SECCIÓN: PANTALLA PRINCIPAL (HOME SCREEN) ---
+// --- SECCIÓN: PANTALLA PRINCIPAL ---
 // ==================================================================================
 
-@OptIn(ExperimentalMaterial3Api::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreenComplete(
     navController: NavHostController,
     bottomPadding: PaddingValues,
-    viewModel: ProfileSharedViewModel = hiltViewModel(), // <-- OBTENER VIEWMODEL
-    weatherViewModel: WeatherViewModel = androidx.lifecycle.viewmodel.compose.viewModel() // <-- WEATHER VIEWMODEL
+    profileViewModel: ProfileSharedViewModel = hiltViewModel(),
+    weatherViewModel: WeatherViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    providerViewModel: ProviderViewModel = hiltViewModel(),
+    categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+    
+    // 🔥 LocationViewModel con su Factory real
     val locationViewModel: LocationViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
         factory = LocationViewModelFactory(context)
     )
     
-    // Solicitar permisos de ubicación
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val fineLocationGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseLocationGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-
-        if (fineLocationGranted || coarseLocationGranted) {
-            // Permisos otorgados, obtener ubicación
-            locationViewModel.fetchLocation()
-        }
-    }
+    val providers by providerViewModel.providers.collectAsStateWithLifecycle()
+    val favorites by providerViewModel.favorites.collectAsStateWithLifecycle()
+    val categories by categoryViewModel.categories.collectAsStateWithLifecycle()
+    val userState by profileViewModel.userState.collectAsState()
     
-    // --- ESTADOS DE LA UI ---
-    val userState by viewModel.userState.collectAsState()
-    
-    // --- ESTADOS DEL CLIMA ---
     val temperature by weatherViewModel.temperature.collectAsState()
     val weatherEmoji by weatherViewModel.weatherEmoji.collectAsState()
-    val weatherData by weatherViewModel.weatherData.collectAsState()
     val weatherDescription by weatherViewModel.weatherDescription.collectAsState()
-    val windSpeed by weatherViewModel.windSpeed.collectAsState()
-    val humidity by weatherViewModel.humidity.collectAsState()
-
-    // --- ESTADOS DE UBICACIÓN ---
     val cityName by locationViewModel.locationName.collectAsState()
     val latitude by locationViewModel.latitude.collectAsState()
     val longitude by locationViewModel.longitude.collectAsState()
     
-    // --- OBTENER UBICACIÓN Y CLIMA AL INICIAR ---
-    LaunchedEffect(Unit) {
-        // Verificar si ya tiene permisos
-        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-            context,
-            android.Manifest.permission.ACCESS_FINE_LOCATION
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-        if (hasPermission) {
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.getOrDefault(android.Manifest.permission.ACCESS_FINE_LOCATION, false) ||
+            permissions.getOrDefault(android.Manifest.permission.ACCESS_COARSE_LOCATION, false)) {
             locationViewModel.fetchLocation()
-        } else {
-            // Solicitar permisos
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                    android.Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
         }
     }
     
-    // --- ACTUALIZAR CLIMA CUANDO CAMBIA LA UBICACIÓN ---
+    LaunchedEffect(Unit) {
+        val hasPermission = context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (hasPermission) locationViewModel.fetchLocation()
+        else locationPermissionLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+    
     LaunchedEffect(latitude, longitude) {
         if (latitude != null && longitude != null) {
             weatherViewModel.fetchWeather(lat = latitude!!, lon = longitude!!)
-        } else {
-            // Ubicación por defecto: Tucumán
-            weatherViewModel.fetchWeather(lat = -26.8083, lon = -65.2176)
         }
     }
 
@@ -194,327 +196,304 @@ fun HomeScreenComplete(
         userState = userState,
         temperature = temperature,
         weatherEmoji = weatherEmoji,
-        weatherData = weatherData,
         weatherDescription = weatherDescription,
-        windSpeed = windSpeed,
-        humidity = humidity,
         cityName = cityName,
         onRefreshLocation = { locationViewModel.fetchLocation() },
-        latitude = latitude,
-        longitude = longitude,
+        allProviders = providers,
+        favoriteProviders = favorites,
+        allCategories = categories,
+        onToggleFavorite = { id, isFav -> providerViewModel.toggleFavoriteStatus(id, isFav) },
         onLogout = {
-            viewModel.logout()
-            navController.navigate(Screen.Login.route) {
-                popUpTo(0) // Limpiar pila de navegación
-            }
+            profileViewModel.logout()
+            navController.navigate(Screen.Login.route) { popUpTo(0) }
         }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreenContent(
     navController: NavHostController,
     bottomPadding: PaddingValues,
     userState: UserEntity?,
-    temperature: String = "24°C",
-    weatherEmoji: String = "☀️",
-    weatherData: OpenMeteoResponse? = null,
-    weatherDescription: String = "Despejado",
-    windSpeed: String = "15 km/h",
-    humidity: String = "60%",
-    cityName: String = "Tucumán",
-    onRefreshLocation: () -> Unit = {},
-    latitude: Double? = null,
-    longitude: Double? = null,
-    onLogout: () -> Unit = {}
+    temperature: String,
+    weatherEmoji: String,
+    weatherDescription: String,
+    cityName: String,
+    onRefreshLocation: () -> Unit,
+    allProviders: List<Provider>,
+    favoriteProviders: List<Provider>,
+    allCategories: List<CategoryEntity>,
+    onToggleFavorite: (String, Boolean) -> Unit,
+    onLogout: () -> Unit
 ) {
-    val colors = MaterialTheme.colorScheme
     val isSystemInDarkMode = isSystemInDarkTheme()
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     var isSearchActive by remember { mutableStateOf(false) }
     var showWeatherDetails by remember { mutableStateOf(false) }
     var isFabMenuExpanded by remember { mutableStateOf(false) }
     var showFavorites by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var refreshTrigger by remember { mutableStateOf(0) }
-    var allCategoryExpanded by remember { mutableStateOf(true)}
+// Estado de la tarjeta de ubicación
+    var currentLocationState by remember {
+        mutableStateOf<LocationOption>(LocationOption.Gps(address = cityName, locality = ""))
+    }
 
-    // Estado para la dirección seleccionada manualmente desde el popup
+    // --- AGREGA O CORRIGE ESTO ---
+    // Esto es lo que "escucha" cuando el GPS termina de buscar
+    LaunchedEffect(cityName) {
+        // Solo actualizamos si la ciudad tiene texto y estamos en modo GPS
+        if (cityName.isNotEmpty() && currentLocationState is LocationOption.Gps) {
+            currentLocationState = LocationOption.Gps(
+                address = cityName, // Aquí llega la dirección real
+                locality = "Ubicación Actual"
+            )
+        }
+    }
+
+
+
     var manualSelectedAddress by remember { mutableStateOf<String?>(null) }
 
-    // Weather API - Variables locales modificables
-    var currentTemperature by remember { mutableStateOf(temperature) }
-    var currentWeatherEmoji by remember { mutableStateOf(weatherEmoji) }
-    var currentWeatherDescription by remember { mutableStateOf(weatherDescription) }
-    var currentWindSpeed by remember { mutableStateOf(windSpeed) }
-    var currentHumidity by remember { mutableStateOf(humidity) }
-    var currentCityName by remember { mutableStateOf(cityName) }
-
-    val weatherRepository = remember { WeatherRepository() }
-    val coroutineScope = rememberCoroutineScope()
-    var forecastDays by remember { mutableStateOf<List<ForecastDay>>(emptyList()) }
-
-    // Actualizar nombre de ciudad cuando cambie
-    LaunchedEffect(cityName) {
-        if (cityName.isNotEmpty()) {
-            currentCityName = cityName
-        }
+    var selectedSuperCategory by remember { mutableStateOf<SuperCategory?>(null) }
+// Agrupación por Súper Categorías
+    val superCategories = remember(allCategories, refreshTrigger) {
+        allCategories.groupBy { it.superCategory }
+            .map { SuperCategory(it.key, it.value.shuffled()) }
+            .shuffled()
+    }
+// 🔥 GENERACIÓN DE CONTENIDO PARA EL NUEVO CARRUSEL
+    val bannerItems = remember(allCategories, allProviders, refreshTrigger) {
+        generateEnterpriseBannerItems(allCategories, allProviders)
+        //generateRealBannerContent(allCategories, allProviders)
     }
 
-    // Cargar datos del clima usando ubicación GPS real
-    LaunchedEffect(latitude, longitude) {
-        // Esperar a que haya coordenadas GPS disponibles
-        if (latitude != null && longitude != null) {
-            coroutineScope.launch {
-                try {
-                    // Usar coordenadas reales del GPS
-                    val weatherData = weatherRepository.getCurrentWeather(latitude, longitude)
-
-                    weatherData?.let { data ->
-                        currentTemperature = data.temperature
-                        currentWeatherEmoji = data.weatherEmoji
-                        currentWeatherDescription = data.weatherDescription
-                        currentWindSpeed = data.windSpeed
-                        currentHumidity = data.humidity
-                    } 
-
-                    forecastDays = weatherRepository.getForecast(latitude, longitude)
-                } catch (e: Exception) {
-                    android.util.Log.e("WeatherDebug", "Error fetching weather: ${e.message}", e)
-                }
-            }
-        }
-    }
-
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    val generatedData = remember(refreshTrigger) {
-        generateFakeBannerAndCategories()
-    }
-    val bannerItems = generatedData.first
-    val regularCategories = generatedData.second
-
-    LaunchedEffect(Unit) {
-        refreshTrigger++
-    }
-
-
-    val onCategoryClick: (String) -> Unit = { categoryName ->
-        navController.navigate("result_busqueda/$categoryName")
-    }
-
-    val closeSearch = {
+    val closeSearch: () -> Unit = {
         isSearchActive = false
         searchQuery = ""
         keyboardController?.hide()
-        Unit
     }
-
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color(0xFF0A0E14)
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
 
-            // --- CAPA 1: CONTENIDO DE FONDO (SCROLLABLE) ---
+            // --- CONTENIDO PRINCIPAL: GRID ---
             Column(modifier = Modifier.fillMaxSize()) {
-                TopHeaderSection(
-                    navController = navController,
-                    user = userState, // <-- PASAR USUARIO REAL
-                    temperature = currentTemperature,
-                    weatherEmoji = currentWeatherEmoji,
-                    cityName = currentCityName,
-                    gpsLocation = currentCityName, // Pasar ubicación GPS
-                    manualSelection = manualSelectedAddress, // Pasar selección manual
-                    onWeatherClick = { showWeatherDetails = !showWeatherDetails },
-                    onRefreshLocation = {
-                         manualSelectedAddress = null // Resetear selección manual al refrescar
-                         onRefreshLocation()
-                    },
-                    onAddressSelected = { selectedAddr -> manualSelectedAddress = selectedAddr }, // Callback
-                    onLogout = onLogout // Callback
-                )
-
-                // Banner de Novedades (Carrusel Superior Mixto)
+                Spacer(modifier = Modifier.height(145.dp)) // [RESTAURADO] Espaciado para TopBar
+// 🔥          IMPLEMENTACIÓN DEL NUEVO CARRUSEL PREMIUM
                 if (bannerItems.isNotEmpty()) {
-                    AutoPlayingBannerSection(
-                        bannerItems = bannerItems,
-                        onCategoryClick = onCategoryClick,
-                        navController = navController
+                    PremiumLensCarousel(
+                        items = bannerItems,
+                        onSettingsClick = {
+                            // Aquí puedes abrir un BottomSheet de configuración a futuro
+                        },
+                        onItemClick = { banner ->
+                            // Navegación inteligente según el origen
+                            if (banner.originalCategory != null) {
+                                navController.navigate("result_busqueda/${banner.originalCategory.name}")
+                            } else if (banner.type == BannerType.GOOGLE_AD) {
+                                // Lógica para clics en anuncios externos
+                            }
+                        },
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
 
-                // Lista Vertical de Categorías
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        top = 8.dp,
-                        // [MODIFICABLE] Espacio inferior para que el contenido no quede tapado por el FAB/BottomBar
-                        bottom = paddingValues.calculateBottomPadding() + 80.dp
-                    )
-                ) {
-                    items(regularCategories) { superCat ->
-                        SuperCategorySection(
-                            superCategory = superCat,
-                            onCategoryClick = onCategoryClick,
-                            globalExpandState = allCategoryExpanded
+
+              /**  if (bannerItems.isNotEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        AutoPlayingBannerSection(
+                            bannerItems = bannerItems,
+                            onCategoryClick = { navController.navigate("result_busqueda/$it") },
+                            navController = navController
                         )
-                        Spacer(modifier = Modifier.height(1.dp)) // [MODIFICABLE] Separación entre filas de categorías
+                    }
+                }
+                **/
+
+
+                // Grid Staggered para Súper Categorías
+                LazyVerticalStaggeredGrid(
+                    columns = StaggeredGridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 8.dp, start = 16.dp, end = 16.dp, bottom = paddingValues.calculateBottomPadding() + 100.dp),
+                    verticalItemSpacing = 16.dp, 
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(superCategories) { superCat ->
+                        val height = when {
+                            superCat.items.size <= 3 -> 150.dp
+                            superCat.items.size in 4..7 -> 190.dp
+                            else -> 240.dp
+                        }
+                        BentoSuperCategoryCard(
+                            superCategory = superCat,
+                            emoji = getCategoryEmoji(superCat.title),
+                            height = height,
+                            onClick = { selectedSuperCategory = superCat }
+                        )
                     }
                 }
             }
 
+            // --- CAPA HEADER (Glassmorphism) ---
+            Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(IntrinsicSize.Min)) {
+                Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.65f)))
+                Box(modifier = Modifier.statusBarsPadding()) {
+                    TopHeaderSection(
+                        navController = navController,
+                        user = userState,
+                        temperature = temperature,
+                        weatherEmoji = weatherEmoji,
+                        cityName = cityName,
+                        onWeatherClick = { showWeatherDetails = !showWeatherDetails },
+                        onRefreshLocation = {
+                            // 1. Poner estado visual en "Cargando/GPS"
+                            currentLocationState = LocationOption.Gps(address = "Actualizando...", locality = "")
+                            // 2. Llamar al ViewModel real
+                            onRefreshLocation()
+                        },
+                        //onRefreshLocation = { manualSelectedAddress = null; onRefreshLocation() },
+                        onLogout = onLogout,
+                        currentLocationState = currentLocationState, // <--- La variable 'remember' que creamos antes
+                        onLocationSelected = { nuevaSeleccion ->
+                            currentLocationState = nuevaSeleccion // Actualizamos el estado
+                        },
 
+                        //onAddressSelected = { manualSelectedAddress = it },
+                        //gpsLocation = cityName,
+                        //manualSelection = manualSelectedAddress
+                    )
+                }
+            }
 
-            // --- CAPA 2.5: PANEL EXPANDIDO DEL CLIMA (SOBREPUESTO) + SCRIM ---
-             if (showWeatherDetails) {
+            // --- Popup de Subcategorías ---
+            if (selectedSuperCategory != null) {
+                FolderExpandedView(
+                    superCategoryName = selectedSuperCategory!!.title,
+                    items = selectedSuperCategory!!.items,
+                    onDismiss = { selectedSuperCategory = null },
+                    onCategoryClick = { categoryName ->
+                        selectedSuperCategory = null
+                        navController.navigate("result_busqueda/$categoryName")
+                    }
+                )
+            }
+
+            // --- [RESTAURADO] PANEL EXPANDIDO DEL CLIMA CON SCRIM ---
+            if (showWeatherDetails) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(1.5f) // Justo debajo de la tarjeta del clima
-                        .background(Color.Black.copy(alpha = 0.5f)) // Scrim oscuro
+                    modifier = Modifier.fillMaxSize().zIndex(1.5f).background(Color.Black.copy(alpha = 0.5f))
                         .clickable { showWeatherDetails = false }
                 )
             }
 
             AnimatedVisibility(
                 visible = showWeatherDetails,
-                enter = expandVertically(
-                    expandFrom = Alignment.Top,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                ) + fadeIn(
-                    animationSpec = tween(300)
-                ),
-                exit = shrinkVertically(
-                    shrinkTowards = Alignment.Top,
-                    animationSpec = tween(250)
-                ) + fadeOut(
-                    animationSpec = tween(200)
-                ),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 60.dp) // Ajusta según altura del TopHeaderSection
-                    .zIndex(2f)
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 60.dp).zIndex(2f)
             ) {
                 WeatherExpandedCard(
-                    temperature = currentTemperature,
-                    weatherEmoji = currentWeatherEmoji,
-                    weatherDescription = currentWeatherDescription,
-                    windSpeed = currentWindSpeed,
-                    humidity = currentHumidity,
-                    cityName = currentCityName,
-                    forecastDays = forecastDays
+                    temperature = temperature,
+                    weatherEmoji = weatherEmoji,
+                    weatherDescription = weatherDescription,
+                    cityName = cityName,
+                    forecastDays = emptyList() 
                 )
             }
 
-            // --- CAPA 2.8: SCRIM DE BÚSQUEDA (TAPA EL CONTENIDO AL BUSCAR) ---
+            // --- [RESTAURADO] SCRIM DE BÚSQUEDA ---
             if (isSearchActive) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(8f) // Debajo de Resultados (9f) y Barra (10f)
-                        .background(Color.Black.copy(alpha = 0.5f)) // Opaco oscuro
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { closeSearch() }
+                    modifier = Modifier.fillMaxSize().zIndex(8f).background(Color.Black.copy(alpha = 0.5f))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { closeSearch() }
                 )
             }
-            
-            // --- CAPA 3: BARRA DE BÚSQUEDA (ANIMADA DESDE ABAJO) ---
+
+            // --- [RESTAURADO] BARRA DE BÚSQUEDA GEMINI ---
             AnimatedVisibility(
                 visible = isSearchActive,
-                enter = fadeIn(animationSpec = tween(200)) + slideInVertically(initialOffsetY = { it / 2 }),
-                exit = fadeOut(animationSpec = tween(200)) + slideOutVertically(targetOffsetY = { it / 2 }),
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                exit = fadeOut() + slideOutHorizontally(targetOffsetX = { it / 2 }),
                 modifier = Modifier.zIndex(10f).align(Alignment.TopCenter)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(modifier = Modifier.weight(1f)) {
-                        // Usamos el componente reutilizable GeminiTopSearchBar
                         GeminiTopSearchBar(
                             searchQuery = searchQuery,
                             onSearchQueryChange = { searchQuery = it },
                             placeholderText = "Buscar servicios...",
-                            focusRequester = remember { FocusRequester() } // El foco se pide dentro del componente
+                            focusRequester = remember { FocusRequester() }
                         )
                     }
-
-                    // Botón de Cerrar (X) estilo Gemini
                     val rainbowBrush = geminiGradientEffect()
                     Surface(
                         modifier = Modifier.size(56.dp).clickable(onClick = closeSearch),
-                        shape = CircleShape,
-                        color = colors.surface,
-                        border = BorderStroke(2.5.dp, rainbowBrush),
-                        shadowElevation = 12.dp
+                        shape = CircleShape, color = Color(0xFF121212), border = BorderStroke(2.5.dp, rainbowBrush), shadowElevation = 12.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Close, "Cerrar", tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                            Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(26.dp))
                         }
                     }
                 }
             }
-
-            // --- CAPA 4: PANEL DE RESULTADOS DE BÚSQUEDA ---
+// --- [NUEVO] PANEL DE RESULTADOS DE BÚSQUEDA ---
             AnimatedVisibility(
-                visible = isSearchActive && searchQuery.isNotEmpty() && !showFavorites,
-                enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(250)),
-                exit = shrinkVertically(animationSpec = tween(250)) + fadeOut(animationSpec = tween(250)),
-                modifier = Modifier
-                    .zIndex(9f)
-                    .align(Alignment.TopCenter)
-                    // [MODIFICABLE] Ajustar este padding si cambia la altura del TopBar o SearchBar
-                    .padding(top = 130.dp)
+                visible = isSearchActive && searchQuery.isNotEmpty(),
+                enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
+                exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300)),
+                modifier = Modifier.zIndex(9f).align(Alignment.TopCenter).padding(top = 130.dp)
             ) {
                 SearchResultsPanel(
-                    isVisible = true,
                     searchQuery = searchQuery,
-                    onCategoryClick = onCategoryClick
+                    allCategories = allCategories,
+                    onCategoryClick = { categoryName ->
+                        closeSearch()
+                        navController.navigate("result_busqueda/$categoryName")
+                    }
                 )
             }
 
-            // --- CAPA 5: PANEL LATERAL DE FAVORITOS ---
+
+
+
+            // --- [RESTAURADO] PANEL DE FAVORITOS CON SCRIM ---
+            if (showFavorites) {
+                Box(
+                    modifier = Modifier.fillMaxSize().zIndex(11f).background(Color.Black.copy(alpha = 0.65f))
+                        .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { showFavorites = false }
+                )
+            }
+
             AnimatedVisibility(
                 visible = showFavorites,
-                enter = slideInHorizontally(initialOffsetX = { fullWidth -> fullWidth }), // Entra desde la derecha
-                exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }),
+                enter = slideInHorizontally(initialOffsetX = { it }),
+                exit = slideOutHorizontally(targetOffsetX = { it }),
                 modifier = Modifier.align(Alignment.CenterEnd).zIndex(12f)
             ) {
                 FavoritesPanel(
                     navController = navController,
+                    favorites = favoriteProviders,
                     onClose = { showFavorites = false },
-                    sortBy = "Name",
-                    selectionMode = false,
-                    selectedIds = emptySet(),
-                    searchQuery = "",
-                    onToggleSelection = { }
+                    onToggleFavorite = onToggleFavorite
                 )
             }
 
-            // --- CAPA 6: FAB DIVIDIDO CON SCRIM REUTILIZABLE ---
-            
-            // COLOR MATTE BLACK para FAB en modo oscuro
+            // --- FAB GEMINI DIVIDIDO ---
             val fabSurfaceColor = if (isSystemInDarkMode) Color(0xFF121212) else MaterialTheme.colorScheme.surface
-            
             GeminiFABWithScrim(
                 bottomPadding = bottomPadding,
-                showScrim = true // Solo mostrar el degradado si no hay menús abiertos
+                showScrim = !isFabMenuExpanded
             ) {
-                // Sobrescribimos el color surface para los componentes dentro del FAB (si usan MaterialTheme)
-                MaterialTheme(
-                    colorScheme = MaterialTheme.colorScheme.copy(surface = fabSurfaceColor)
-                ) {
+                MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(surface = fabSurfaceColor)) {
                     GeminiSplitFAB(
                         isExpanded = isFabMenuExpanded,
                         isSearchActive = isSearchActive,
@@ -523,52 +502,13 @@ fun HomeScreenContent(
                         onActivateSearch = { isSearchActive = true },
                         onCloseSearch = closeSearch,
                         onCloseSecondaryPanel = { showFavorites = false },
-                        // --- MODIFICADO --- Botones de acción con el nuevo estilo
                         secondaryActions = {
-                            SmallActionFab(
-                                icon = Icons.Default.Gavel,
-                                label = "Licitar",
-                                iconColor = Color(0xFF4285F4),
-                                onClick = { navController.navigate(Screen.CrearLicitacion.route) }
-                            )
-                            SmallActionFab(
-                                icon = Icons.Default.Bolt,
-                                label = "Rápido",
-                                iconColor = Color(0xFFFBC02D),
-                                onClick = { println("Acción rápida") }
-                            )
-                            SmallActionFab(
-                                icon = Icons.Default.Favorite,
-                                label = "Favs",
-                                iconColor = Color(0xFFE91E63),
-                                onClick = {
-                                    showFavorites = true
-                                    isFabMenuExpanded = false
-                                }
-                            )
+                            SmallActionFab(icon = Icons.Default.Gavel, label = "Licitar", iconColor = Color(0xFF4285F4), onClick = { navController.navigate(Screen.CrearLicitacion.route) })
+                            SmallActionFab(icon = Icons.Default.Bolt, label = "Rápido", iconColor = Color(0xFFFBC02D), onClick = { })
+                            SmallActionFab(icon = Icons.Default.Favorite, label = "Favs", iconColor = Color(0xFFE91E63), onClick = { showFavorites = true; isFabMenuExpanded = false })
                         },
-
-
-                        // Herramientas que salen hacia arriba
                         expandedTools = {
-                            SmallFabTool(
-                                label = if (allCategoryExpanded)
-                                    "Colapsar" else "Expandir",
-                                icon = if (allCategoryExpanded)
-                                    Icons.Default.UnfoldLess else Icons.Default.UnfoldLess,
-                                onClick = {
-                                    allCategoryExpanded = !allCategoryExpanded
-                                }
-                            )
-
-                            SmallFabTool(
-                                label = "Actualizar",
-                                icon = Icons.Default.Refresh,
-                                onClick = {
-                                    isFabMenuExpanded = false
-                                    refreshTrigger++
-                                }
-                            )
+                            SmallFabTool(label = "Actualizar", icon = Icons.Default.Refresh, onClick = { isFabMenuExpanded = false; refreshTrigger++ })
                         }
                     )
                 }
@@ -578,637 +518,629 @@ fun HomeScreenContent(
 }
 
 // ==================================================================================
-// --- SECCIÓN: COMPONENTES DEL TOP BAR (REFACTORIZADO) ---
+// --- SECCIÓN: COMPONENTES DE UI ---
 // ==================================================================================
+
+@Composable
+fun BentoSuperCategoryCard(superCategory: SuperCategory, emoji: String, height: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().height(height).clickable(onClick = onClick).shadow(12.dp, RoundedCornerShape(32.dp)),
+        shape = RoundedCornerShape(32.dp), border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1C1E))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize().blur(radius = 20.dp).alpha(0.35f)) {
+                LazyVerticalGrid(GridCells.Fixed(2), userScrollEnabled = false) {
+                    items(superCategory.items.take(4)) { item ->
+                        Text(item.icon, fontSize = 55.sp, modifier = Modifier.padding(8.dp).alpha(0.5f))
+                    }
+                }
+            }
+            Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.85f)))))
+            Column(modifier = Modifier.align(Alignment.BottomStart).padding(20.dp)) {
+                Text(superCategory.title, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                Text("${superCategory.items.size} servicios", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
+            }
+            Text(emoji, fontSize = 44.sp, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp).alpha(0.85f))
+        }
+    }
+}
+
+@Composable
+fun CategoryCard(item: CategoryEntity, onClick: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(item.color)),
+        modifier = Modifier.fillMaxSize().clickable(onClick = onClick), elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Text(text = item.icon, fontSize = 110.sp, modifier = Modifier.align(Alignment.Center).blur(16.dp).alpha(0.4f))
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.85f)))))
+            Text(item.icon, fontSize = 60.sp, modifier = Modifier.align(Alignment.Center).graphicsLayer { shadowElevation = 12f })
+            Text(item.name, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp), fontSize = 14.sp, maxLines = 2)
+            if (item.isNew) Surface(color = MaterialTheme.colorScheme.tertiary, shape = RoundedCornerShape(topStart = 24.dp, bottomEnd = 8.dp)) {
+                Text("NUEVO", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun FavoritesPanel(navController: NavHostController, favorites: List<Provider>, onClose: () -> Unit, onToggleFavorite: (String, Boolean) -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxHeight().width(320.dp), color = Color(0xFF121212), tonalElevation = 16.dp,
+        shape = RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxWidth().padding(20.dp).statusBarsPadding(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Mis Favoritos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                IconButton(onClick = onClose, modifier = Modifier.background(Color.White.copy(0.1f), CircleShape)) {
+                    Icon(Icons.Default.Close, null, tint = Color.White)
+                }
+            }
+            HorizontalDivider(color = Color.White.copy(0.1f))
+            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (favorites.isEmpty()) {
+                    item { Text("No tienes favoritos guardados.", modifier = Modifier.padding(32.dp), color = Color.Gray, textAlign = TextAlign.Center) }
+                } else {
+                    items(favorites, key = { it.id }) { provider ->
+                        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White.copy(0.05f)).clickable { navController.navigate("perfil_prestador/${provider.id}") }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(model = provider.photoUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(CircleShape).border(1.dp, Color.White.copy(0.2f), CircleShape), contentScale = ContentScale.Crop, error = painterResource(R.drawable.iconapp))
+                            Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) {
+                                Text(provider.displayName, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(provider.category, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                            IconButton(onClick = { onToggleFavorite(provider.id, provider.isFavorite) }) {
+                                Icon(if (provider.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, null, tint = if (provider.isFavorite) Color.Red else Color.Gray)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================================================================================
+// --- SECCIÓN: COMPONENTES DEL TOP BAR (RESTAURADOS) ---
+// ==================================================================================
+
 @Composable
 fun TopHeaderSection(
     navController: NavHostController,
     user: UserEntity?,
-    temperature: String = "24°C",
-    weatherEmoji: String = "☀️",
-    cityName: String = "Tucumán",
-    gpsLocation: String = "Tucumán",
-    manualSelection: String? = null, 
-    onWeatherClick: () -> Unit = {},
-    onRefreshLocation: () -> Unit = {},
-    onAddressSelected: (String) -> Unit = {}, // Callback pasado desde HomeScreenContent
-    onLogout: () -> Unit = {} // Callback pasado desde HomeScreenContent
+    temperature: String,
+    weatherEmoji: String,
+    cityName: String,
+    // CAMBIO 1: Ahora recibimos el estado completo, no solo strings sueltos
+    currentLocationState: LocationOption,
+    onWeatherClick: () -> Unit,
+    onRefreshLocation: () -> Unit,
+    // CAMBIO 2: El callback de salida también debe devolver el objeto completo
+    onLocationSelected: (LocationOption) -> Unit,
+    onLogout: () -> Unit
 ) {
-    val isDarkMode = isSystemInDarkTheme()
-    // Definimos el color Matte Black para modo oscuro
-    val topBarBackgroundColor = if (isDarkMode) Color(0xFF121212) else MaterialTheme.colorScheme.surface
-    
-    // Gradiente blanco semi-transparente para las tarjetas
-    val cardGradientBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color.White.copy(alpha = 0.2f),
-            Color.White.copy(alpha = 0.05f)
-        )
-    )
+    val cardGradientBrush = Brush.verticalGradient(listOf(Color.White.copy(0.15f), Color.White.copy(0.03f)))
 
-    Surface(
-        color = topBarBackgroundColor,
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // --- 1. WIDGET DE CLIMA ---
-            // Reducido ligeramente para dar espacio
-            Box(modifier = Modifier.weight(0.8f)) { 
-                WeatherWidget(
-                    temperature = temperature,
-                    weatherEmoji = weatherEmoji,
-                    cityName = cityName,
-                    onClick = onWeatherClick,
-                    backgroundBrush = cardGradientBrush // Pasamos el gradiente
-                )
-            }
+        // 1. WIDGET CLIMA
+        Box(Modifier.weight(0.8f)) {
+            WeatherWidget(temperature, weatherEmoji, cityName, onWeatherClick, cardGradientBrush)
+        }
 
-            // --- 2. SELECTOR DE UBICACIÓN (CORREGIDO) ---
-            // Aumentado peso (más ancho horizontalmente)
-            Box(modifier = Modifier.weight(1.6f)) {
-                LocationSelector(
-                    user = user,
-                    gpsLocation = gpsLocation,
-                    manualSelection = manualSelection, // Pasar la selección manual
-                    onRefreshLocation = onRefreshLocation,
-                    backgroundBrush = cardGradientBrush // Pasamos el gradiente
-                )
-            }
+        // 2. SELECTOR DE UBICACIÓN (Aquí estaba el error)
+        Box(Modifier.weight(1.6f)) {
+            LocationSelector(
+                user = user,
+                currentLocation = currentLocationState, // Pasamos el objeto LocationOption
+                onRefresh = onRefreshLocation,
+                onLocationSelected = onLocationSelected, // Pasamos el callback directo
+                brush = cardGradientBrush
+            )
+        }
 
-            // --- 3. PERFIL (CON POPUP INTEGRADO) ---
-            Box(modifier = Modifier.weight(0.8f)) {
-                ProfileSection(
-                    user = user, 
-                    navController = navController,
-                    onAddressSelected = onAddressSelected,
-                    onLogout = onLogout,
-                    backgroundBrush = cardGradientBrush // Pasamos el gradiente
-                )
-            }
+        // 3. PERFIL
+        Box(Modifier.weight(0.8f)) {
+            ProfileSection(
+                user,
+                navController,
+                // ADAPTADOR: Como el perfil antiguo devuelve solo String, lo convertimos temporalmente
+                // para que sea compatible con el nuevo sistema.
+                onAddressSelected = onLocationSelected,
+                onLogout,
+                cardGradientBrush
+            )
         }
     }
 }
 
-// ... (Resto de ForecastDay permanece igual) ...
+
 @Composable
-fun ForecastDay(day: String, emoji: String, temp: String) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(horizontal = 2.dp)
-    ) {
-        Text(
-            text = day,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 10.sp
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = emoji,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = temp,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 11.sp
-        )
+fun WeatherWidget(temp: String, emoji: String, city: String, onClick: () -> Unit, brush: Brush) {
+    Card(onClick = onClick, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(Color.Transparent), border = BorderStroke(1.dp, Color.White.copy(0.1f))) {
+        Box(Modifier.fillMaxSize().background(brush).padding(4.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text(emoji, fontSize = 22.sp)
+                Text(temp, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(city, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(0.7f))
+            }
+        }
     }
 }
-
 @Composable
 fun LocationSelector(
     user: UserEntity?,
-    gpsLocation: String = "Tucumán",
-    manualSelection: String? = null, // Parámetro para forzar actualización
-    onRefreshLocation: () -> Unit = {},
-    backgroundBrush: Brush? = null // Nuevo parámetro opcional
+    currentLocation: LocationOption,
+    onRefresh: () -> Unit,
+    onLocationSelected: (LocationOption) -> Unit,
+    brush: Brush
 ) {
-    val colors = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
-    var useGpsLocation by remember { mutableStateOf(true) }
 
-    // Lógica para determinar Título y Dirección
-    val (title, displayAddress) = remember(user, gpsLocation, useGpsLocation, manualSelection) {
-        when {
-            // 1. Si hay una selección manual (o forzada)
-            manualSelection != null -> {
-                // Buscar si coincide con alguna dirección guardada para obtener su "nombre"
-                val personal = user?.personalAddresses?.find { "${it.calle} ${it.numero}" == manualSelection }
-                val branch = user?.companies?.flatMap { it.branches }?.find { "${it.address.calle} ${it.address.numero}" == manualSelection }
-                
-                if (personal != null) {
-                    // Es una dirección personal (ej: Casa)
-                    // Como AddressClient no tiene "nombre" (ej: Casa), usamos "Mi Dirección" o primera palabra
-                    "Mi Dirección" to manualSelection
-                } else if (branch != null) {
-                    // Es una sucursal
-                    branch.name to manualSelection
-                } else {
-                    // Dirección genérica seleccionada
-                    "Ubicación Seleccionada" to manualSelection
-                }
-            }
-            // 2. Si el usuario eligió GPS
-            useGpsLocation -> "Ubicación Actual" to gpsLocation
-            // 3. Por defecto: Primera dirección o GPS
-            else -> {
-                val firstAddr = user?.personalAddresses?.firstOrNull()
-                if (firstAddr != null) {
-                    "Mi Dirección" to "${firstAddr.calle} ${firstAddr.numero}"
-                } else {
-                    "Ubicación Actual" to gpsLocation
-                }
-            }
-        }
-    }
-    
-    // Si llega una selección manual, desactivamos modo GPS
-    LaunchedEffect(manualSelection) {
-        if (manualSelection != null) {
-            useGpsLocation = false
-        }
+    // --- 1. Lógica de Textos Reorganizada ---
+    // Estructura: Título (Pequeño) -> Dirección (Grande) -> Localidad (Pequeño)
+    val (linea1, linea2, linea3) = when (currentLocation) {
+        is LocationOption.Gps -> Triple(
+            "UBICACIÓN ACTUAL",          // Línea 1 (Arriba)
+            currentLocation.address,     // Línea 2 (Medio - Grande)
+            "GPS Activo"                 // Línea 3 (Abajo)
+        )
+        is LocationOption.Personal -> Triple(
+            "MI CASA / PERSONAL",
+            "${currentLocation.address} ${currentLocation.number}",
+            currentLocation.locality
+        )
+        is LocationOption.Business -> Triple(
+            currentLocation.companyName.uppercase(), // Línea 1: NOMBRE EMPRESA
+            currentLocation.branchName,              // Línea 2: SUCURSAL
+            "${currentLocation.address} ${currentLocation.number}" // Línea 3: Dirección
+        )
     }
 
-    Card(
-        modifier = Modifier.fillMaxSize(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            // Usamos transparente para que se vea el brush si existe
-            containerColor = if (backgroundBrush != null) Color.Transparent else MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
-        ),
-        // Si hay brush, el borde podría ser redundante o necesitar ajuste, lo mantenemos sutil
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)),
-        onClick = { expanded = true }
+    // --- 2. Layout Principal ---
+    // IMPORTANTE: Quitamos el padding top del Box para que NO agrande la fila de tarjetas
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Solo dejamos un padding derecho pequeño para que el icono no se corte si la pantalla termina justo ahí
+            .padding(end = 6.dp)
     ) {
-        // Aplicamos el fondo con Brush si existe
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (backgroundBrush != null) Modifier.background(backgroundBrush) else Modifier)
+
+        // --- TARJETA DE FONDO ---
+        Card(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(Color.Transparent),
+            border = BorderStroke(1.dp, Color.White.copy(0.15f)),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Box(
+                modifier = Modifier
+                    .background(brush)
+                    // Ajustamos padding interno:
+                    // top/bottom equilibrados para altura normal.
+                    // end = 40.dp para que el texto no se meta debajo del icono.
+                    .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 46.dp)
             ) {
-                // Textos (Izquierda)
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center
-                ) {
+                // Reemplaza el Column anterior por este:
+                Column {
+                    // LÍNEA 1: Título o Nombre de Empresa (Color Cyan)
                     Text(
-                        text = title,
+                        text = linea1,
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.primary,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF22D3EE), // Cyan
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    // LÍNEA 2: Dirección Principal o SUCURSAL (Blanco, Negrita)
                     Text(
-                        text = displayAddress,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = linea2,
+                        // Usamos titleSmall para que no sea GIGANTE pero se lea bien
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = colors.onSurface
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // LÍNEA 3: Detalle o Dirección física de la sucursal (Gris, más chico)
+                    Text(
+                        text = linea3,
+                        style = MaterialTheme.typography.bodySmall, // Letra chica para que entre la dirección
+                        fontSize = 10.sp, // Forzamos un poco más chico si la dirección es larga
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                
-                // Botón GPS (Derecha) - Siempre visible o solo cuando es GPS?
-                // "COLOCA AL LADO EL BOTON PARA ACTUALIZAR LA UBICACION CON GPS"
-                IconButton(
-                    onClick = { 
-                        useGpsLocation = true
-                        onRefreshLocation() 
-                    },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MyLocation,
-                        contentDescription = "Usar GPS",
-                        tint = if (useGpsLocation) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+
             }
         }
 
+        // --- BOTÓN GPS (Flotante tipo Clip) ---
+        // Lo ponemos en un Surface para que tenga fondo y tape el borde de la tarjeta si es necesario
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopEnd) // Alineado a la derecha arriba
+                // MAGIA AQUÍ:
+                // x = 8.dp -> Lo saca un poquito hacia la derecha (fuera de la tarjeta)
+                // y = (-14).dp -> Lo sube la MITAD de su altura (aprox), quedando "mordiendo" el borde.
+                // Como quitamos el padding del padre, esto se dibujará "fuera" de los límites,
+                // pero NO empujará a las tarjetas vecinas.
+                .offset(x = 8.dp, y = (-14).dp),
+            shape = CircleShape,
+            color = Color(0xFF1E1E1E), // Color oscuro para resaltar (o usa MaterialTheme.colorScheme.surface)
+            border = BorderStroke(1.dp, Color(0xFF22D3EE).copy(alpha = 0.6f)),
+            shadowElevation = 6.dp
+        ) {
+            IconButton(
+                onClick = {
+                    onRefresh() // Acción directa
+                    // Opcional: Cerrar menú si estaba abierto, aunque aquí es el botón directo
+                },
+                modifier = Modifier.size(40.dp) // Tamaño un poco más grande
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MyLocation,
+                    contentDescription = "Actualizar GPS",
+                    tint = Color(0xFF22D3EE),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // --- MENÚ DESPLEGABLE ---
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.widthIn(min = 200.dp)
+            modifier = Modifier
+                .background(Color(0xFF0D1117).copy(alpha = 0.95f))
+                .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(12.dp))
         ) {
-                Text(
-                    "Mis Direcciones",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onSurface
-                )
+            DropdownMenuItem(
+                text = { Text("Usar GPS Actual", color = Color(0xFF22D3EE), fontWeight = FontWeight.Bold) },
+                onClick = {
+                    onRefresh() // <--- ESTO EJECUTA LA ACTUALIZACIÓN
+                    expanded = false
+                },
+                leadingIcon = { Icon(Icons.Default.MyLocation, null, tint = Color(0xFF22D3EE)) }
+            )
 
-                if (user?.personalAddresses.isNullOrEmpty()) {
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                "No hay direcciones guardadas",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSurfaceVariant
-                            )
-                        },
-                        onClick = { expanded = false },
-                        enabled = false
-                    )
-                } else {
-                    user?.personalAddresses?.forEach { address ->
+            HorizontalDivider(color = Color.White.copy(0.1f))
+
+            user?.personalAddresses?.forEach { addr ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("${addr.calle} ${addr.numero}", color = Color.White)
+                            Text(addr.localidad, fontSize = 10.sp, color = Color.Gray)
+                        }
+                    },
+                    onClick = {
+                        onLocationSelected(LocationOption.Personal(addr.calle, addr.numero, addr.localidad))
+                        expanded = false
+                    }
+                )
+            }
+
+            if (user?.companies?.isNotEmpty() == true) {
+                HorizontalDivider(color = Color.White.copy(0.1f))
+                user.companies.forEach { company ->
+                    company.branches.forEach { branch ->
                         DropdownMenuItem(
-                            text = { 
+                            text = {
                                 Column {
-                                    Text("Casa/Personal", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) // Ejemplo estático, idealmente AddressClient tendría 'nombre'
-                                    Text(address.fullString(), style = MaterialTheme.typography.bodySmall)
+                                    Text("${company.name} - ${branch.name}", color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text("${branch.address.calle} ${branch.address.numero}", fontSize = 11.sp, color = Color.Gray)
                                 }
                             },
                             onClick = {
-                                useGpsLocation = false
-                                // Nota: Esto actualiza localmente, pero el manualSelection tiene prioridad si está seteado
+                                onLocationSelected(LocationOption.Business(
+                                    company.name, branch.name, branch.address.calle, branch.address.numero, branch.address.localidad
+                                ))
                                 expanded = false
                             }
                         )
                     }
                 }
-            
-            HorizontalDivider()
-
-            // Opción de Ubicación Actual con Refresh
-            DropdownMenuItem(
-                text = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Ubicación GPS Actual")
-                        Icon(Icons.Default.Refresh, contentDescription = "Actualizar", tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-                onClick = {
-                    useGpsLocation = true
-                    onRefreshLocation()
-                    expanded = false
-                }
-            )
+            }
         }
     }
 }
 
-/**
- * --- VERSIÓN CORREGIDA Y SIMPLIFICADA ---
- * Se renombró a 'ProfileSection' para coincidir con el Header.
- * Se agregó soporte para long click y Popup anclado.
- */
+
 @Composable
 fun ProfileSection(
     user: UserEntity?,
     navController: NavHostController,
-    onAddressSelected: (String) -> Unit,
+    onAddressSelected: (LocationOption) -> Unit,
     onLogout: () -> Unit,
-    backgroundBrush: Brush? = null // Nuevo parámetro
+    brush: Brush
 ) {
-    val colors = MaterialTheme.colorScheme
     var showPopup by remember { mutableStateOf(false) }
 
-    Box { // Contenedor para anclar el popup
-        Card(
-            modifier = Modifier
-                .fillMaxSize()
-                // Reemplazamos onClick simple por pointerInput para detectar taps y long press
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { showPopup = true }, // Tap abre Popup
-                        onLongPress = { navController.navigate(Screen.PerfilCliente.route) } // Long Press va a Perfil
-                    )
-                },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (backgroundBrush != null) Color.Transparent else MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (backgroundBrush != null) Modifier.background(backgroundBrush) else Modifier)
-                    .padding(horizontal = 8.dp), // Padding interno reajustado
-                contentAlignment = Alignment.Center
-            ) {
-                // Solo mostramos la info del usuario (Imagen + Nombre)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AsyncImage(
-                        model = user?.photoUrl,
-                        contentDescription = "Perfil",
-                        modifier = Modifier
-                            .size(40.dp) // [MODIFICADO] Aumentado tamaño de 32 a 40
-                            .clip(CircleShape)
-                            .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), CircleShape),
-                        contentScale = ContentScale.Crop,
-                        error = painterResource(id = R.drawable.iconapp),
-                        fallback = painterResource(id = R.drawable.iconapp)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = user?.name ?: "Usuario",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-
-        // --- POPUP A PANTALLA COMPLETA CON SCRIM ---
-        if (showPopup && user != null) {
-            Popup(
-                alignment = Alignment.TopStart,
-                onDismissRequest = { showPopup = false },
-                properties = PopupProperties(focusable = true)
-            ) {
-                 // SCRIM (Fondo oscuro transparente)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .clickable { showPopup = false }
-                ) {
-                    // CONTENIDO DEL POPUP
-                    // Animación de entrada
-                    var visible by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) { visible = true }
-                    
-                    AnimatedVisibility(
-                        visible = visible,
-                        enter = slideInVertically(initialOffsetY = { -it/2 }) + fadeIn(),
-                        exit = fadeOut(),
-                        modifier = Modifier
-                             .align(Alignment.TopEnd)
-                             .padding(top = 80.dp, end = 16.dp) // Ajuste de posición
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(300.dp) // Ancho fijo o relativo
-                                .heightIn(max = 450.dp) // Altura máxima con scroll
-                                .shadow(8.dp, RoundedCornerShape(16.dp))
-                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable(enabled = false) {} // Evitar que clicks dentro cierren el popup
-                        ) {
-                            UserProfilePopup(
-                                user = user,
-                                onClose = { showPopup = false },
-                                onLogout = {
-                                    showPopup = false
-                                    onLogout()
-                                },
-                                onAddressSelected = {
-                                    showPopup = false
-                                    onAddressSelected(it)
-                                },
-                                onProfileClick = {
-                                    showPopup = false
-                                    navController.navigate(Screen.PerfilCliente.route)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
+    // Procesamos el nombre (MAXIMILIANO es largo, aseguramos que entre)
+    val displayName = remember(user) {
+        user?.name?.trim()?.split(" ")?.firstOrNull()?.uppercase() ?: "PERFIL"
     }
-}
+// 1. Detecta si el widget está siendo presionado
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
 
-// ==================================================================================
-// --- NUEVO COMPONENTE: POPUP DETALLADO DE USUARIO ---
-// ==================================================================================
-@Composable
-fun UserProfilePopup(
-    user: UserEntity,
-    onClose: () -> Unit,
-    onLogout: () -> Unit,
-    onAddressSelected: (String) -> Unit, // Callback para selección de dirección
-    onProfileClick: () -> Unit // Callback para navegar al perfil
-) {
-    Column(
+// 2. Anima la escala: Si se presiona, baja a 0.95 (95% del tamaño), si no, vuelve a 1.0
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "scaleAnimation"
+    )
+    // --- CAMBIO 1: Usamos Box en lugar de Card para quitar el fondo gris ---
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .wrapContentHeight() // [MODIFICADO] Wrap content
-            .padding(16.dp)
+            .fillMaxSize() // Llena el espacio del cuadro (weight 0.8f)
+            .graphicsLayer(scaleX = scale, scaleY = scale) // <--- APLICA LA ESCALA AQUÍ
+            .background(brush, RoundedCornerShape(16.dp)) // El fondo transparente va AQUÍ
+            .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(16.dp)) // Borde sutil
+            .clip(RoundedCornerShape(16.dp)) // Recorta lo que sobresalga
+            .clickable(
+                interactionSource = interactionSource, // Conectamos la detección de presión
+                indication = ripple(), // Agregamos el efecto visual de onda
+                onClick = { showPopup = true }
+            ),
+
+        contentAlignment = Alignment.Center // --- CAMBIO 2: Alineación central forzada ---
     ) {
-        // Encabezado con botón de cierre
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Mi Cuenta",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Default.Close, "Cerrar", modifier = Modifier.size(16.dp))
-            }
-        }
-        
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-        // Contenido desplazable
         Column(
-            modifier = Modifier
-                .weight(1f, fill = false) // fill=false permite que se encoja si hay poco contenido
-                .verticalScroll(rememberScrollState()), // [MODIFICADO] Scroll vertical simple
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center, // Centra verticalmente Icono y Texto
+            modifier = Modifier.padding(4.dp)
         ) {
-            // SECCIÓN 1: DATOS PERSONALES (CLICKABLE PARA IR AL PERFIL)
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onProfileClick() } // Navega al perfil al tocar la tarjeta del usuario
+            // --- CAMBIO 3: Control estricto del tamaño de la imagen ---
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(34.dp) // Un poco más chico para dejar espacio al texto
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(
-                            model = user.photoUrl,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp).clip(CircleShape),
-                            error = painterResource(id = R.drawable.iconapp)
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text("${user.name} ${user.lastName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                            Text(user.email, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-
-            // SECCIÓN 2: DIRECCIONES PERSONALES
-            Text(
-                "Mis Direcciones",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (user.personalAddresses.isEmpty()) {
-                Text("No hay direcciones.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            } else {
-                user.personalAddresses.forEach { addr ->
-                    Card(
+                if (user?.photoUrl != null) {
+                    AsyncImage(
+                        model = user.photoUrl,
+                        contentDescription = "Avatar",
                         modifier = Modifier
-                            .padding(top = 4.dp)
-                            .fillMaxWidth()
-                            .clickable { onAddressSelected("${addr.calle} ${addr.numero}") }, // CLICKABLE
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha=0.3f))
-                    ) {
-                        // [MODIFICADO] Layout de dirección (Nombre arriba, dirección abajo)
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Home, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Casa / Personal", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text("${addr.calle} ${addr.numero}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            Text("${addr.localidad}, ${addr.provincia}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                        }
-                    }
+                            .matchParentSize()
+                            .clip(CircleShape)
+                            .border(1.dp, Color(0xFF22D3EE), CircleShape), // Borde Cyan
+                        contentScale = ContentScale.Crop,
+                        // Si falla la carga, NO mostramos el icono roto, mostramos el vector
+                        error = rememberVectorPainter(Icons.Default.Person)
+                    )
+                } else {
+                    // Si no hay foto, mostramos icono vectorial limpio
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
 
-            // SECCIÓN 3: MIS NEGOCIOS Y SUCURSALES
+            Spacer(modifier = Modifier.height(4.dp)) // Espacio pequeño
+
+            // Texto del Nombre
             Text(
-                "Mis Negocios",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                text = displayName,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                fontSize = 9.sp, // Letra pequeña para nombres largos como MAXIMILIANO
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+        }
+    }
 
-            if (user.companies.isEmpty()) {
-                Text("No hay negocios.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            } else {
-                user.companies.forEach { company ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha=0.2f)),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha=0.5f))
+    // --- POPUP (Sin cambios) ---
+    if (showPopup && user != null) {
+        Popup(
+            alignment = Alignment.TopEnd,
+            onDismissRequest = { showPopup = false },
+            properties = PopupProperties(focusable = true)
+        ) {
+            // Fondo oscuro semitransparente que cubre toda la pantalla
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable { showPopup = false }
+            ) {
+                // Variable para detonar la animación al momento de crearse el Popup
+                var animateIn by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) { animateIn = true }
+
+                // Caja contenedora alineada arriba a la derecha
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 70.dp, end = 12.dp) // Ajusté un poco el padding
+                        // --- CAMBIO 1: ANCHO MÁS GRANDE ---
+                        .width(340.dp)
+                        .clickable(enabled = false) {} // Evita que el click pase al fondo
+                ) {
+                    // --- CAMBIO 2: ANIMACIÓN DE ENTRADA ---
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = animateIn,
+                        // Efecto: Se expande desde arriba hacia abajo + Aparece suavemente
+                        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn() + slideInVertically { -40 },
+                        // (Opcional) Salida: Se contrae hacia arriba
+                        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
                     ) {
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            // Cabecera del Negocio
-                            Text(company.name, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                            // Lista de Sucursales
-                            if (company.branches.isEmpty()) {
-                                Text("Sin sucursales", style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                company.branches.forEach { branch ->
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                            .clickable { onAddressSelected("${branch.address.calle} ${branch.address.numero}") }, // CLICKABLE
-                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent) // Transparente para parecer parte de la lista
-                                    ) {
-                                        Column {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.Store, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
-                                                Spacer(Modifier.width(4.dp))
-                                                Text(branch.name, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
-                                            }
-                                            Text(
-                                                "${branch.address.calle} ${branch.address.numero}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                modifier = Modifier.padding(start = 18.dp)
-                                            )
-                                        }
-                                    }
-                                }
+                        UserProfilePopup(
+                            user = user,
+                            onClose = { showPopup = false },
+                            onLogout = {
+                                showPopup = false
+                                onLogout()
+                            },
+                            onAddressSelected = {
+                                onAddressSelected(it)
+                                showPopup = false
+                            },
+                            onProfileClick = {
+                                showPopup = false
+                                navController.navigate(Screen.PerfilCliente.route)
                             }
-                        }
+                        )
                     }
                 }
             }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // BOTÓN DE CERRAR SESIÓN (AL PIE)
-        Button(
-            onClick = onLogout,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            contentPadding = PaddingValues(vertical = 0.dp, horizontal = 16.dp)
-        ) {
-            Icon(Icons.Default.ExitToApp, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Cerrar Sesión", color = Color.White, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
 
 
-// ... (Resto del archivo: SearchResultsPanel, FavoritesPanel, Banners, Categories, Previews permanecen igual) ...
+ /**
+    if (showPopup && user != null) {
+        // ... (Tu código del Popup existente va aquí igual que antes) ...
+        // Solo para no llenar la respuesta, asumo que mantienes el Popup igual
+        Popup(
+            alignment = Alignment.TopEnd,
+            onDismissRequest = { showPopup = false },
+            properties = PopupProperties(focusable = true)
+        ) {
+            // ... Tu lógica de popup ...
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable { showPopup = false }
+            ) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 80.dp, end = 16.dp)
+                        .width(280.dp)
+                        .clickable(enabled = false) {}
+                ) {
+                    UserProfilePopup(
+                        user = user,
+                        onClose = { showPopup = false },
+                        onLogout = { showPopup = false; onLogout() },
+                        onAddressSelected = {
+                            onAddressSelected(it)
+                            showPopup = false
+                        },
+                        onProfileClick = {
+                            showPopup = false
+                            navController.navigate(Screen.PerfilCliente.route)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+**/
+//**
+//* 🔥 NUEVA FUNCIÓN DE GENERACIÓN DE CONTENIDO PARA EL CARRUSEL
+//* Filtra categorías nuevas, nuevos prestadores y anuncios.
+//*/
+fun generateEnterpriseBannerItems(
+    categories: List<CategoryEntity>,
+    providers: List<Provider>
+): List<AccordionBanner> {
+    val bannerList = mutableListOf<AccordionBanner>()
+
+    // 1. Filtrar Categorías Nuevas (isNew == true)
+    categories.filter { it.isNew }.forEach { cat ->
+        bannerList.add(
+            AccordionBanner(
+                id = "cat_new_${cat.name}",
+                title = cat.name,
+                subtitle = "¡Nueva categoría disponible!",
+                icon = cat.icon,
+                color = Color(cat.color),
+                type = BannerType.NEW_CATEGORY,
+                originalCategory = cat
+            )
+        )
+    }
+
+    // 2. Filtrar Novedades de Prestadores (isNewPrestador == true)
+    categories.filter { it.isNewPrestador }.forEach { cat ->
+        bannerList.add(
+            AccordionBanner(
+                id = "cat_prov_${cat.name}",
+                title = cat.name,
+                subtitle = "Nuevos profesionales registrados",
+                icon = cat.icon,
+                color = Color(cat.color),
+                type = BannerType.NEW_PROVIDER,
+                originalCategory = cat
+            )
+        )
+    }
+
+    // 3. Agregar Publicidad de Google (isAd == true o estática)
+    // Aquí puedes mapear anuncios reales si los tienes en la BD o uno de prueba
+    bannerList.add(
+        AccordionBanner(
+            id = "ad_google_1",
+            title = "Publicidad",
+            subtitle = "Contenido patrocinado por Google",
+            icon = "📢",
+            color = Color(0xFF1967D2),
+            type = BannerType.GOOGLE_AD
+        )
+    )
+
+    // 4. Agregar Promociones de Prestadores Subscritos
+    providers.filter { it.isSubscribed }.shuffled().take(2).forEach { provider ->
+        bannerList.add(
+            AccordionBanner(
+                id = "promo_${provider.id}",
+                title = provider.displayName,
+                subtitle = "¡Aprovecha esta oferta especial!",
+                icon = "🔥",
+                color = Color(0xFFE91E63),
+                type = BannerType.PROMO
+            )
+        )
+    }
+
+    return bannerList.shuffled()
+}
+
+
+
 @Composable
 fun SearchResultsPanel(
-    isVisible: Boolean,
     searchQuery: String,
+    allCategories: List<CategoryEntity>,
     onCategoryClick: (String) -> Unit
 ) {
-    if (!isVisible) return
-
-    val allCategories = CategorySampleDataFalso.categories
-
-    // 1. Filtrar las que coinciden EXACTAMENTE al inicio (letra por letra desde el principio)
-    // Ejemplo: Query "Carp" -> "Carpintería"
-    val prefixMatches = remember(searchQuery) {
-        allCategories.filter {
-            !it.isNew && it.name.startsWith(searchQuery, ignoreCase = true)
-        }
+    val prefixMatches = remember(searchQuery, allCategories) {
+        allCategories.filter { it.name.startsWith(searchQuery, ignoreCase = true) }
     }
 
-    // 2. Filtrar las que CONTIENEN el texto pero NO al inicio
-    // Ejemplo: Query "nic" -> "Mecánica"
-    val approximateMatches = remember(searchQuery) {
+    val approximateMatches = remember(searchQuery, allCategories) {
         allCategories.filter {
-            !it.isNew &&
-            it.name.contains(searchQuery, ignoreCase = true) &&
-            !it.name.startsWith(searchQuery, ignoreCase = true)
+            it.name.contains(searchQuery, ignoreCase = true) && !it.name.startsWith(searchQuery, ignoreCase = true)
         }
     }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(),
+        modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 110.dp),
+            columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1223,56 +1155,39 @@ fun SearchResultsPanel(
                     )
                 }
             } else {
-                // Sección: Coincidencia Exacta (Prefijo)
                 if (prefixMatches.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column {
-                            Text(
-                                "Coincidencia Exacta",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(top = 8.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                            )
-                        }
+                        Text(
+                            "Coincidencia Exacta",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
                     }
                     items(prefixMatches) { category ->
-                        Box(modifier = Modifier.height(115.dp)) {
-                            CategoryCard(item = category, onClick = { onCategoryClick(category.name) })
-                        }
-                    }
-
-                    // Separador entre secciones (Solo si hay de ambos tipos)
-                    if (approximateMatches.isNotEmpty()) {
-                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            Spacer(modifier = Modifier.height(24.dp))
-                        }
+                        CompactCategoryCard(
+                            item = category,
+                            onClick = { onCategoryClick(category.name) }
+                        )
                     }
                 }
 
-                // Sección: Resultados Aproximados (Contiene)
                 if (approximateMatches.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column {
-                            Text(
-                                "Resultados relacionados",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(top = 8.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                            )
-                        }
+                        Text(
+                            "Resultados relacionados",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        )
                     }
                     items(approximateMatches) { category ->
-                        Box(modifier = Modifier.height(115.dp)) {
-                            CategoryCard(item = category, onClick = { onCategoryClick(category.name) })
-                        }
+                        CompactCategoryCard(
+                            item = category,
+                            onClick = { onCategoryClick(category.name) }
+                        )
                     }
                 }
             }
@@ -1280,308 +1195,17 @@ fun SearchResultsPanel(
     }
 }
 
-@Composable
-fun FavoritesPanel(
-    navController: NavHostController,
-    onClose: () -> Unit,
-    sortBy: String,
-    selectionMode: Boolean,
-    selectedIds: Set<String>,
-    searchQuery: String,
-    onToggleSelection: (String) -> Unit
-) {
-    // Usamos SampleDataFalso directamente si está disponible.
-    val favorites = com.example.myapplication.data.model.fake.SampleDataFalso.prestadores.filter { it.isFavorite }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(320.dp),
-
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header Panel
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .statusBarsPadding(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "Mis Favoritos",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Cerrar")
-                }
-            }
-
-            HorizontalDivider()
-
-            // Lista
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                if (favorites.isEmpty()) {
-                    item {
-                        Text(
-                            "Aún no tienes favoritos.",
-                            modifier = Modifier.padding(32.dp),
-                            color = Color.Gray
-                        )
-                    }
-                } else {
-                    items(favorites) { provider ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { navController.navigate("perfil_prestador/${provider.id}") },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                             Surface(
-                                 shape = CircleShape,
-                                 modifier = Modifier.size(50.dp),
-                                 color = Color.Gray
-                             ) {
-                                 // Imagen de perfil
-                                 AsyncImage(
-                                     model = provider.profileImageUrl,
-                                     contentDescription = null,
-                                     modifier = Modifier.fillMaxSize(),
-                                     contentScale = ContentScale.Crop,
-                                     error = painterResource(id = R.drawable.iconapp),
-                                     fallback = painterResource(id = R.drawable.iconapp)
-                                 )
-                             }
-                             Spacer(modifier = Modifier.width(12.dp))
-                             Column {
-                                 Text(
-                                     "${provider.name} ${provider.lastName}",
-                                     fontWeight = FontWeight.Bold
-                                 )
-                                 // ADAPTACIÓN: servicios y nombre de empresa
-                                 val services = provider.companies.firstOrNull()?.services?.firstOrNull() ?: "Prestador"
-                                 val compName = provider.companies.firstOrNull()?.name ?: "Sin Empresa"
-
-                                 Text(
-                                     if(services != "Prestador") services else compName,
-                                     style = MaterialTheme.typography.bodySmall,
-                                     color = Color.Gray
-                                 )
-                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ==================================================================================
-// --- SECCIÓN: BANNER DE NOVEDADES (AUTO-PLAYING) ---
-// ==================================================================================
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun AutoPlayingBannerSection(
-    bannerItems: List<BannerContent>,
-    onCategoryClick: (String) -> Unit,
-    navController: NavHostController
-) {
-    val totalItems = bannerItems.size
-    // Iniciamos en un número alto para simular scroll infinito (loop)
-    val pagerState = rememberPagerState(initialPage = Int.MAX_VALUE / 2, pageCount = { Int.MAX_VALUE })
-
-    var showAdDialog by remember { mutableStateOf<BannerContent.GoogleAd?>(null) }
-    var showPromoDialog by remember { mutableStateOf<BannerContent.ProviderPromo?>(null) }
-
-    // Efecto de Auto-play: Cambia de página cada 4.5 segundos
-    LaunchedEffect(pagerState.currentPage) {
-        delay(4500)
-        pagerState.animateScrollToPage(
-            page = pagerState.currentPage + 1,
-            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
-        )
-    }
-
-    Column(modifier = Modifier.padding(vertical = 1.dp)) {
-        // Título del Banner
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Novedades y Promociones",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleSmall
-            )
-            // Línea divisora
-            HorizontalDivider(
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
-                thickness = 0.5.dp,
-                color = Color.LightGray.copy(alpha = 0.5f)
-            )
-        }
-
-        // Carrusel Horizontal
-        HorizontalPager(
-            state = pagerState,
-            pageSize = PageSize.Fixed(220.dp), // [MODIFICABLE] Ancho de la tarjeta del banner (Doble ancho aprox)
-            contentPadding = PaddingValues(horizontal = 45.dp), // [MODIFICABLE] Para ver las tarjetas de los lados
-            pageSpacing = 4.dp, // Espacio entre tarjetas
-            modifier = Modifier.height(115.dp) // [MODIFICABLE] Altura igual a las categorías normales
-        ) { page ->
-            // Cálculo para el efecto de Zoom en la tarjeta central
-            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
-
-            // Escala: 1.0 (100%) si está en el centro, baja hasta 0.9 (90%) si está a los lados
-            val scale = lerp(
-                start = 0.9f,
-                stop = 1.0f,
-                fraction = 1f - pageOffset.coerceIn(0f, 1f)
-            )
-
-            // Contenedor que aplica la escala y el orden de apilado (zIndex)
-            Box(
-                modifier = Modifier
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                    }
-                    .zIndex(if (pageOffset < 0.5f) 1f else 0f) // La central va por encima
-            ) {
-                // Seleccionamos la tarjeta según el tipo de contenido
-                when (val item = bannerItems[page % totalItems]) {
-                    is BannerContent.Category -> {
-                        CategoryCard(item = item.item, onClick = { onCategoryClick(item.item.name) })
-                    }
-                    is BannerContent.GoogleAd -> {
-                        GoogleAdCard(
-                            item = item,
-                            onClick = { showAdDialog = item }
-                        )
-                    }
-                    is BannerContent.ProviderPromo -> {
-                        ProviderPromoCard(
-                            item = item,
-                            onClick = { showPromoDialog = item },
-                            onProfileClick = { navController.navigate("perfil_prestador/${item.provider.id}") }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // --- DIÁLOGOS ---
-
-    // Diálogo para Google Ads
-    if (showAdDialog != null) {
-        AlertDialog(
-            onDismissRequest = { showAdDialog = null },
-            confirmButton = { TextButton(onClick = { showAdDialog = null }) { Text("Cerrar") } },
-            title = { Text(showAdDialog!!.title) },
-            text = {
-                Column {
-                    Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Gray.copy(0.3f)), contentAlignment = Alignment.Center) {
-                         Text("Aquí iría el video o imagen del anuncio", textAlign = TextAlign.Center)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(showAdDialog!!.contentDescription)
-                }
-            }
-        )
-    }
-
-    // Diálogo para Promoción de Prestador
-    if (showPromoDialog != null) {
-        val promo = showPromoDialog!!
-        AlertDialog(
-            onDismissRequest = { showPromoDialog = null },
-            icon = {
-                AsyncImage(
-                    model = promo.provider.profileImageUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(50.dp).clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-            },
-            title = { Text(promo.promoTitle) },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("¡Oferta especial de ${promo.provider.name}!", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Aquí se mostrarían los detalles de la promoción, similar a PromoScreen.", textAlign = TextAlign.Center)
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    showPromoDialog = null
-                    // Aquí podrías navegar a PromoScreen si tuvieras la ruta configurada
-                }) {
-                    Text("Ver Promoción Completa")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPromoDialog = null }) {
-                    Text("Cerrar")
-                }
-            }
-        )
-    }
-}
-
-// ==================================================================================
-// --- SECCIÓN: TARJETAS DEL CARRUSEL (BANNER) ---
-// ==================================================================================
 
 @Composable
 fun GoogleAdCard(item: BannerContent.GoogleAd, onClick: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F0FE)), // Color estilo Google Ads (azul muy claro)
-        modifier = Modifier.fillMaxSize().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        border = BorderStroke(1.dp, Color(0xFF4285F4))
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Etiqueta "Ad" pequeña
-            Surface(
-                color = Color(0xFFFBC02D), // Amarillo Ad
-                shape = RoundedCornerShape(bottomEnd = 8.dp),
-                modifier = Modifier.align(Alignment.TopStart)
-            ) {
-                Text(
-                    "Anuncio",
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(Color(0xFFE8F0FE)), modifier = Modifier.fillMaxSize().clickable(onClick = onClick), border = BorderStroke(1.dp, Color(0xFF4285F4))) {
+        Box(Modifier.fillMaxSize()) {
+            Surface(color = Color(0xFFFBC02D), shape = RoundedCornerShape(bottomEnd = 8.dp), modifier = Modifier.align(Alignment.TopStart)) {
+                Text("Anuncio", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Black)
             }
-
-            // Contenido Central
-            Column(
-                modifier = Modifier.align(Alignment.Center).padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(Modifier.align(Alignment.Center).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.PlayCircleOutline, null, modifier = Modifier.size(40.dp), tint = Color(0xFF4285F4))
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    item.title,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color(0xFF1967D2)
-                )
+                Text(item.title, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, color = Color(0xFF1967D2))
             }
         }
     }
@@ -1589,571 +1213,423 @@ fun GoogleAdCard(item: BannerContent.GoogleAd, onClick: () -> Unit) {
 
 @Composable
 fun ProviderPromoCard(item: BannerContent.ProviderPromo, onClick: () -> Unit, onProfileClick: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        modifier = Modifier.fillMaxSize().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-             // Fondo Imagen (Simulada o real si el prestador tuviera banner de promo)
-             Box(modifier = Modifier.fillMaxSize().background(
-                 Brush.verticalGradient(
-                     listOf(MaterialTheme.colorScheme.primary.copy(alpha=0.2f), MaterialTheme.colorScheme.primary.copy(alpha=0.8f))
-                 )
-             ))
-
-            // Icono Perfil Prestador (Top Right) - Navega al perfil
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .size(32.dp)
-                    .clickable { onProfileClick() }, // Acción separada para ir al perfil
-                shape = CircleShape,
-                border = BorderStroke(1.dp, Color.White),
-                shadowElevation = 4.dp
-            ) {
-                AsyncImage(
-                    model = item.provider.profileImageUrl,
-                    contentDescription = "Perfil Prestador",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    error = painterResource(id = R.drawable.iconapp)
-                )
+    Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxSize().clickable(onClick = onClick)) {
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primary.copy(0.3f), MaterialTheme.colorScheme.primary.copy(0.9f)))))
+            Surface(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(32.dp).clickable(onClick = onProfileClick), shape = CircleShape, border = BorderStroke(1.dp, Color.White)) {
+                AsyncImage(model = item.provider.photoUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, error = painterResource(R.drawable.iconapp))
             }
+            Column(modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)) {
+                Surface(color = MaterialTheme.colorScheme.tertiary, shape = RoundedCornerShape(4.dp)) { Text("PROMO", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) }
+                Spacer(Modifier.height(2.dp))
+                Text(item.promoTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 2)
+                Text(item.provider.displayName, color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp)
+            }
+        }
+    }
+}
 
-            // Contenido Texto (Abajo)
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(12.dp)
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun WeatherExpandedCard(temperature: String, weatherEmoji: String, weatherDescription: String, cityName: String, forecastDays: List<ForecastDay>) {
+    Card(modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(8.dp)) {
+        Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(cityName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(weatherDescription, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(weatherEmoji, fontSize = 64.sp)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(temperature, fontSize = 64.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+fun generateRealBannerContent(categories: List<CategoryEntity>, providers: List<Provider>): List<BannerContent> {
+    val bannerList = mutableListOf<BannerContent>()
+    if (categories.isNotEmpty()) categories.shuffled().take(2).forEach { bannerList.add(BannerContent.Category(it)) }
+    bannerList.add(BannerContent.GoogleAd("Publicidad", "Anuncio patrocinado.", ""))
+    providers.filter { it.isSubscribed }.shuffled().take(1).forEach { bannerList.add(BannerContent.ProviderPromo(it, "¡Oferta Especial!")) }
+    return bannerList.shuffled()
+}
+
+fun getCategoryEmoji(title: String): String {
+    return when {
+        title.contains("Hogar", ignoreCase = true) -> "🏠"
+        title.contains("Tecnología", ignoreCase = true) -> "💻"
+        title.contains("Vehículos", ignoreCase = true) -> "🚗"
+        title.contains("Eventos", ignoreCase = true) -> "🎉"
+        title.contains("Salud", ignoreCase = true) -> "⚕️"
+        title.contains("Enseñanza", ignoreCase = true) -> "📚"
+        title.contains("Construcción", ignoreCase = true) -> "🏗️"
+        title.contains("Mascotas", ignoreCase = true) -> "🐾"
+        title.contains("Belleza", ignoreCase = true) -> "💅"
+        title.contains("Transporte", ignoreCase = true) -> "🚚"
+        title.contains("Gastronomía", ignoreCase = true) -> "🍔"
+        title.contains("Profesionales", ignoreCase = true) -> "👨‍⚖️"
+        else -> "📂"
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------
+ //* [ACTUALIZACIÓN] UserProfilePopup - Estética de Árbol de Código & HUD.
+ //* Implementa una jerarquía expandible tipo directorio con líneas de conexión técnica.
+// ==================================================================================
+// --- SECCIÓN: COMPONENTES DEL TOP BAR                    ICONO PERFIL ---
+// ==================================================================================
+@Composable
+fun UserProfilePopup(
+    user: UserEntity,
+    onClose: () -> Unit,
+    onLogout: () -> Unit,
+    // CAMBIO A: Ahora recibe LocationOption, no String
+    onAddressSelected: (LocationOption) -> Unit,
+    onProfileClick: () -> Unit
+) {
+    val geminiBrush = geminiGradientBrush(isAnimated = true)
+    val cyberCyan = Color(0xFF22D3EE)
+    val cyberMagenta = Color(0xFFE91E63)
+    val cyberPurple = Color(0xFF9B51E0)
+    val deepGlass = Color(0xFF0D1117).copy(alpha = 0.92f)
+
+    // Estados de expansión para las secciones principales
+    var personalExpanded by remember { mutableStateOf(true) }
+    var businessExpanded by remember { mutableStateOf(true) }
+
+    GeminiCyberWrapper(
+        modifier = Modifier
+            .fillMaxWidth() // Más ancho para mejor lectura
+            .padding(vertical = 15.dp, horizontal = 1.dp),
+        cornerRadius = 24.dp,
+        isAnimated = true,
+        showGlow = true
+    ) {
+        Column(
+            modifier = Modifier
+                .background(deepGlass)
+                .fillMaxWidth()
+                .heightIn(max = 650.dp) // Límite de altura para activar scroll
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+        ) {
+            // --- HEADER: SYSTEM_PROTOCOL ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiary,
-                    shape = RoundedCornerShape(4.dp)
-                ) {
+                Column {
                     Text(
-                        "PROMOCIÓN",
-                        color = Color.White,
+                        text = "DATOS DE USUARIO V4",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = cyberCyan,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        text = "STATUS: ACTIVE_SESSION",
                         fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        color = Color.White.copy(alpha = 0.3f),
+                        fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    item.promoTitle,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    maxLines = 2,
-                    lineHeight = 14.sp
-                )
 
-                // ADAPTACIÓN: Nombre empresa
-                val companyName = item.provider.companies.firstOrNull()?.name ?: item.provider.name
-                Text(
-                    companyName,
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 10.sp
+
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // --- SECCIÓN 1: PERFIL DIGITAL (HUD CARD) ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.03f))
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                    .clickable { onProfileClick() }
+                    .padding(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Avatar con "Targeting" frame
+                    Box(contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(64.dp).border(1.dp, cyberCyan.copy(alpha = 0.4f), RoundedCornerShape(12.dp)))
+                        AsyncImage(
+                            model = user.photoUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.5.dp, cyberCyan, RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+
+                    Spacer(Modifier.width(20.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${user.name} ${user.lastName}".uppercase(),
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 16.sp,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "UID: ${user.email}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = cyberCyan.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(Icons.Default.QrCodeScanner, null, tint = cyberCyan, modifier = Modifier.size(20.dp).graphicsLayer { alpha = 0.5f })
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // --- SECCIÓN 2: ÁRBOL DE DIRECCIONES (PERSONAL_FS) ---
+            CyberTreeDirectory(
+                title = "DIR_PERSONALES",
+                icon = Icons.Default.FolderOpen,
+                accentColor = cyberCyan,
+                isExpanded = personalExpanded,
+                onToggle = { personalExpanded = !personalExpanded }
+            ) {
+                user.personalAddresses.forEach { addr ->
+                    CyberTreeLeaf(
+                        icon = Icons.Default.LocationOn,
+                        title = "${addr.calle} ${addr.numero}",
+                        subtitle = "${addr.localidad}, ${addr.provincia}",
+                        accentColor = cyberCyan,
+                        onClick = { // ENVIAMOS EL OBJETO PERSONAL COMPLETO
+                            onAddressSelected(LocationOption.Personal(
+                                address = addr.calle,
+                                number = addr.numero,
+                                locality = addr.localidad
+                            ))
+                            onClose() }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // --- SECCIÓN 3: ÁRBOL DE NEGOCIOS (BUSINESS_FS) ---
+            if (user.companies.isNotEmpty()) {
+                CyberTreeDirectory(
+                    title = "DIR_EMPRESA/COMERCIO",
+                    icon = Icons.Default.Dns,
+                    accentColor = cyberPurple,
+                    isExpanded = businessExpanded,
+                    onToggle = { businessExpanded = !businessExpanded }
+                ) {
+                    user.companies.forEach { company ->
+                        // Sub-directorio para cada empresa
+                        var companyItemExpanded by remember { mutableStateOf(false) }
+
+                        CyberTreeDirectory(
+                            title = company.name.uppercase(),
+                            icon = Icons.Default.Business,
+                            accentColor = cyberPurple.copy(alpha = 0.8f),
+                            isExpanded = companyItemExpanded,
+                            isNested = true,
+                            onToggle = { companyItemExpanded = !companyItemExpanded }
+                        ) {
+                            company.branches.forEach { branch ->
+                                CyberTreeLeaf(
+                                    icon = Icons.Default.Storefront,
+                                    title = branch.name,
+                                    subtitle = "${branch.address.calle} ${branch.address.numero}",
+                                    accentColor = cyberPurple,
+                                    isNested = true,
+                                    onClick = {// ENVIAMOS EL OBJETO NEGOCIO COMPLETO
+                                        onAddressSelected(LocationOption.Business(
+                                            companyName = company.name,
+                                            branchName = branch.name,
+                                            address = branch.address.calle,
+                                            number = branch.address.numero,
+                                            locality = branch.address.localidad
+                                        ))
+                                        onClose()  }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // --- BOTÓN DE SALIDA: PURGE_SESSION ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(cyberMagenta.copy(alpha = 0.05f))
+                    .border(1.dp, Brush.horizontalGradient(listOf(cyberMagenta, Color.Transparent)), RoundedCornerShape(12.dp))
+                    .clickable { onLogout() }
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PowerSettingsNew, null, tint = cyberMagenta, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        text = "Cerrar_Sesion",
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        letterSpacing = 2.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(8.dp)
+                        .background(cyberMagenta, CircleShape)
+                        .blur(4.dp)
                 )
             }
         }
     }
 }
 
-// ==================================================================================
-// --- SECCIÓN: FILAS DE CATEGORÍAS (SUPER CATEGORÍAS) ---
-// ==================================================================================
 
-@OptIn(ExperimentalFoundationApi::class)
+ //* Representa un Directorio (Nodo Padre) en el árbol Cyberpunk.
+ //*/
 @Composable
-fun SuperCategorySection(superCategory: SuperCategory, onCategoryClick: (String) -> Unit, globalExpandState: Boolean = true) {
-    val totalItems = superCategory.items.size
-    var isExpanded by remember { mutableStateOf(globalExpandState) }
-    val pagerState = rememberPagerState(initialPage = Int.MAX_VALUE / 2, pageCount = { Int.MAX_VALUE })
+private fun CyberTreeDirectory(
+    title: String,
+    icon: ImageVector,
+    accentColor: Color,
+    isExpanded: Boolean,
+    isNested: Boolean = false,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val rotation by animateFloatAsState(if (isExpanded) 90f else 0f)
 
-    //Sincornizar con el estado global
-    LaunchedEffect(globalExpandState) {
-        isExpanded = globalExpandState
-    }
-
-    // Cálculo para mostrar "1/10"
-    val currentRealIndex = (pagerState.currentPage % totalItems) + 1
-
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
-        // Encabezado de la Fila (Título + Divisor + Contador)
+    Column(modifier = Modifier.padding(start = if (isNested) 16.dp else 0.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { isExpanded = !isExpanded } // Al hacer clic en el título, se contrae
-                .padding(horizontal = 20.dp, vertical = 6.dp),
+                .clickable { onToggle() }
+                .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                superCategory.title,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(end = 12.dp),
-                style = MaterialTheme.typography.titleSmall
+            // Icono de flecha indicativa
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = accentColor.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(rotation)
             )
-            HorizontalDivider(
-                modifier = Modifier.weight(1f),
-                thickness = 0.5.dp,
-                color = Color.LightGray.copy(alpha = 0.5f)
-            )
-            // CONTADOR 1/10
+            Spacer(Modifier.width(8.dp))
+            Icon(icon, null, tint = accentColor, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(12.dp))
             Text(
-                "$currentRealIndex/$totalItems",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 12.dp)
-            )
-        }
-
-        // Contenido Expandible
-        AnimatedVisibility(visible = isExpanded) {
-            HorizontalPager(
-                state = pagerState,
-                pageSize = PageSize.Fixed(115.dp), // [MODIFICABLE] Ancho de la tarjeta normal
-                contentPadding = PaddingValues(horizontal = 6.dp),
-                pageSpacing = 2.dp,
-                modifier = Modifier.height(115.dp) // [MODIFICABLE] Alto de la tarjeta normal
-            ) { page ->
-                CategoryCard(
-                    item = superCategory.items[page % totalItems],
-                    onClick = { onCategoryClick(superCategory.items[page % totalItems].name) }
-                )
-            }
-        }
-    }
-}
-
-// ==================================================================================
-// --- SECCIÓN: TARJETA DE CATEGORÍA (DISEÑO) ---
-// ==================================================================================
-
-@Composable
-fun CategoryCard(item: CategoryItem, onClick: () -> Unit) {
-    // Estados para los menús contextuales de las etiquetas
-    var showNewMenu by remember { mutableStateOf(false) }
-    var showPrestadorMenu by remember { mutableStateOf(false) }
-
-    Card(
-        shape = RoundedCornerShape(20.dp), // [MODIFICABLE] Redondez de las esquinas
-        colors = CardDefaults.cardColors(containerColor = item.color), // Color viene del modelo
-        modifier = Modifier.fillMaxSize().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Fondo con gradiente negro transparente para leer mejor el texto blanco
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.9f)))))
-
-            // ICONO CENTRAL (Emoji o Imagen)
-            Text(
-                item.icon,
-                fontSize = 65.sp, // [MODIFICABLE] Tamaño del icono
-                modifier = Modifier.align(Alignment.Center)
-            )
-
-            // NOMBRE DE LA CATEGORÍA
-            Text(
-                item.name,
+                text = title,
                 color = Color.White,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(2.dp),
-                fontSize = 14.sp, // [MODIFICABLE] Tamaño del texto
-                maxLines = 2
+                letterSpacing = 1.sp,
+                modifier = Modifier.weight(1f)
             )
+        }
 
-            // --- ETIQUETAS SUPERPUESTAS (NUEVO / ALERTA) ---
-            Row(
-                modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+        // Líneas de conexión y contenido expandible
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 7.dp) // Alineado con el centro de la flecha/icono
+                    .drawWithCache {
+                        onDrawWithContent {
+                            // Línea vertical que conecta los hijos
+                            drawLine(
+                                color = accentColor.copy(alpha = 0.2f),
+                                start = Offset(0f, 0f),
+                                end = Offset(0f, size.height),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                            drawContent()
+                        }
+                    }
             ) {
-                // Etiqueta "NUEVO"
-                if (item.isNew) {
-                    Box {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiary, // [MODIFICABLE] Color etiqueta nuevo
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.clickable { showNewMenu = true } // Abre menú al tocar
-                        ) {
-                            Text(
-                                "NUEVO",
-                                color = Color.White,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                            )
-                        }
-                        // Menú desplegable para "NUEVO"
-                        DropdownMenu(expanded = showNewMenu, onDismissRequest = { showNewMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("¡Esta categoría es nueva!") },
-                                onClick = { showNewMenu = false }
-                            )
-                        }
-                    }
-                }
-
-                // Icono de Alerta (!)
-                if (item.isNewPrestador) {
-                    Box {
-                        Surface(
-                            color = MaterialTheme.colorScheme.error, // [MODIFICABLE] Color alerta
-                            shape = CircleShape,
-                            modifier = Modifier.size(20.dp).clickable { showPrestadorMenu = true }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.PriorityHigh, null, tint = Color.White, modifier = Modifier.size(12.dp))
-                            }
-                        }
-                        // Menú desplegable para "ALERTA"
-                        DropdownMenu(expanded = showPrestadorMenu, onDismissRequest = { showPrestadorMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Hay nuevos prestadores disponibles") },
-                                onClick = { showPrestadorMenu = false }
-                            )
-                        }
-                    }
+                Column {
+                    content()
                 }
             }
         }
     }
 }
 
-// 4. Generar lista regular (Super Categorías) excluyendo las que ya están en banner si se quisiera,
-// pero generalmente se muestran todas abajo ordenadas.
-// Aquí agrupamos todas por su superCategory.\
-
-fun generateFakeBannerAndCategories(): Pair<List<BannerContent>, List<SuperCategory>> {
-    //Obtiene todas las categoria del repositorio falso
-    val allCategories = CategorySampleDataFalso.categories
-    //Crea una lista simulada para el banner (mezcla categorias, anuncios y promo)
-    val bannerList = mutableListOf<BannerContent>()
-
-    //Agregamos algunos ejempos al banner si hay categorias disponibles
-    if (allCategories.isNotEmpty()) {
-        bannerList.add(BannerContent.Category(allCategories.random()))
-        bannerList.add(BannerContent.GoogleAd("Anuncio Google", "Publicidad simulada de Google Ads",""))
-        bannerList.add(BannerContent.ProviderPromo(SampleDataFalso.prestadores.random(), "Promoción de prestador"))
-    }
-
-val regularCats = allCategories.shuffled() // [NUEVO] Barajar categorías generales también
-    .groupBy { it.superCategory }
-    .map { SuperCategory(it.key, it.value) }
-
-return Pair(bannerList, regularCats)
-}
-
-// ==================================================================================
-// --- PREVIEWS (VISTA PREVIA EN ANDROID STUDIO) ---
-// ==================================================================================
-
-@Preview(showBackground = true)
+/**
+ * Representa una Hoja (Nodo Hijo) con línea de conexión horizontal.
+ */
 @Composable
-fun FavoritesPanelPreview() {
-    MyApplicationTheme {
-        FavoritesPanel(rememberNavController(), {}, "Name", false, emptySet(), "", {})
-    }
-}
-
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun WeatherForecastItem(
-    date: String,
-    maxTemp: Int,
-    minTemp: Int,
-    weatherCode: Int
+private fun CyberTreeLeaf(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    accentColor: Color,
+    isNested: Boolean = false,
+    onClick: () -> Unit
 ) {
-    val colors = MaterialTheme.colorScheme
-    val emoji = getWeatherEmojiFromCode(weatherCode)
-
-    // Parsear fecha para mostrar día de la semana
-    val dayName = try {
-        val parts = date.split("-")
-        if (parts.size == 3) {
-            val month = parts[1].toInt()
-            val day = parts[2].toInt()
-            "$day/$month"
-        } else {
-            date.takeLast(5)
-        }
-    } catch (e: Exception) {
-        date.takeLast(5)
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .clickable { onClick() }
+            .padding(vertical = 6.dp)
+            .drawWithCache {
+                onDrawWithContent {
+                    // Línea horizontal "L-shape"
+                    drawLine(
+                        color = accentColor.copy(alpha = 0.2f),
+                        start = Offset(0f, size.height / 2),
+                        end = Offset(15.dp.toPx(), size.height / 2),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawContent()
+                }
+            }
+            .padding(start = 20.dp),
         verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = dayName,
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-
-        Text(
-            text = emoji,
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center
-        )
-
-        Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.End
-        ) {
-            Text(
-                text = "$maxTemp°",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = colors.onSurface
-            )
-            Text(
-                text = " / $minTemp°",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun WeatherForecastItemPreview() {
-    MyApplicationTheme {
-        WeatherForecastItem(
-            date = "2026-02-04",
-            maxTemp = 32,
-            minTemp = 24,
-            weatherCode = 1,
-        )
-    }
-}
-
-fun getWeatherEmojiFromCode(code: Int): String {
-    return when (code) {
-        0 -> "☀️"
-        1, 2, 3 -> "⛅"
-        45, 48 -> "🌫️"
-        51, 53, 55 -> "🌦️"
-        61, 63, 65 -> "🌧️"
-        71, 73, 75 -> "❄️"
-        95, 96, 99 -> "⛈️"
-        else -> "🌤️"
-    }
-}
-
-
-// =================================================================================================
-// --- COMPONENTE: WIDGET DE CLIMA (TARJETA PEQUEÑA) --- ---
-// Este componente NO existía en el proyecto, por eso aparecía en rojo en 'TopHeaderSection'.
-// SOLUCIÓN: Definimos aquí el diseño visual de la tarjeta pequeña del clima.
-// =================================================================================================
-
-@Composable
-fun WeatherWidget(
-    temperature: String,
-    weatherEmoji: String,
-    cityName: String,
-    onClick: () -> Unit,
-    backgroundBrush: Brush? = null // Nuevo parámetro
-) {
-    Card(
-        modifier = Modifier.fillMaxSize(), // Tamaño flexible dentro del peso
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (backgroundBrush != null) Color.Transparent else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-        onClick = onClick
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .then(if (backgroundBrush != null) Modifier.background(backgroundBrush) else Modifier)
-                .padding(4.dp),
+                .size(32.dp)
+                .background(accentColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                .border(0.5.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(text = weatherEmoji, fontSize = 22.sp)
-
-                Text(
-                    text = temperature,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Text(
-                    text = cityName,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Icon(icon, null, tint = accentColor, modifier = Modifier.size(16.dp))
         }
-    }
-}
 
+        Spacer(Modifier.width(16.dp))
 
-// ==================================================================================
-// --- COMPONENTE: TARJETA DE CLIMA EXPANDIDA ---
-// ==================================================================================
-
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun WeatherExpandedCard(
-    temperature: String,
-    weatherEmoji: String,
-    weatherDescription: String,
-    windSpeed: String,
-    humidity: String,
-    cityName: String,
-    forecastDays: List<ForecastDay>
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // 1. Encabezado: Ciudad y Estado
+        Column {
             Text(
-                text = cityName,
-                style = MaterialTheme.typography.titleLarge,
+                text = title,
+                color = Color.White,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = weatherDescription,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = subtitle,
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 2. Clima Actual (Emoji Gigante y Temp)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(text = weatherEmoji, fontSize = 64.sp)
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = temperature,
-                    fontSize = 64.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 3. Detalles (Viento y Humedad)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                WeatherDetailItem(icon = Icons.Default.Air, label = "Viento", value = windSpeed)
-                WeatherDetailItem(icon = Icons.Default.WaterDrop, label = "Humedad", value = humidity)
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 4. Pronóstico (Lista)
-            Text(
-                text = "Pronóstico Extendido",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.Start)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            if (forecastDays.isEmpty()) {
-                Text("Cargando pronóstico...", style = MaterialTheme.typography.bodySmall)
-            } else {
-                forecastDays.forEach { day ->
-                    WeatherForecastItem(
-                        date = day.date,
-                        maxTemp = day.maxTemp.toInt(),
-                        minTemp = day.minTemp.toInt(),
-                        weatherCode = day.weatherCode
-                    )
-                }
-            }
         }
-    }
-}
-
-// Sub-componente para detalles pequeños (Viento/Humedad)
-@Composable
-fun WeatherDetailItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-    }
-}
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Preview(showBackground = true)
-@Composable
-fun HomeScreenCompletePreview() {
-    val navController = rememberNavController()
-
-    // Usuario Falso para Preview
-    val fakeUser = UserEntity(
-        id = "user_preview",
-        email = "preview@example.com",
-        displayName = "Preview User",
-        name = "Juan",
-        lastName = "Perez",
-        phoneNumber = "123456789",
-        matricula = null,
-        titulo = null,
-        photoUrl = null,
-        bannerImageUrl = null,
-        hasCompanyProfile = false,
-        isSubscribed = true,
-        isVerified = true,
-        isOnline = true,
-        isFavorite = false,
-        rating = 4.5f,
-        createdAt = System.currentTimeMillis()
-    )
-
-    MyApplicationTheme {
-        HomeScreenContent(
-            navController = navController,
-            bottomPadding = PaddingValues(0.dp),
-            userState = fakeUser
-        )
     }
 }

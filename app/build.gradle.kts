@@ -57,7 +57,7 @@ dependencies {
 
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
     implementation(libs.androidx.ui)
-    implementation("androidx.compose.material3:material3:1.3.1")
+    //implementation("androidx.compose.material3:material3:1.3.1")
     implementation(libs.androidx.compose.animation)
 
 
@@ -77,6 +77,13 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+    // Room components
+    //def room_version = "2.6.1" // O la versión más reciente
+   // implementation "androidx.room:room-runtime:$room_version"
+    //implementation "androidx.room:room-ktx:$room_version" // Para usar corrutinas
+    //ksp "androidx.room:room-compiler:$room_version" // Usa ksp en lugar de kapt si es posible
+
+
 
     // Retrofit
     implementation(libs.retrofit)
@@ -91,11 +98,11 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     // Navigation
-    implementation(libs.androidx.navigation.compose)
+   // implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.navigation:navigation-compose:2.7.0")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("com.google.accompanist:accompanist-pager:0.32.0")
     implementation("com.google.accompanist:accompanist-pager-indicators:0.32.0")
 
@@ -120,5 +127,5 @@ dependencies {
     implementation(libs.coil.compose)
 
     // Coil para cargar imagenes
-    implementation("io.coil-kt:coil-compose:2.5.0")
+    //implementation("io.coil-kt:coil-compose:2.5.0")
 }

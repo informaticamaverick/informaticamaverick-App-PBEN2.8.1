@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.local.UserEntity
 import com.example.myapplication.data.repository.UserRepository
-import com.example.myapplication.ui.screens.ProfileMode
+//import com.example.myapplication.ui.screens.ProfileMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

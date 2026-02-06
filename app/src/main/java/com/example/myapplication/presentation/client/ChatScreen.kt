@@ -105,10 +105,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.zIndex
-import com.example.myapplication.data.model.fake.SampleDataFalso
-import com.example.myapplication.data.model.fake.UserFalso
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.myapplication.data.model.Provider
 import com.example.myapplication.presentation.components.PrestadorCard
+//import com.example.myapplication.presentation.components.PrestadorCard
 import com.example.myapplication.presentation.components.geminiGradientEffect
+import kotlin.collections.distinct
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -116,10 +119,14 @@ fun ChatScreen(
     onBack: () -> Unit,
     initialProviderId: String? = null,
     navController: NavHostController? = null,
-    onInConversationChange: (Boolean) -> Unit = {}
+    onInConversationChange: (Boolean) -> Unit = {},
+    providerViewModel: ProviderViewModel = hiltViewModel()
 ) {
     // Colores adaptativos
     val appColors = getAppColors()
+
+    // Recuperar prestadores desde el ViewModel (Room -> Repository -> ViewModel)
+    val providers by providerViewModel.providers.collectAsStateWithLifecycle()
 
     // Estado para la conversación activa
     var activeChatUserId by remember { mutableStateOf(initialProviderId) }
@@ -149,7 +156,7 @@ fun ChatScreen(
     var showAttachMenu by remember { mutableStateOf(false) }
     //Estado para la imagen seleccionada
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    
+
     //Launcher para seleccionar imagen de galeria
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -172,22 +179,15 @@ fun ChatScreen(
 
     //Estado para la URI de la foto de la camara
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
-    
+
     //Crear URI temporal para la foto
     val context = LocalContext.current
     val tempPhotoUri = remember {
-        val photoFile = File(
-            context.cacheDir,
-            "camera_photo_${System.currentTimeMillis()}.jpg"
-        )
-        FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            photoFile
-        )
+        val photoFile = File(context.cacheDir, "camera_photo_${System.currentTimeMillis()}.jpg")
+        FileProvider.getUriForFile(context, "${context.packageName}.provider", photoFile)
     }
 
-    //Launcher para tomar foto con la camara
+    // Launcher para tomar foto
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
@@ -211,11 +211,7 @@ fun ChatScreen(
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) {
-            cameraLauncher.launch(tempPhotoUri)
-        } else {
-            //Mostrar mensaje de error
-        }
+        if (isGranted) cameraLauncher.launch(tempPhotoUri)
     }
 
     // Estados para grabación de audio
@@ -231,12 +227,8 @@ fun ChatScreen(
             // Iniciar grabación
             val audioFile = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
             audioFilePath = audioFile.absolutePath
-            
-            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                MediaRecorder()
-            }.apply {
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+            mediaRecorder?.apply {
                 setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -245,9 +237,7 @@ fun ChatScreen(
                     prepare()
                     start()
                     isRecordingAudio = true
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                } catch (e: Exception) { e.printStackTrace() }
             }
         }
     }
@@ -255,12 +245,8 @@ fun ChatScreen(
     // Función para detener grabación
     fun stopRecordingAndSend() {
         try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
+            mediaRecorder?.apply { stop(); release() }
             mediaRecorder = null
-            
             audioFilePath?.let { path ->
                 val audioUri = Uri.fromFile(File(path))
                 val newMessage = Message(
@@ -273,7 +259,6 @@ fun ChatScreen(
                 )
                 messages = messages + newMessage
             }
-            
             isRecordingAudio = false
             audioFilePath = null
         } catch (e: Exception) {
@@ -281,21 +266,13 @@ fun ChatScreen(
             isRecordingAudio = false
         }
     }
-    
+
     // Función para cancelar grabación
     fun cancelRecording() {
         try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
+            mediaRecorder?.apply { stop(); release() }
             mediaRecorder = null
-            
-            // Eliminar archivo de audio
-            audioFilePath?.let { path ->
-                File(path).delete()
-            }
-            
+            audioFilePath?.let { path -> File(path).delete() }
             isRecordingAudio = false
             audioFilePath = null
         } catch (e: Exception) {
@@ -319,24 +296,14 @@ fun ChatScreen(
     // Decidir qué vista mostrar
     if (activeChatUserId == null) {
         ChatListView(
-            //En lugar de: activeChatUserid = userId
-            //Navegar a conversacion
-            onChatClick = { userId ->
-                if (navController != null) {
-                    navController.navigate("chat_conversation/$userId")
-                } else {
-                    activeChatUserId = userId
-                }
-            },
+            providersList = providers,
+            onChatClick = { userId -> activeChatUserId = userId },
             onBack = onBack,
             appColors = appColors,
             navController = navController
         )
-
     } else {
-        // VISTA: Conversación activa
-        // Obtenemos los datos del prestador para el header de la conversación
-        val provider = SampleDataFalso.getPrestadorById(activeChatUserId!!)
+        val provider = providers.find { it.id == activeChatUserId }
         if (provider != null) {
             ChatConversationView(
                 provider = provider,
@@ -363,67 +330,37 @@ fun ChatScreen(
                     messages = messages + imageMessage
                 },
                 onCameraClick = {
-                    // Verificar permisos de cámara
-                    if (androidx.core.content.ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.CAMERA
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    ) {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                         cameraLauncher.launch(tempPhotoUri)
                     } else {
                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                     }
                 },
-                onGalleryClick = {
-                    imagePickerLauncher.launch("image/*")
-                },
+                onGalleryClick = { imagePickerLauncher.launch("image/*") },
                 onAudioClick = {
-                    // Verificar si ya está grabando
-                    if (isRecordingAudio) {
-                        // Detener y enviar
-                        stopRecordingAndSend()
-                    } else {
-                        // Verificar permisos y empezar a grabar
-                        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        ) {
-                            // Ya tiene permiso, iniciar grabación directamente
+                    if (isRecordingAudio) stopRecordingAndSend()
+                    else {
+                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                             val audioFile = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
                             audioFilePath = audioFile.absolutePath
-                            
-                            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                MediaRecorder(context)
-                            } else {
-                                MediaRecorder()
-                            }.apply {
+                            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+                            mediaRecorder?.apply {
                                 setAudioSource(MediaRecorder.AudioSource.MIC)
                                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                                 setOutputFile(audioFilePath)
-                                try {
-                                    prepare()
-                                    start()
-                                    isRecordingAudio = true
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                }
+                                try { prepare(); start(); isRecordingAudio = true } catch (e: Exception) { e.printStackTrace() }
                             }
-                        } else {
-                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
+                        } else audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
                 },
-                onCancelAudio = {
-                    cancelRecording()
-                },
+                onCancelAudio = { cancelRecording() },
                 isRecordingAudio = isRecordingAudio
             )
         } else {
-            // Manejar caso donde el providerId no es válido o no se encuentra
-            // Podríamos mostrar un mensaje de error o volver a la lista de chats.
-            Text("Error: Prestador no encontrado para ID $activeChatUserId", color = appColors.textPrimaryColor)
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
     }
 }
@@ -431,46 +368,30 @@ fun ChatScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListView(
+    providersList: List<Provider>,
     onChatClick: (String) -> Unit,
     onBack: () -> Unit,
     appColors: com.example.myapplication.ui.theme.AppColors,
     navController: NavHostController? = null
 ) {
     val colors = MaterialTheme.colorScheme
-    val isSystemInDarkMode = isSystemInDarkTheme()
-    
-    // PASO 1: Obtenemos una lista de 10 prestadores de ejemplo para simular chats
-    var providersList by remember { mutableStateOf(SampleDataFalso.prestadores.take(10)) }
-
-    // Estado para el diálogo de eliminación
-    var providerToDelete by remember { mutableStateOf<UserFalso?>(null) }
-
-    // Obtenemos las categorías (profesiones) de forma dinámica de los prestadores en el chat.
-    val categories = remember(providersList) { 
-        providersList.mapNotNull { it.companies.firstOrNull()?.services?.firstOrNull() }.distinct() 
-    }
-
+    var providerToDelete by remember { mutableStateOf<Provider?>(null) }
+    val categories = remember(providersList) { providersList.map { it.category }.distinct() }
     var selectedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
-    
-    // Estados para búsqueda y menú cíclico
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    
-    // Estado cíclico del menú: 0 = Filtros, 1 = Menú config, 2 = Todo oculto
     var menuState by remember { mutableIntStateOf(0) }
     val showSettingsMenu = menuState == 0
     val showVerticalMenu = menuState == 1
-    
-    // Estados de filtros
     var onlyUnread by remember { mutableStateOf(false) }
-    var sortByAlphabetical by remember { mutableStateOf(false) } // false = Más reciente, true = A-Z
-    
-    // Estados del menú de configuración
+    var sortByAlphabetical by remember { mutableStateOf(false) }
+
+    // Diálogos y preferencias
     var showNotificationsDialog by remember { mutableStateOf(false) }
     var showDataVisibilityDialog by remember { mutableStateOf(false) }
     var showTimePeriodDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
-    
+
     // Preferencias de usuario
     var viewMode by remember { mutableStateOf("Detallada") } // "Compacta", "Detallada", "Tarjetas"
     var timePeriod by remember { mutableStateOf("Todo") } // "Semana", "Mes", "3 Meses", "Todo"
@@ -481,51 +402,46 @@ fun ChatListView(
     var notifyNewMessages by remember { mutableStateOf(true) }
     var notifyMentions by remember { mutableStateOf(true) }
     var notifyReactions by remember { mutableStateOf(true) }
-    
+
     // Preferencias de privacidad
     var showReadReceipts by remember { mutableStateOf(true) }
     var showLastSeen by remember { mutableStateOf(true) }
     var showProfilePhoto by remember { mutableStateOf(true) }
     var showProfileInfo by remember { mutableStateOf(true) }
 
-    // Filtramos los prestadores basándonos en los filtros seleccionados.
-    val filteredProviders = remember(selectedCategories, providersList, searchQuery, onlyUnread, sortByAlphabetical) {
-        var result = providersList
-        
-        // Filtro por categoría
-        if (selectedCategories.isNotEmpty()) {
-            result = result.filter { 
-                val service = it.companies.firstOrNull()?.services?.firstOrNull()
-                service != null && service in selectedCategories
+    // [CORREGIDO] Filtramos los prestadores basándonos en la propiedad `category`.
+    val filteredProviders =
+        remember(selectedCategories, providersList, searchQuery, onlyUnread, sortByAlphabetical) {
+            var result = providersList
+            if (selectedCategories.isNotEmpty()) result =
+                result.filter { it.category in selectedCategories }
+            if (searchQuery.isNotEmpty()) {
+                result = result.filter {
+                    it.name.contains(searchQuery, ignoreCase = true) ||
+                            it.category.contains(searchQuery, ignoreCase = true) // Forma correcta
+                }
             }
-        }
-        
-        // Filtro por búsqueda
-        if (searchQuery.isNotEmpty()) {
-            result = result.filter {
-                it.name.contains(searchQuery, ignoreCase = true) ||
-                it.companies.firstOrNull()?.services?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
+
+            // Filtro por no leídos (simulado)
+            if (onlyUnread) {
+                result = result.filter {
+                    // Simulación: 50% de los chats tienen mensajes sin leer
+                    it.id.hashCode() % 2 == 0
+                }
             }
-        }
-        
-        // Filtro por no leídos (simulado - en producción verificarías mensajes reales)
-        if (onlyUnread) {
-            result = result.filter { 
-                // Simulación: 50% de los chats tienen mensajes sin leer
-                it.id.hashCode() % 2 == 0
+
+            // Ordenar
+            if (sortByAlphabetical) {
+                result = result.sortedBy { it.name }
+            } else {
+                // Por defecto ordenar por más reciente (simulado usando ID)
+                result = result.sortedByDescending { it.id }
             }
+            if (onlyUnread) result = result.filter { it.id.hashCode() % 2 == 0 }
+            if (sortByAlphabetical) result = result.sortedBy { it.name }
+            else result = result.sortedByDescending { it.id }
+            result
         }
-        
-        // Ordenar
-        if (sortByAlphabetical) {
-            result = result.sortedBy { it.name }
-        } else {
-            // Por defecto ordenar por más reciente (simulado usando ID)
-            result = result.sortedByDescending { it.id }
-        }
-        
-        result
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -534,18 +450,17 @@ fun ChatListView(
                     title = { Text("Mensajes") },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                "Volver"
+                            )
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = appColors.surfaceColor
-                    )
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = appColors.surfaceColor)
                 )
             },
             floatingActionButton = {
-                val rainbowBrush =
-                    geminiGradientEffect()
-                
+                val rainbowBrush = geminiGradientEffect()
                 Column(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -564,7 +479,7 @@ fun ChatListView(
                             // Opción: Alertas
                             Surface(
                                 modifier = Modifier.size(64.dp),
-                                onClick = { 
+                                onClick = {
                                     showNotificationsDialog = true
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -592,11 +507,11 @@ fun ChatListView(
                                     )
                                 }
                             }
-                            
+
                             // Opción: Mostrar Datos
                             Surface(
                                 modifier = Modifier.size(64.dp),
-                                onClick = { 
+                                onClick = {
                                     showDataVisibilityDialog = true
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -624,11 +539,11 @@ fun ChatListView(
                                     )
                                 }
                             }
-                            
+
                             // Opción: Período
                             Surface(
                                 modifier = Modifier.size(64.dp),
-                                onClick = { 
+                                onClick = {
                                     showTimePeriodDialog = true
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -656,11 +571,11 @@ fun ChatListView(
                                     )
                                 }
                             }
-                            
+
                             // Opción: Privacidad
                             Surface(
                                 modifier = Modifier.size(64.dp),
-                                onClick = { 
+                                onClick = {
                                     showPrivacyDialog = true
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -690,7 +605,7 @@ fun ChatListView(
                             }
                         }
                     }
-                
+
                     // Botones de búsqueda y engranaje
                     AnimatedVisibility(
                         visible = !isSearchActive,
@@ -704,544 +619,603 @@ fun ChatListView(
                                 stiffness = Spring.StiffnessLow
                             )
                         )
-                        
+
                         Row(
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                        // Botones de filtros expandibles (aparecen a la izquierda)
-                        AnimatedVisibility(
-                            visible = showSettingsMenu && !isSearchActive,
-                            enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
-                            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
-                        ) {
+                            // Botones de filtros expandibles (aparecen a la izquierda)
+                            AnimatedVisibility(
+                                visible = showSettingsMenu && !isSearchActive,
+                                enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
+                                exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(start = 32.dp, end = 8.dp)
+                                ) {
+                                    // Botón: No Leídos
+                                    Surface(
+                                        modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                        onClick = {
+                                            onlyUnread = !onlyUnread
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (onlyUnread) appColors.accentBlue else appColors.surfaceColor,
+                                        shadowElevation = 6.dp
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxSize()
+                                                .padding(vertical = 4.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.MarkEmailUnread,
+                                                "No Leídos",
+                                                tint = if (onlyUnread) Color.White else appColors.textPrimaryColor,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = if (onlyUnread) "Activo" else "No Leídos",
+                                                color = if (onlyUnread) Color.White else appColors.textPrimaryColor,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    // Botón: Ordenar
+                                    Surface(
+                                        modifier = Modifier.size(width = 64.dp, height = 56.dp),
+                                        onClick = {
+                                            sortByAlphabetical = !sortByAlphabetical
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (sortByAlphabetical) appColors.accentBlue else appColors.surfaceColor,
+                                        shadowElevation = 6.dp
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxSize()
+                                                .padding(vertical = 4.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                if (sortByAlphabetical) Icons.Default.SortByAlpha else Icons.Default.Schedule,
+                                                "Ordenar",
+                                                tint = if (sortByAlphabetical) Color.White else appColors.textPrimaryColor,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = if (sortByAlphabetical) "A-Z" else "Reciente",
+                                                color = if (sortByAlphabetical) Color.White else appColors.textPrimaryColor,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            // Botón Dividido (Buscar + Engranaje)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(start = 32.dp, end = 8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                // Botón: No Leídos
+                                // Parte Izquierda: Buscar
                                 Surface(
-                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
-                                    onClick = { 
-                                        onlyUnread = !onlyUnread
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (onlyUnread) appColors.accentBlue else appColors.surfaceColor,
-                                    shadowElevation = 6.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.MarkEmailUnread,
-                                            "No Leídos",
-                                            tint = if (onlyUnread) Color.White else appColors.textPrimaryColor,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = if (onlyUnread) "Activo" else "No Leídos",
-                                            color = if (onlyUnread) Color.White else appColors.textPrimaryColor,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                                
-                                // Botón: Ordenar
-                                Surface(
-                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
-                                    onClick = { 
-                                        sortByAlphabetical = !sortByAlphabetical
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (sortByAlphabetical) appColors.accentBlue else appColors.surfaceColor,
-                                    shadowElevation = 6.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            if (sortByAlphabetical) Icons.Default.SortByAlpha else Icons.Default.Schedule,
-                                            "Ordenar",
-                                            tint = if (sortByAlphabetical) Color.White else appColors.textPrimaryColor,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = if (sortByAlphabetical) "A-Z" else "Reciente",
-                                            color = if (sortByAlphabetical) Color.White else appColors.textPrimaryColor,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.weight(1f))
-                        
-                        // Botón Dividido (Buscar + Engranaje)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            // Parte Izquierda: Buscar
-                            Surface(
-                                onClick = { isSearchActive = true },
-                                modifier = Modifier.size(56.dp),
-                                shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
-                                color = appColors.surfaceColor,
-                                border = BorderStroke(2.5.dp, rainbowBrush),
-                                shadowElevation = 12.dp
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Search, null, tint = appColors.textPrimaryColor, modifier = Modifier.size(26.dp))
-                                }
-                            }
-                            
-                            // Parte Derecha: Ajustes / Cerrar
-                            Surface(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .combinedClickable(
-                                        onClick = { 
-                                            menuState = (menuState + 1) % 3
-                                        },
-                                        onLongClick = { }
+                                    onClick = { isSearchActive = true },
+                                    modifier = Modifier.size(56.dp),
+                                    shape = RoundedCornerShape(
+                                        topStart = 28.dp,
+                                        bottomStart = 28.dp,
+                                        topEnd = 10.dp,
+                                        bottomEnd = 10.dp
                                     ),
-                                shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp, topEnd = 28.dp, bottomEnd = 28.dp),
-                                color = appColors.surfaceColor,
-                                border = BorderStroke(2.5.dp, rainbowBrush),
-                                shadowElevation = 12.dp
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Settings,
-                                        "Ajustes",
-                                        tint = appColors.textPrimaryColor,
-                                        modifier = Modifier.size(26.dp).rotate(gearRotation)
-                                    )
+                                    color = appColors.surfaceColor,
+                                    border = BorderStroke(2.5.dp, rainbowBrush),
+                                    shadowElevation = 12.dp
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Search,
+                                            null,
+                                            tint = appColors.textPrimaryColor,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    }
+                                }
+
+                                // Parte Derecha: Ajustes / Cerrar
+                                Surface(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .combinedClickable(
+                                            onClick = {
+                                                menuState = (menuState + 1) % 3
+                                            },
+                                            onLongClick = { }
+                                        ),
+                                    shape = RoundedCornerShape(
+                                        topStart = 10.dp,
+                                        bottomStart = 10.dp,
+                                        topEnd = 28.dp,
+                                        bottomEnd = 28.dp
+                                    ),
+                                    color = appColors.surfaceColor,
+                                    border = BorderStroke(2.5.dp, rainbowBrush),
+                                    shadowElevation = 12.dp
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Settings,
+                                            "Ajustes",
+                                            tint = appColors.textPrimaryColor,
+                                            modifier = Modifier.size(26.dp).rotate(gearRotation)
+                                        )
+                                    }
                                 }
                             }
-                        }
                         }
                     }
                 }
             },
             floatingActionButtonPosition = FabPosition.End
         ) { paddingValues ->
-        
-        // Diálogo: Alertas de Notificaciones
-        if (showNotificationsDialog) {
-            AlertDialog(
-                onDismissRequest = { showNotificationsDialog = false },
-                title = { Text("Alertas", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column {
-                        Text("Configurar notificaciones:", fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Notificar mensajes nuevos")
-                            Switch(
-                                checked = notifyNewMessages,
-                                onCheckedChange = { notifyNewMessages = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Notificar menciones")
-                            Switch(
-                                checked = notifyMentions,
-                                onCheckedChange = { notifyMentions = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Notificar reacciones")
-                            Switch(
-                                checked = notifyReactions,
-                                onCheckedChange = { notifyReactions = it }
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { 
-                        showNotificationsDialog = false
-                    }) {
-                        Text("Aceptar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showNotificationsDialog = false }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-        
-        // Diálogo: Mostrar Datos
-        if (showDataVisibilityDialog) {
-            AlertDialog(
-                onDismissRequest = { showDataVisibilityDialog = false },
-                title = { Text("Mostrar Datos", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column {
-                        Text("Configurar visibilidad de datos:", fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Mostrar fechas")
-                            Switch(
-                                checked = showDates,
-                                onCheckedChange = { showDates = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Mostrar avatares")
-                            Switch(
-                                checked = showAvatars,
-                                onCheckedChange = { showAvatars = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Mostrar vista previa")
-                            Switch(
-                                checked = showPreviews,
-                                onCheckedChange = { showPreviews = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Mostrar insignias")
-                            Switch(
-                                checked = showBadges,
-                                onCheckedChange = { showBadges = it }
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { 
-                        showDataVisibilityDialog = false
-                    }) {
-                        Text("Aceptar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDataVisibilityDialog = false }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-        
-        // Diálogo: Período de Tiempo
-        if (showTimePeriodDialog) {
-            AlertDialog(
-                onDismissRequest = { showTimePeriodDialog = false },
-                title = { Text("Período de Tiempo", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column {
-                        Text("Filtrar mensajes por período:", fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        val periods = listOf("Semana", "Mes", "3 Meses", "Todo")
-                        periods.forEach { period ->
+
+            // Diálogo: Alertas de Notificaciones
+            if (showNotificationsDialog) {
+                AlertDialog(
+                    onDismissRequest = { showNotificationsDialog = false },
+                    title = { Text("Alertas", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text("Configurar notificaciones:", fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.height(12.dp))
+
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { timePeriod = period }
-                                    .padding(vertical = 8.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(period)
-                                RadioButton(
-                                    selected = timePeriod == period,
-                                    onClick = { timePeriod = period }
+                                Text("Notificar mensajes nuevos")
+                                Switch(
+                                    checked = notifyNewMessages,
+                                    onCheckedChange = { notifyNewMessages = it }
                                 )
                             }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { 
-                        showTimePeriodDialog = false
-                    }) {
-                        Text("Aceptar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showTimePeriodDialog = false }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-        
-        // Diálogo: Privacidad
-        if (showPrivacyDialog) {
-            AlertDialog(
-                onDismissRequest = { showPrivacyDialog = false },
-                title = { Text("Privacidad", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column {
-                        Text("Configurar opciones de privacidad:", fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Confirmación de lectura", fontWeight = FontWeight.Medium)
-                                Text(
-                                    "Mostrar cuando leíste mensajes",
-                                    fontSize = 12.sp,
-                                    color = appColors.textSecondaryColor
-                                )
-                            }
-                            Switch(
-                                checked = showReadReceipts,
-                                onCheckedChange = { showReadReceipts = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Última conexión", fontWeight = FontWeight.Medium)
-                                Text(
-                                    "Mostrar tu última conexión",
-                                    fontSize = 12.sp,
-                                    color = appColors.textSecondaryColor
-                                )
-                            }
-                            Switch(
-                                checked = showLastSeen,
-                                onCheckedChange = { showLastSeen = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Foto de perfil", fontWeight = FontWeight.Medium)
-                                Text(
-                                    "Quién puede ver tu foto",
-                                    fontSize = 12.sp,
-                                    color = appColors.textSecondaryColor
-                                )
-                            }
-                            Switch(
-                                checked = showProfilePhoto,
-                                onCheckedChange = { showProfilePhoto = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Información de perfil", fontWeight = FontWeight.Medium)
-                                Text(
-                                    "Mostrar datos de contacto",
-                                    fontSize = 12.sp,
-                                    color = appColors.textSecondaryColor
-                                )
-                            }
-                            Switch(
-                                checked = showProfileInfo,
-                                onCheckedChange = { showProfileInfo = it }
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { 
-                        showPrivacyDialog = false
-                    }) {
-                        Text("Aceptar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showPrivacyDialog = false }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-        
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(appColors.backgroundColor)
-            .padding(paddingValues)
-    ) {
 
-        // --- Filtros dinámicos ---
-        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
-            Text(
-                text = "Filtrar por profesión:",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = appColors.textPrimaryColor
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(categories) { category ->
-                    val isSelected = selectedCategories.contains(category)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            selectedCategories = if (isSelected) {
-                                selectedCategories - category
-                            } else {
-                                selectedCategories + category
-                            }
-                        },
-                        label = { Text(category) },
-                        leadingIcon = if (isSelected) {
-                            @Composable {
-                                Icon(
-                                    imageVector = Icons.Default.Done,
-                                    contentDescription = "Seleccionado",
-                                    modifier = Modifier.size(FilterChipDefaults.IconSize)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Notificar menciones")
+                                Switch(
+                                    checked = notifyMentions,
+                                    onCheckedChange = { notifyMentions = it }
                                 )
                             }
-                        } else {
-                            null
-                        }
-                    )
-                }
-            }
-        }
 
-        // --- Lista de Chats (Tarjetas rediseñadas) ---
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(filteredProviders, key = { it.id }) { provider ->
-                PrestadorCard(
-                    provider = provider,
-                    onClick = {
-                        navController?.navigate("perfil_prestador/${provider.id}")
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Notificar reacciones")
+                                Switch(
+                                    checked = notifyReactions,
+                                    onCheckedChange = { notifyReactions = it }
+                                )
+                            }
+                        }
                     },
-                    // onLongClick eliminado
-                    onChat = { onChatClick(provider.id) },
-                    onDeleteRequest = { providerToDelete = provider },
-                    actionContent = {
-                        ActionContent(
-                            inDeleteMode = false,
-                            onMessageClick = { onChatClick(provider.id) },
-                            onDeleteRequest = { providerToDelete = provider }
-                        )
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showNotificationsDialog = false
+                        }) {
+                            Text("Aceptar")
+                        }
                     },
-                    showAvatars = showAvatars,
-                    showPreviews = showPreviews,
-                    showBadges = showBadges
+                    dismissButton = {
+                        TextButton(onClick = { showNotificationsDialog = false }) {
+                            Text("Cancelar")
+                        }
+                    }
                 )
             }
-        }
-    }
-    } // Cierre del Column + Scaffold (paddingValues)
-    
-    // Diálogo de confirmación para eliminar
-    if (providerToDelete != null) {
-        AlertDialog(
-            onDismissRequest = { providerToDelete = null },
-            title = { Text("Eliminar Conversación") },
-            text = { Text("¿Estás seguro de que deseas eliminar el chat con ${providerToDelete!!.name}? Esta acción no se puede deshacer.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        providersList = providersList.filter { it.id != providerToDelete!!.id }
-                        providerToDelete = null
+
+            // Diálogo: Mostrar Datos
+            if (showDataVisibilityDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDataVisibilityDialog = false },
+                    title = { Text("Mostrar Datos", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text("Configurar visibilidad de datos:", fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Mostrar fechas")
+                                Switch(
+                                    checked = showDates,
+                                    onCheckedChange = { showDates = it }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Mostrar avatares")
+                                Switch(
+                                    checked = showAvatars,
+                                    onCheckedChange = { showAvatars = it }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Mostrar vista previa")
+                                Switch(
+                                    checked = showPreviews,
+                                    onCheckedChange = { showPreviews = it }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Mostrar insignias")
+                                Switch(
+                                    checked = showBadges,
+                                    onCheckedChange = { showBadges = it }
+                                )
+                            }
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                ) {
-                    Text("Eliminar", color = Color.White)
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showDataVisibilityDialog = false
+                        }) {
+                            Text("Aceptar")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDataVisibilityDialog = false }) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
+            }
+
+            // Diálogo: Período de Tiempo
+            if (showTimePeriodDialog) {
+                AlertDialog(
+                    onDismissRequest = { showTimePeriodDialog = false },
+                    title = { Text("Período de Tiempo", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text("Filtrar mensajes por período:", fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            val periods = listOf("Semana", "Mes", "3 Meses", "Todo")
+                            periods.forEach { period ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { timePeriod = period }
+                                        .padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(period)
+                                    RadioButton(
+                                        selected = timePeriod == period,
+                                        onClick = { timePeriod = period }
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showTimePeriodDialog = false
+                        }) {
+                            Text("Aceptar")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showTimePeriodDialog = false }) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
+            }
+
+            // Diálogo: Privacidad
+            if (showPrivacyDialog) {
+                AlertDialog(
+                    onDismissRequest = { showPrivacyDialog = false },
+                    title = { Text("Privacidad", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text(
+                                "Configurar opciones de privacidad:",
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Confirmación de lectura", fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "Mostrar cuando leíste mensajes",
+                                        fontSize = 12.sp,
+                                        color = appColors.textSecondaryColor
+                                    )
+                                }
+                                Switch(
+                                    checked = showReadReceipts,
+                                    onCheckedChange = { showReadReceipts = it }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Última conexión", fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "Mostrar tu última conexión",
+                                        fontSize = 12.sp,
+                                        color = appColors.textSecondaryColor
+                                    )
+                                }
+                                Switch(
+                                    checked = showLastSeen,
+                                    onCheckedChange = { showLastSeen = it }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Foto de perfil", fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "Quién puede ver tu foto",
+                                        fontSize = 12.sp,
+                                        color = appColors.textSecondaryColor
+                                    )
+                                }
+                                Switch(
+                                    checked = showProfilePhoto,
+                                    onCheckedChange = { showProfilePhoto = it }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Información de perfil", fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "Mostrar datos de contacto",
+                                        fontSize = 12.sp,
+                                        color = appColors.textSecondaryColor
+                                    )
+                                }
+                                Switch(
+                                    checked = showProfileInfo,
+                                    onCheckedChange = { showProfileInfo = it }
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showPrivacyDialog = false
+                        }) {
+                            Text("Aceptar")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showPrivacyDialog = false }) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(appColors.backgroundColor)
+                    .padding(paddingValues)
+            ) {
+
+                // --- Filtros dinámicos ---
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+                    Text(
+                        text = "Filtrar por profesión:",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = appColors.textPrimaryColor
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(categories) { category ->
+                            val isSelected = selectedCategories.contains(category)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedCategories = if (isSelected) {
+                                        selectedCategories - category
+                                    } else {
+                                        selectedCategories + category
+                                    }
+                                },
+                                label = { Text(category) },
+                                leadingIcon = if (isSelected) {
+                                    @Composable {
+                                        Icon(
+                                            imageVector = Icons.Default.Done,
+                                            contentDescription = "Seleccionado",
+                                            modifier = Modifier.size(FilterChipDefaults.IconSize)
+                                        )
+                                    }
+                                } else {
+                                    null
+                                }
+                            )
+                        }
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { providerToDelete = null }) {
-                    Text("Cancelar")
+
+                // --- Lista de Chats (Tarjetas rediseñadas) ---
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(filteredProviders, key = { it.id }) { provider ->
+                        PrestadorCard(
+                            provider = provider,
+                            onClick = {
+                                navController?.navigate("perfil_prestador/${provider.id}")
+                            },
+                            // onLongClick eliminado
+                            onChat = { onChatClick(provider.id) },
+                            onDeleteRequest = { providerToDelete = provider },
+                            actionContent = {
+                                ActionContent(
+                                    inDeleteMode = false,
+                                    onMessageClick = { onChatClick(provider.id) },
+                                    onDeleteRequest = { providerToDelete = provider }
+                                )
+                            },
+                            showAvatars = showAvatars,
+                            showPreviews = showPreviews,
+                            showBadges = showBadges
+                        )
+                    }
                 }
             }
-        )
+        } // Cierre del Column + Scaffold (paddingValues)
+
+// Diálogo de confirmación para eliminar
+        if (providerToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { providerToDelete = null },
+                title = { Text("Eliminar Conversación") },
+                text = {
+                    Text("¿Estás seguro de que deseas eliminar el chat con ${providerToDelete?.name}? Esta acción no se puede deshacer.")
+                },
+                confirmButton = {
+                    // Aquí estaba el error: El Button debe envolver a los parámetros
+                    Button(
+                        onClick = {
+                            // Tu lógica de eliminación
+                            //providersList = providersList.filter { it.id != providerToDelete?.id }
+                            //providerToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) {
+                        Text("Eliminar", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { providerToDelete = null }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+
+/**
+        // Diálogo de confirmación para eliminar
+        if (providerToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { providerToDelete = null },
+                // title = { Text("Eliminar Conversación") },
+                //text = { Text("¿Estás seguro de que deseas eliminar el chat con ${providerToDelete!!.name}? Esta acción no se puede deshacer.") },
+                confirmButton = {
+                    //Button(
+                    //onClick = {
+                    //  providersList = providersList.filter { it.id != providerToDelete!!.id }
+                    // providerToDelete = null
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+            ) {
+                // Text("Eliminar", color = Color.White)
+            }
+        }
+        // dismissButton = {
+        //   TextButton(onClick = { providerToDelete = null }) {
+        //     Text("Cancelar")
+        // }
+        //  }
+        // )
+**/
+
+
+
+
     }
-    
+
+
+
     // Barra de búsqueda flotante (igual que en PresupuestosScreen)
     if (isSearchActive) {
         val rainbowBrush =
@@ -1257,7 +1231,7 @@ fun ChatListView(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.TopCenter)
+                //.align(Alignment.TopCenter)
                 .statusBarsPadding()
                 .padding(start = 16.dp, end = 16.dp)
                 .zIndex(10f),
@@ -1324,7 +1298,7 @@ fun ChatListView(
         }
     }
     } // Cierre del Box externo
-}
+//}
 
 fun formatDate(timestamp: Long): String {
     val calendar = Calendar.getInstance()
@@ -1375,7 +1349,7 @@ fun DateLabel(date: String) {
 
 @Composable
 fun ChatConversationView(
-    provider: UserFalso,
+    provider: Provider,
     messages: List<Message>,
     inputText: String,
     onInputChange: (String) -> Unit,
@@ -1491,7 +1465,7 @@ fun ChatConversationView(
                 isRecordingAudio = isRecordingAudio
             )
         }
-        
+
         // Menú flotante de adjuntos - FUERA del flujo normal
         AnimatedVisibility(
             visible = showAttachMenu,
@@ -1563,7 +1537,7 @@ fun ChatConversationView(
 
 @Composable
 fun ChatHeader(
-    provider: UserFalso,
+    provider: Provider,
     onBack: () -> Unit,
     appColors: com.example.myapplication.ui.theme.AppColors
 ) {
@@ -1595,7 +1569,7 @@ fun ChatHeader(
             // Nombre y estado
             Column {
                 Text(
-                    text = "${provider.name} ${provider.lastName}",
+                    text = "${provider.name} ",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = appColors.textPrimaryColor
@@ -1631,7 +1605,7 @@ fun buildAnnotatedStringWithLinks(text: String, linkColor: Color): AnnotatedStri
         urlPattern.findAll(text).forEach { matchResult ->
             // Texto antes del link
             append(text.substring(lastIndex, matchResult.range.first))
-            
+
             // El link
             pushStringAnnotation(
                 tag = "URL",
@@ -1646,7 +1620,7 @@ fun buildAnnotatedStringWithLinks(text: String, linkColor: Color): AnnotatedStri
                 append(matchResult.value)
             }
             pop()
-            
+
             lastIndex = matchResult.range.last + 1
         }
         // Texto después del último link
@@ -1674,7 +1648,7 @@ fun AudioMessageBubble(
     var isPlaying by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0) }
     var duration by remember { mutableStateOf(0) }
-    
+
     // Actualizar posición mientras reproduce
     LaunchedEffect(isPlaying) {
         while (isPlaying) {
@@ -1684,14 +1658,14 @@ fun AudioMessageBubble(
             delay(100)
         }
     }
-    
+
     // Limpiar MediaPlayer cuando se destruye el composable
     DisposableEffect(Unit) {
         onDispose {
             mediaPlayer?.release()
         }
     }
-    
+
     fun togglePlayPause() {
         if (isPlaying) {
             // Pausar
@@ -1721,7 +1695,7 @@ fun AudioMessageBubble(
             }
         }
     }
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isFromMe) Arrangement.End else Arrangement.Start
@@ -1754,7 +1728,7 @@ fun AudioMessageBubble(
                         modifier = Modifier.size(24.dp)
                     )
                 }
-                
+
                 // Barra de progreso y duración
                 Column(
                     modifier = Modifier
@@ -1778,9 +1752,9 @@ fun AudioMessageBubble(
                                 .background(if (isFromMe) Color.White else appColors.accentBlue)
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     // Tiempo
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1798,7 +1772,7 @@ fun AudioMessageBubble(
                         )
                     }
                 }
-                
+
                 // Icono de micrófono
                 Icon(
                     imageVector = Icons.Default.Mic,
@@ -1819,17 +1793,17 @@ fun MessageBubble(
     appColors: com.example.myapplication.ui.theme.AppColors
 ) {
     val isFromMe = message.senderId == "currentUser"
-    
+
     // Detectar si es un mensaje de cita
     val isAppointment = message.text.startsWith("📅 Solicitud de cita|")
-    
+
     if (isAppointment) {
         // Extraer información de la cita
         val parts = message.text.removePrefix("📅 Solicitud de cita|").split("|")
         val date = parts.getOrNull(0) ?: ""
         val time = parts.getOrNull(1) ?: ""
         val notes = parts.getOrNull(2) ?: ""
-        
+
         TarjetaMensajeCita(
             date = date,
             time = time,
@@ -1924,7 +1898,7 @@ fun MessageBubble(
                         text = message.text,
                         linkColor = if (isFromMe) Color.White else Color(0xFF2563EB)
                     )
-                    
+
                     ClickableText(
                         text = annotatedText,
                         style = androidx.compose.ui.text.TextStyle(
@@ -2218,7 +2192,7 @@ fun MessageInputBar(
                             awaitPointerEventScope {
                                 while (true) {
                                     val event = awaitPointerEvent()
-                                    
+
                                     event.changes.forEach { change ->
                                         // Detectar movimiento horizontal
                                         val dragAmountX = change.position.x - change.previousPosition.x
@@ -2226,13 +2200,13 @@ fun MessageInputBar(
                                             dragOffsetX = (dragOffsetX + dragAmountX).coerceAtLeast(-300f)
                                             isDraggingToCancel = dragOffsetX < -120f
                                         }
-                                        
+
                                         // Detectar cuando se suelta el dedo
                                         if (change.changedToUp()) {
                                             if (dragOffsetX < -180f) {
                                                 // Activar animación de cancelación
                                                 isCancelling = true
-                                                
+
                                                 coroutineScope.launch {
                                                     // Animación de papelera tragándose el micrófono
                                                     delay(300)
@@ -2241,7 +2215,7 @@ fun MessageInputBar(
                                                     animationCompleted = true
                                                     onCancelAudio?.invoke()
                                                     delay(300)
-                                                    
+
                                                     // Resetear estados
                                                     isCancelling = false
                                                     isDraggingToCancel = false
@@ -2276,17 +2250,17 @@ fun MessageInputBar(
                         ),
                         label = "trashScale"
                     )
-                    
+
                     val trashColor by animateColorAsState(
                         targetValue = if (dragOffsetX < -180f) Color.Red else Color(0xFF757575),
                         label = "trashColor"
                     )
-                    
+
                     val trashAlpha by animateFloatAsState(
                         targetValue = if (dragOffsetX < -50f) 1f else 0.3f,
                         label = "trashAlpha"
                     )
-                    
+
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Cancelar",
@@ -2300,7 +2274,7 @@ fun MessageInputBar(
                                 alpha = trashAlpha
                             }
                     )
-                    
+
                     // CONTENIDO CENTRAL (deslizable)
                     Row(
                         modifier = Modifier
@@ -2314,13 +2288,13 @@ fun MessageInputBar(
                     ) {
                         // Espaciador para empujar el contenido a la derecha
                         Spacer(modifier = Modifier.weight(1f))
-                        
+
                         // CENTRO: Indicador desliza para cancelar
                         val textAlpha by animateFloatAsState(
                             targetValue = if (isDraggingToCancel || isCancelling) 0.2f else 1f,
                             label = "textAlpha"
                         )
-                        
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2338,9 +2312,9 @@ fun MessageInputBar(
                                 fontSize = 14.sp
                             )
                         }
-                        
+
                         Spacer(modifier = Modifier.weight(1f))
-                        
+
                         // DERECHA: Tiempo y micrófono pulsante
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -2354,7 +2328,7 @@ fun MessageInputBar(
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium
                             )
-                            
+
                             // Micrófono pulsante
                             val infiniteTransition = rememberInfiniteTransition(label = "pulse")
                             val pulseScale by infiniteTransition.animateFloat(
@@ -2366,7 +2340,7 @@ fun MessageInputBar(
                                 ),
                                 label = "pulseScale"
                             )
-                            
+
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
@@ -2399,7 +2373,7 @@ fun ChatScreenPreview() {
         ChatScreen(onBack = {})
     }
 }
-
+/**
 @Preview(showBackground = true)
 @Composable
 fun ChatConversationViewPreview() {
@@ -2421,7 +2395,7 @@ fun ChatConversationViewPreview() {
         )
     }
 }
-
+**/
 @Composable
 fun AttachmentOptionsMenu(
     onDismiss: () -> Unit,

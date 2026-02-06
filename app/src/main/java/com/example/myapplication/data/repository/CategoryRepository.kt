@@ -5,7 +5,41 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.example.myapplication.data.local.CategoryDao
+import com.example.myapplication.data.local.CategoryEntity
+import kotlinx.coroutines.flow.Flow
 
+
+// Asumo que usas Hilt para la inyección de dependencias, por eso el @Inject
+class CategoryRepository @Inject constructor(
+    private val categoryDao: CategoryDao
+) {
+
+    // La UI observará este Flow. La fuente de verdad ÚNICA es Room.
+    val allCategories: Flow<List<CategoryEntity>> = categoryDao.getAllCategories()
+
+    // Esta función se llamará desde un ViewModel o Worker para sincronizar datos.
+    suspend fun syncWithFirebase() {
+        // 🔥 AQUÍ ESCRIBIRÁS EL CÓDIGO DE FIREBASE 🔥
+        // Ejemplo conceptual:
+        // 1. val firebaseData = firestore.collection("categories").get().await()
+        // 2. firebaseData.documents.forEach { document ->
+        //      val categoryEntity = document.toObject(CategoryEntity::class.java)
+        //      if (categoryEntity != null) {
+        //          // Esto insertará si es nuevo, o actualizará si el nombre ya existe.
+        //          categoryDao.insertOrUpdate(categoryEntity)
+        //      }
+        //    }
+    }
+
+    // Nota: No hay métodos para borrar. Se cumple el requisito.
+}
+
+
+
+
+
+/**
 @Singleton
 class CategoryRepository @Inject constructor(
     private val firestore: FirebaseFirestore
@@ -73,4 +107,4 @@ class CategoryRepository @Inject constructor(
             Result.failure(e)
         }
     }
-}
+}**/

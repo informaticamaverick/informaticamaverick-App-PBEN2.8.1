@@ -53,7 +53,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.myapplication.presentation.profile.ProfileSharedViewModel
-import com.example.myapplication.ui.screens.HomeScreenComplete
+//import com.example.myapplication.ui.screens.HomeScreenComplete
 
 // 1. DEFINICIÓN CENTRALIZADA DE TODAS LAS RUTAS
 sealed class Screen(val route: String, val title: String) {
@@ -144,7 +144,7 @@ fun AppNavigation() {
                     bottomPadding = innerPadding
                 )
             }
-
+/**
             // 2. PRESUPUESTOS
             composable(Screen.Presupuestos.route) {
                 PresupuestosScreen(
@@ -153,7 +153,7 @@ fun AppNavigation() {
                     onProfileClick = { pid -> navController.navigate("perfil_prestador/$pid") }
                 )
             }
-
+**/
             // 3. CHAT
             composable(
                 route = Screen.Chat.route,
@@ -173,10 +173,11 @@ fun AppNavigation() {
             // 4. CALENDAR & PROMO
             composable(Screen.Calendar.route) { CalendarScreen(onBack = { navController.popBackStack() }) }
 
+   /**
             composable(Screen.Promo.route) {
                 PromoScreen(navController = navController, onBack = { navController.popBackStack() })
             }
-
+**/
             // --- PANTALLAS SECUNDARIAS ---
 
             composable(Screen.CrearLicitacion.route) { CrearLicScreen(onBack = { navController.popBackStack() }) }

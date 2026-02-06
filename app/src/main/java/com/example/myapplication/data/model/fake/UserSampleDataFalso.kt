@@ -1,3 +1,4 @@
+/**
 package com.example.myapplication.data.model.fake
 
 import androidx.compose.runtime.mutableStateListOf
@@ -116,7 +117,7 @@ data class UserFalso(
 object UserSampleDataFalso {
     
     // Usuario principal simulado (El que usa la app)
-    val currentUser = UserFalso(
+   /** val currentUser = UserFalso(
         id = "user1",
         username = "maxinanterne",
         name = "Maximiliano",
@@ -196,4 +197,6 @@ object UserSampleDataFalso {
     fun findUserByUsername(username: String): UserFalso? {
         return if (currentUser.username == username) currentUser else null
     }
+   **/
 }
+**/
