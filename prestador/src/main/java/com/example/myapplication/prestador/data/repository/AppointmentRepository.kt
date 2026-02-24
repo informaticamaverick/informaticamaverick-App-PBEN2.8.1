@@ -110,8 +110,14 @@ class AppointmentRepository @Inject constructor(
     fun getAllAppointments(): Flow<List<AppointmentEntity>> {
         return appointmentDao.getAllAppointmentsFlow()
     }
+
+    fun getAppointmentsByServiceType(serviceType: String): Flow<List<AppointmentEntity>> {
+        return appointmentDao.getAllintmentsByServiceType(serviceType)
+    }
     
     suspend fun updateAppointmentStatus(appointmentId: String, status: String) {
         appointmentDao.updateAppointmentStatus(appointmentId, status, System.currentTimeMillis())
     }
+
+
 }

@@ -34,6 +34,10 @@ import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.myapplication.prestador.viewmodel.AvailabilityViewModel
+import com.example.myapplication.prestador.viewmodel.PresupuestoViewModel
 
 
 @Preview(showBackground = true, showSystemUi = true)
@@ -153,7 +157,14 @@ fun PrestadorDashboardScreen(
                         onNavigateToServiceConfig = onNavigateToServiceConfig,
                         onLogout = onLogout,
                         onNavigateToPromotionList = onNavigateToPromotionList,
-                        onNavigateToThemeDemo = onNavigateToThemeDemo
+                        onNavigateToThemeDemo = onNavigateToThemeDemo,
+                        onNavigateToCalendar = { selectedTab = 1 },
+                        onNavigateToPresupuesto = onNavigateToPresupuesto,
+                        onNavigateToPresupuestos = onNavigateToPresupuestos,
+                        onNavigateToChat = { clientId ->
+                            targetChatUserId = clientId
+                            selectedTab = 3
+                        }
                     )
                     3 -> {
                         println("🔥 DASHBOARD: Renderizando tab de chat")
@@ -370,205 +381,6 @@ fun PresupuestoContent(
     )
 }
 
-@Composable
-fun InicioContent(
-    onNavigateToEditProfile: () -> Unit = {},
-    onNavigateToServiceConfig: () -> Unit = {},
-    onLogout: () -> Unit = {},
-    onNavigateToCreatePromo: () -> Unit = {},
-    onNavigateToPromotionList: () -> Unit = {},
-    onNavigateToThemeDemo: () -> Unit = {}
-) {
-    val colors = getPrestadorColors()
-    var showMenu by remember { mutableStateOf(false) }
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.backgroundColor)
-    ) {
-        // Header naranja con avatar y menú
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            colors.primaryOrange,
-                            colors.primaryOrange.copy(alpha = 0.8f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
-                )
-                .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 48.dp)
-        ) {
-            Column {
-                // Fila superior: Avatar + Nombre a la izquierda
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Nombre y estado (IZQUIERDA)
-                    Column(
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = "Hola, Prestador", // TODO: Obtener nombre del usuario
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(colors.success, shape = CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Disponible para Fast",
-                                fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                    }
-                    
-                    // Avatar a la derecha
-                    Box {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    Color.White.copy(alpha = 0.3f),
-                                    shape = CircleShape
-                                )
-                                .border(2.dp, Color.White.copy(alpha = 0.5f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            IconButton(
-                                onClick = { showMenu = !showMenu }
-                            ) {
-                                Text(
-                                    text = "P", // TODO: Obtener inicial del usuario
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                        
-                        // Menú desplegable
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            modifier = Modifier.background(colors.surfaceColor)
-                        ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = null,
-                                            tint = colors.primaryOrange,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "Editar Perfil",
-                                            fontSize = 14.sp,
-                                            color = colors.textPrimary
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onNavigateToEditProfile()
-                                }
-                            )
-                            
-                            HorizontalDivider(color = colors.divider)
-                            
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = null,
-                                            tint = colors.primaryOrange,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "Configurar Servicio",
-                                            fontSize = 14.sp,
-                                            color = colors.textPrimary
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onNavigateToServiceConfig()
-                                }
-                            )
-                            
-                            HorizontalDivider(color = colors.divider)
-                            
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.ExitToApp,
-                                            contentDescription = null,
-                                            tint = colors.error,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "Cerrar Sesión",
-                                            fontSize = 14.sp,
-                                            color = colors.error
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onLogout() //Llamar al callback
-                                    // TODO: Cerrar sesión
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Contenido del dashboard (temporal)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Contenido del Dashboard",
-                fontSize = 16.sp,
-                color = colors.textSecondary
-            )
-        }
-    }
-}
 
 @Composable
 fun CalendarioContent() {

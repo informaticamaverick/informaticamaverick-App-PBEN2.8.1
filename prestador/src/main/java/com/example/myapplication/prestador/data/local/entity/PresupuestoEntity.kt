@@ -36,18 +36,21 @@ data class PresupuestoEntity(
     val numeroPresupuesto: String,
     val clienteId: String,
     val prestadorId: String,
-    val fecha: String, // Formato ISO: "2024-01-15"
+    val fecha: String,
     val validezDias: Int = 7,
     val subtotal: Double,
     val impuestos: Double,
     val total: Double,
-    val estado: String, // "Pendiente", "Aprobado", "Rechazado", "Enviado"
+    val estado: String,
     val notas: String = "",
-    val itemsJson: String = "", // Items separados por |
-    val serviciosJson: String = "", // Servicios separados por |
-    val appointmentId: String? = null, // ID de la cita asociada
-    val firestoreId: String? = null,   // ID del doc en Firestore (para sync)
-    val syncedAt: Long? = null,        // Timestamp del último sync con Firestore
+    val itemsJson: String = "",
+    val serviciosJson: String = "",
+    val honorariosJson: String = "",
+    val gastosJson: String = "",
+    val impuestosJson: String = "",
+    val appointmentId: String? = null,
+    val firestoreId: String? = null,
+    val syncedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

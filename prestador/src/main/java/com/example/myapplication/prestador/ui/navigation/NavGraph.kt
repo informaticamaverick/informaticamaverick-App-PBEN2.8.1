@@ -21,7 +21,7 @@ import com.example.myapplication.prestador.ui.register.PrestadorRegisterScreen
 import com.example.myapplication.prestador.ui.success.PrestadorSuccessScreen
 import com.example.myapplication.prestador.ui.dashboard.PrestadorDashboardScreen
 import com.example.myapplication.prestador.ui.config.ServiceConfigScreen
-import com.example.myapplication.prestador.ui.CrearPresupuestoPrestadorScreen
+import com.example.myapplication.prestador.ui.presupuesto.CrearPresupuestoPrestadorScreen
 import com.example.myapplication.prestador.ui.presupuesto.PresupuestosScreen
 import com.example.myapplication.prestador.ui.promotion.CreatePromotionScreen
 import com.example.myapplication.prestador.ui.promotion.PromotionListScreen

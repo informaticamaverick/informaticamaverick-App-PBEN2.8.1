@@ -113,4 +113,10 @@ interface AppointmentDao {
     @Query("DELETE FROM appointments WHERE (status = 'completed' OR status = 'cancelled') AND createdAt < :beforeTimestamp")
     suspend fun deleteOldAppointments(beforeTimestamp: Long)
 
+    /**
+     * OBTENER todas las citas filtradas por serviceType
+     */
+    @Query("SELECT * FROM appointments WHERE serviceType = :serviceType ORDER BY date ASC, time ASC")
+    fun getAllintmentsByServiceType(serviceType: String): Flow<List<AppointmentEntity>>
+
 }

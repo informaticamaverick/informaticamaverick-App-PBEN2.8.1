@@ -102,4 +102,10 @@ object DatabaseModule {
         return database.rentalSpaceDao()
     }
 
+    @Provides
+    @Singleton
+    fun providePlantillaPresupuestoDao(database: PrestadorDatabase): PlantillaPresupuestoDao {
+        return database.plantillaPresupuestoDao()
+    }
+
 }

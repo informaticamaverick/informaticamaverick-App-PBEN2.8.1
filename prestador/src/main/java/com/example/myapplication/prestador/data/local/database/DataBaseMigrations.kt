@@ -444,6 +444,36 @@ object DatabaseMigrations {
     /**
      * Lista de todas las migraciones disponibles
      */
+    val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL(
+                """CREATE TABLE IF NOT EXISTS `plantillas_presupuesto` (
+                    `id` TEXT NOT NULL,
+                    `nombre` TEXT NOT NULL,
+                    `itemsJson` TEXT NOT NULL DEFAULT '',
+                    `createdAT` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )"""
+            )
+        }
+    }
+
+    val MIGRATION_24_25 = object : Migration(24, 25) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL(
+                "ALTER TABLE plantillas_presupuesto ADD COLUMN serviciosJson TEXT NOT NULL DEFAULT ''"
+            )
+        }
+    }
+
+    val MIGRATION_25_26 = object : Migration(25, 26) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE presupuestos ADD COLUMN honorariosJson TEXT NOT NULL DEFAULT ''")
+            database.execSQL("ALTER TABLE presupuestos ADD COLUMN gastosJson TEXT NOT NULL DEFAULT ''")
+            database.execSQL("ALTER TABLE presupuestos ADD COLUMN impuestosJson TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_6_7,
         MIGRATION_7_8,
@@ -458,6 +488,9 @@ object DatabaseMigrations {
         MIGRATION_17_18,
         MIGRATION_20_21,
         MIGRATION_21_22,
-        MIGRATION_22_23
+        MIGRATION_22_23,
+        MIGRATION_23_24,
+        MIGRATION_24_25,
+        MIGRATION_25_26
     )
 }

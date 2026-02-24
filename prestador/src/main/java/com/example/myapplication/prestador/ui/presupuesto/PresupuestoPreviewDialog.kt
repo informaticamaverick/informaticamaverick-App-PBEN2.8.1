@@ -1,0 +1,581 @@
+package com.example.myapplication.prestador.ui.presupuesto
+
+import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
+import com.example.myapplication.prestador.data.PPrestadorProfileFalso
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun BudgetPreviewPDFDialog(
+    prestador: PPrestadorProfileFalso,
+    items: List<BudgetItem>,
+    services: List<BudgetService>,
+    professionalFees: List<BudgetProfessionalFee>,
+    miscExpenses: List<BudgetMiscExpense>,
+    taxes: List<BudgetTax>,
+    grandTotal: Double,
+    subtotal: Double,
+    taxAmount: Double,
+    discountAmount: Double,
+    onDismiss: () -> Unit,
+    onEnviar: () -> Unit,
+    onEnviarBudget: (() -> Unit)? = null,
+    onCapturePng: ((android.graphics.Bitmap) -> Unit)? = null
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val captureLayer = rememberGraphicsLayer()
+    //CONVERTIR ITEMS A FORMATO DE DISPLAY
+
+    val displayItems = mutableListOf<PresupuestoItemDisplay>()
+
+    //Agregar articulos
+    items.forEach { item ->
+        val base = item.unitPrice * item.quantity
+        val taxAmount = base * (item.taxPercentage / 100)
+        val withTax = base + taxAmount
+        val discountAmount = withTax * (item.discountPercentage / 100)
+        val total = withTax - discountAmount
+
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = item.quantity.toString(),
+                descripcion = item.description,
+                unitario = "$ ${String.format("%,.2f", item.unitPrice)}",
+                total = "$ ${String.format("%,.2f", total)}"
+            )
+        )
+    }
+
+    // Agregar servicios
+    services.forEach { service ->
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = "-",
+                descripcion = service.description,
+                unitario = "-",
+                total = "$ ${String.format("%,.2f", service.total)}",
+                isSpecial = true
+            )
+        )
+    }
+    
+    // Agregar honorarios profesionales
+    professionalFees.forEach { fee ->
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = "-",
+                descripcion = fee.description,
+                unitario = "-",
+                total = "$ ${String.format("%,.2f", fee.total)}",
+                isSpecial = true
+            )
+        )
+    }
+
+    // Agregar gastos varios
+    miscExpenses.forEach { expense ->
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = "-",
+                descripcion = expense.description,
+                unitario = "-",
+                total = "$ ${String.format("%,.2f", expense.amount)}"
+            )
+        )
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val screenWidth = maxWidth
+            val initialFitScale = remember (screenWidth) {
+                ((screenWidth - 32.dp) / A4_WIDTH).coerceAtMost(1f)
+            }
+            // Estados de zoom y paneo
+            var scale by remember { mutableFloatStateOf(initialFitScale) }
+            var offset by remember { mutableStateOf(Offset.Zero) }
+
+            //Contenedor principal (visor)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF202020))
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(initialFitScale, 4f)
+                            offset += pan
+                        }
+                    }
+            ) {
+                // La hoja de papel A4
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        )
+                        .width(A4_WIDTH)
+                        .wrapContentHeight()
+                        .shadow(elevation = 12.dp)
+                        .background(Color.White)
+
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Slate300)
+                            .drawWithContent {
+                                captureLayer.record { this@drawWithContent.drawContent() }
+                                drawLayer(captureLayer)
+                            }
+                    ) {
+                        //Franja decorativa
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .background(MaverickGradient)
+                        )
+
+                        // Encabezado
+                        A4HeaderSection(prestador)
+                        HorizontalDivider(color = Slate200)
+
+                        // Datos Cliente
+                        A4ClientInfoSection(prestador)
+
+                        // Tabla de items
+                        A4ItemsTable(displayItems)
+                        //Footer
+                        A4FooterSection(
+                            subtotal = subtotal,
+                            taxAmount = taxAmount,
+                            discountAmount = discountAmount,
+                            total = grandTotal
+                        )
+                    }
+                }
+
+                //Boton cerrar
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                        .size(48.dp)
+                        .zIndex(10f)
+                ) {
+                    Icon(Icons.Default.Close, "Cerrar", tint = Slate800)
+                }
+
+                //Boton enviar
+                Button(
+                    onClick = {
+                        when {
+                            onEnviarBudget != null -> onEnviarBudget()
+                            onCapturePng != null -> {
+                                coroutineScope.launch {
+                                    val bitmap = captureLayer.toImageBitmap().asAndroidBitmap()
+                                    onCapturePng(bitmap)
+                                }
+                            }
+                            else -> onEnviar()
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                        .zIndex(10f),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF6B35)
+                    )
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Enviar", fontWeight = FontWeight.Bold)
+                }
+
+                //Controles de zoom
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                        .background(Slate800.copy(alpha = 0.9f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .zIndex(10f), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            scale = (scale * 0.8f).coerceAtLeast(initialFitScale)
+                            offset = Offset.Zero
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Remove, "Alejar", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                    Text(
+                        text = "${(scale / initialFitScale * 100).toInt()}%",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.widthIn(min = 50.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    IconButton(
+                        onClick = {
+                            scale = (scale * 1.25f).coerceAtMost(4f)
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Add, "Acercar", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            scale = initialFitScale
+                            offset = Offset.Zero
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, "Resetear", tint = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun A4HeaderSection(prestador: PPrestadorProfileFalso) {
+    val currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        // Logo y dirección
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaverickGradient)
+                    .padding(6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Home, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    "${prestador.name} ${prestador.lastName}".uppercase(),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Slate800,
+                    letterSpacing = (-0.5).sp,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    prestador.services.firstOrNull() ?: "SERVICIOS",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Slate400,
+                    letterSpacing = 1.5.sp,
+                    lineHeight = 11.sp
+                )
+            }
+        }
+
+        // La "X" con PRESUPUESTO debajo
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .border(2.dp, Slate800, RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("X", fontSize = 26.sp, fontWeight = FontWeight.Black, color = Slate800)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("PRESUPUESTO", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Slate600, letterSpacing = 0.5.sp)
+        }
+
+        // Datos
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 3.dp)
+                    .background(Slate50)
+                    .border(1.dp, Slate300, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text("N° ${prestador.id.takeLast(8)}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Slate800)
+            }
+            Text(currentDate, fontSize = 10.sp, color = Slate600, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+fun A4ClientInfoSection(prestador: PPrestadorProfileFalso) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+        // Emisor
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text("DE:", fontSize = 10.sp,
+                fontWeight = FontWeight.Bold, color = Slate400)
+            Text(
+                prestador.companyName ?: "${prestador.name} ${prestador.lastName}",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Normal,
+                color = Slate600
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        //Receptor
+
+        Column {
+            Text("PARA:", fontSize = 10.sp,
+                fontWeight = FontWeight.Bold, color = Slate400)
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 2.dp).width(20.dp),
+                color = Slate300
+            )
+
+            Column(modifier = Modifier.padding(bottom = 4.dp)) {
+                Text("CLIENTE / EMPRESA", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Cliente", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800, lineHeight = 13.sp)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .width(1.dp)
+                            .height(13.dp)
+                            .background(Slate400)
+                    )
+                    Text(prestador.companyName ?: "", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800, lineHeight = 13.sp)
+                }
+                HorizontalDivider(color = Slate400, thickness = 1.dp)
+            }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("DIRECCIÓN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                    Text("A definir", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                    HorizontalDivider(color = Slate300, thickness = 1.dp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("MÉTODO DE PAGO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                    Text("A definir", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                    HorizontalDivider(color = Slate300, thickness = 1.dp)
+                }
+            }
+            Column {
+                Text("TRABAJO / PROYECTO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                Text("Proyecto de servicio", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                HorizontalDivider(color = Slate300, thickness = 1.dp)
+            }
+        }
+    }
+}
+
+@Composable
+fun A4ItemsTable(items: List<PresupuestoItemDisplay>) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier.border(1.dp, Slate300)) {
+            // Header
+            Row(modifier = Modifier.background(Slate100).height(IntrinsicSize.Min)) {
+                A4TableCell("Cant", 0.15f, true)
+                A4TableCell("Descripción", 0.55f, true)
+                A4TableCell("Unitario", 0.3f, true, alignRight = true)
+                A4TableCell("Total", 0.3f, true, alignRight = true, isLast = true)
+            }
+            HorizontalDivider(color = Slate300)
+
+            // Items
+            items.forEach { item ->
+                val bg = if (item.isSpecial) Color(0xFFEFF6FF) else Color.White
+                val color = if (item.isSpecial) MaverickBlueEnd else Slate800
+                val weight = if (item.isSpecial) FontWeight.Bold else FontWeight.Normal
+
+                Row(modifier = Modifier.background(bg).height(IntrinsicSize.Min)) {
+                    A4TableCell(if(item.isSpecial) "-" else item.cantidad, 0.15f, color = Slate600)
+                    A4TableCell(item.descripcion, 0.55f, color = color, fontWeight = weight)
+                    A4TableCell(item.unitario, 0.3f, alignRight = true, color = Slate600)
+                    A4TableCell(item.total, 0.3f, alignRight = true, fontWeight = FontWeight.Bold, color = color, isLast = true)
+                }
+                HorizontalDivider(color = Slate300)
+            }
+        }
+    }
+}
+
+@Composable
+fun RowScope.A4TableCell(
+    text: String,
+    weight: Float,
+    isHeader: Boolean = false,
+    alignRight: Boolean = false,
+    isLast: Boolean = false,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null
+) {
+    val finalColor = if (color == Color.Unspecified) (if (isHeader) Slate600 else Slate800) else color
+    val finalWeight = fontWeight ?: (if (isHeader) FontWeight.Bold else FontWeight.Normal)
+
+    Box(
+        modifier = Modifier
+            .weight(weight)
+            .fillMaxHeight()
+            .then(if (!isLast) Modifier.border(width = 0.5.dp, color = Slate300.copy(alpha = 0.5f)) else Modifier)
+            .padding(6.dp),
+        contentAlignment = if (alignRight) Alignment.CenterEnd else Alignment.CenterStart
+    ) {
+        Text(
+            text = text,
+            fontSize = if (isHeader) 9.sp else 10.sp,
+            fontWeight = finalWeight,
+            color = finalColor,
+            textAlign = if (alignRight) TextAlign.End else TextAlign.Start,
+            lineHeight = if (isHeader) 11.sp else 12.sp
+        )
+    }
+}
+
+@Composable
+fun A4FooterSection(
+    subtotal: Double,
+    taxAmount: Double,
+    discountAmount: Double,
+    total: Double
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Slate50)
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Nota Legal
+            Text(
+                text = "Nota: Los precios están expresados en Pesos Argentinos.\nVálido por 15 días.",
+                fontSize = 10.sp,
+                color = Slate400,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                lineHeight = 14.sp,
+                modifier = Modifier.width(180.dp)
+            )
+
+            // Cuadro de Totales
+            Column(
+                modifier = Modifier
+                    .width(220.dp)
+                    .shadow(2.dp, RoundedCornerShape(4.dp))
+                    .background(Color.White, RoundedCornerShape(4.dp))
+                    .border(1.dp, Slate300, RoundedCornerShape(4.dp))
+                    .padding(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Subtotal:", fontSize = 11.sp, color = Slate600)
+                    Text("$ ${String.format("%,.2f", subtotal)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                }
+
+                if (taxAmount > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Impuestos:", fontSize = 11.sp, color = Slate600)
+                        Text("$ ${String.format("%,.2f", taxAmount)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                    }
+                }
+
+                if (discountAmount > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Descuento:", fontSize = 11.sp, color = Slate600)
+                        Text("- $ ${String.format("%,.2f", discountAmount)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Slate200)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("TOTAL", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Slate800)
+                    Text("$ ${String.format("%,.2f", total)}", fontSize = 20.sp, fontWeight = FontWeight.Black, color = MaverickBlueEnd)
+                }
+            }
+        }
+    }
+}
