@@ -1,4 +1,4 @@
-package com.example.myapplication.Utils
+package com.example.myapplication.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -116,6 +116,11 @@ class LocationManager(private val context: Context) {
             else -> "Ubicación desconocida"
         }
     }
-    
+
     private fun Double.format(decimals: Int) = "%.${decimals}f".format(this)
 }
+
+/**
+ * LocationManager: Obtiene ubicación GPS usando LocationListener con geocodificación inversa
+ * para convertir coordenadas a nombre de ciudad, incluye timeout de 5 segundos.
+ */

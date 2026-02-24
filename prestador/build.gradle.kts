@@ -22,6 +22,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Configuración de Room schema export para KSP
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -97,6 +102,16 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
+    
+    // Room Database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // WorkManager para recordatorios
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
     
     // Retrofit para clima (Gson)
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")

@@ -10,11 +10,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
+import com.example.myapplication.prestador.data.local.dao.ProviderDao
+import com.example.myapplication.prestador.data.local.entity.ProviderEntity
+import com.google.gson.Gson
 
 @HiltViewModel
 class PrestadorRegisterViewModel @Inject constructor(
     private val auth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val providerDao: ProviderDao
 ) : ViewModel() {
 
     private val _registerState = MutableStateFlow<RegisterState>(RegisterState.Idle)
@@ -121,6 +125,9 @@ class PrestadorRegisterViewModel @Inject constructor(
                         )
                         
                         userDocRef.set(prestadorData).await()
+                        userDocRef.set(prestadorData).await()
+                        //Guardar en la base de datos local Room
+                        saveProviderToRoom(currentUser.uid, nombre, currentUser.email ?: email, telefono, servicios)
                     }
 
                     _registerState.value = RegisterState.Success
@@ -159,14 +166,44 @@ class PrestadorRegisterViewModel @Inject constructor(
                         .document(userId)
                         .set(prestadorData)
                         .await()
+                    //Guardar en la base de datos local Room
+                    saveProviderToRoom(userId, nombre, email, telefono, servicios)
 
                     _registerState.value = RegisterState.Success
+
                 }
 
             } catch (e: Exception) {
                 _registerState.value = RegisterState.Error(e.message ?: "Error al registrar")
             }
         }
+    }
+    
+    private suspend fun saveProviderToRoom(
+        id: String,
+        nombre: String,
+        email: String,
+        telefono: String,
+        servicios: List<String>
+    ) {
+        val gson = Gson()
+        val categoriesJson = gson.toJson(servicios)
+        
+        val providerEntity = ProviderEntity(
+            id = id,
+            name = nombre,
+            email = email,
+            phone = telefono,
+            imageUrl = null,
+            description = null,
+            address = null,
+            rating = 0f,
+            categories = categoriesJson,
+            isActive = true,
+            createdAt = System.currentTimeMillis()
+        )
+        
+        providerDao.insertProvider(providerEntity)
     }
 }
 

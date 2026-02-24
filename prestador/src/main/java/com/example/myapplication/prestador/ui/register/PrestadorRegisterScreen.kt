@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.prestador.ui.theme.*
+import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -46,8 +47,15 @@ fun PrestadorRegisterScreen(
     onBackToLogin: () -> Unit,
     viewModel: PrestadorRegisterViewModel = hiltViewModel()
 ) {
+    val colors = getPrestadorColors()
+    
     // Estados del formulario
     var nombre by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var dniCuit by remember { mutableStateOf("") }
+    var telefono by remember { mutableStateOf("") }
+    var profesion by remember { mutableStateOf("") }
     var matricula by remember { mutableStateOf("") }
     var pais by remember { mutableStateOf("Argentina") }
     var provincia by remember { mutableStateOf("") }
@@ -132,26 +140,48 @@ fun PrestadorRegisterScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrestadorOrange
+                    containerColor = colors.primaryOrange
                 )
             )
         },
         bottomBar = {
             Surface(
                 shadowElevation = 8.dp,
-                color = SurfaceWhite
+                color = colors.surfaceColor
             ) {
                 Button(
                     onClick = {
-                        // Validar y registrar
-                        // viewModel.register(...)
+                        viewModel.register(
+                            email = email,
+                            password = password,
+                            nombre = nombre,
+                            dniCuit = dniCuit,
+                            telefono = telefono,
+                            matricula = matricula,
+                            profesion = profesion,
+                            direccion = direccion,
+                            codigoPostal = codigoPostal,
+                            provincia = provincia,
+                            servicios = serviciosSeleccionados,
+                            tieneNegocio = tieneEmpresa,
+                            nombreNegocio = nombreEmpresa,
+                            razonSocial = razonSocial,
+                            cuitNegocio = cuit,
+                            direccionNegocio = "",
+                            codigoPostalNegocio = "",
+                            sucursales = sucursales.map { mapOf("direccion" to it.direccion, "codigoPostal" to it.codigoPostal) },
+                            isHomeService = vaDomicilio,
+                            is24Hours = atencionUrgencias,
+                            hasPhysicalStore = turnosEnLocal,
+                            hasStoreAppointments = turnosEnLocal
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp)
                         .height(56.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = PrestadorOrange
+                        containerColor = colors.primaryOrange
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -176,7 +206,7 @@ fun PrestadorRegisterScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(BackgroundLight),
+                .background(colors.backgroundColor),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
             // Foto de perfil
@@ -199,18 +229,71 @@ fun PrestadorRegisterScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
                     ) {
+                        // SIEMPRE VISIBLE: Nombre
                         FloatingLabelTextField(
                             value = nombre,
                             onValueChange = { nombre = it },
                             label = "Nombre Completo",
                             leadingIcon = Icons.Default.Person,
-                            enabled = personalSectionExpanded
+                            enabled = true
                         )
                         
                         Spacer(modifier = Modifier.height(20.dp))
                         
+                        // SIEMPRE VISIBLE: Email
+                        FloatingLabelTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = "Email",
+                            leadingIcon = Icons.Default.Email,
+                            keyboardType = KeyboardType.Email,
+                            enabled = true
+                        )
+                        
+                        Spacer(modifier = Modifier.height(20.dp))
+                        
+                        // RESTO DE CAMPOS - Solo visibles cuando se expande
                         AnimatedVisibility(visible = personalSectionExpanded) {
                             Column {
+                                FloatingLabelTextField(
+                                    value = password,
+                                    onValueChange = { password = it },
+                                    label = "Contraseña",
+                                    leadingIcon = Icons.Default.Lock,
+                                    visualTransformation = PasswordVisualTransformation()
+                                )
+                                
+                                Spacer(modifier = Modifier.height(20.dp))
+                                
+                                FloatingLabelTextField(
+                                    value = dniCuit,
+                                    onValueChange = { dniCuit = it },
+                                    label = "DNI / CUIT",
+                                    leadingIcon = Icons.Default.Badge,
+                                    keyboardType = KeyboardType.Number
+                                )
+                                
+                                Spacer(modifier = Modifier.height(20.dp))
+                                
+                                FloatingLabelTextField(
+                                    value = telefono,
+                                    onValueChange = { telefono = it },
+                                    label = "Teléfono",
+                                    leadingIcon = Icons.Default.Phone,
+                                    keyboardType = KeyboardType.Phone
+                                )
+                                
+                                Spacer(modifier = Modifier.height(20.dp))
+                                
+                                FloatingLabelTextField(
+                                    value = profesion,
+                                    onValueChange = { profesion = it },
+                                    label = "Profesión / Oficio",
+                                    leadingIcon = Icons.Default.Work
+                                )
+                                
+                                Spacer(modifier = Modifier.height(20.dp))
+                                
                                 FloatingLabelTextField(
                                     value = matricula,
                                     onValueChange = { matricula = it },
@@ -266,18 +349,17 @@ fun PrestadorRegisterScreen(
                                 )
                                 
                                 Spacer(modifier = Modifier.height(20.dp))
+                                
+                                FloatingLabelTextField(
+                                    value = direccion,
+                                    onValueChange = { direccion = it },
+                                    label = "Dirección (Calle y N°)",
+                                    leadingIcon = Icons.Default.Home
+                                )
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
                         }
-                        
-                        FloatingLabelTextField(
-                            value = direccion,
-                            onValueChange = { direccion = it },
-                            label = "Dirección (Calle y N°)",
-                            leadingIcon = Icons.Default.Home,
-                            enabled = personalSectionExpanded
-                        )
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
@@ -288,7 +370,7 @@ fun PrestadorRegisterScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp)
-                        .background(Color(0xFFF0F2F5))
+                        .background(colors.divider)
                 )
             }
             
@@ -301,7 +383,7 @@ fun PrestadorRegisterScreen(
                 ) {
                     Text(
                         "¿QUÉ SERVICIO PRESTAS?",
-                        color = OrangePrimary,
+                        color = colors.primaryOrange,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
@@ -338,7 +420,7 @@ fun PrestadorRegisterScreen(
                                     bottomEnd = 8.dp
                                 ),
                                 shadowElevation = 4.dp,
-                                color = Color.White
+                                color = colors.surfaceColor
                             ) {
                                 LazyColumn(
                                     modifier = Modifier
@@ -366,7 +448,7 @@ fun PrestadorRegisterScreen(
                     
                     Text(
                         "Servicios seleccionados:",
-                        color = TextSecondaryGray,
+                        color = colors.textSecondary,
                         fontSize = 12.sp
                     )
                     
@@ -472,6 +554,8 @@ fun ProfilePhotoSection(
     imageUri: Uri?,
     onCameraClick: () -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -485,15 +569,15 @@ fun ProfilePhotoSection(
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 shape = CircleShape,
-                color = Color(0xFFE9EDEF),
-                border = BorderStroke(1.dp, Color(0xFFDDDDDD))
+                color = colors.surfaceElevated,
+                border = BorderStroke(1.dp, colors.border)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.Default.Person,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
-                        tint = Color(0xFF8696A0)
+                        tint = colors.textSecondary
                     )
                 }
             }
@@ -506,7 +590,7 @@ fun ProfilePhotoSection(
                     .clickable { onCameraClick() },
                 shape = CircleShape,
                 shadowElevation = 4.dp,
-                color = PrestadorOrange
+                color = colors.primaryOrange
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -531,6 +615,8 @@ fun CollapsibleSection(
     onToggle: () -> Unit,
     content: @Composable () -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Column(modifier = Modifier.fillMaxWidth()) {
         // Header
         Row(
@@ -542,7 +628,7 @@ fun CollapsibleSection(
         ) {
             Text(
                 title,
-                color = OrangePrimary,
+                color = colors.primaryOrange,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp
@@ -550,13 +636,13 @@ fun CollapsibleSection(
             
             Surface(
                 shape = CircleShape,
-                color = if (isExpanded) OrangePrimary.copy(alpha = 0.1f) else Color.Transparent,
+                color = if (isExpanded) colors.primaryOrange.copy(alpha = 0.1f) else Color.Transparent,
                 modifier = Modifier.clickable { onToggle() }
             ) {
                 Icon(
                     if (isExpanded) Icons.Default.Check else Icons.Default.Edit,
                     contentDescription = if (isExpanded) "Guardar" else "Editar",
-                    tint = if (isExpanded) OrangePrimary else TextSecondaryGray,
+                    tint = if (isExpanded) colors.primaryOrange else colors.textSecondary,
                     modifier = Modifier.padding(4.dp)
                 )
             }
@@ -579,6 +665,7 @@ fun FloatingLabelTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
+    val colors = getPrestadorColors()
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val hasText = value.isNotEmpty()
@@ -593,7 +680,7 @@ fun FloatingLabelTextField(
                 Icon(
                     leadingIcon,
                     contentDescription = null,
-                    tint = TextSecondaryGray
+                    tint = colors.textSecondary
                 )
             },
             trailingIcon = trailingIcon?.let {
@@ -602,7 +689,7 @@ fun FloatingLabelTextField(
                         Icon(
                             it,
                             contentDescription = null,
-                            tint = TextSecondaryGray
+                            tint = colors.textSecondary
                         )
                     }
                 }
@@ -610,19 +697,19 @@ fun FloatingLabelTextField(
             label = {
                 Text(
                     label,
-                    color = if (isFocused) OrangePrimary else TextSecondaryGray,
+                    color = if (isFocused) colors.primaryOrange else colors.textSecondary,
                     fontSize = if (isFocused || hasText) 12.sp else 16.sp
                 )
             },
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = OrangePrimary,
-                unfocusedBorderColor = if (enabled) Color(0xFF8696A0) else Color.Transparent,
+                focusedBorderColor = colors.primaryOrange,
+                unfocusedBorderColor = if (enabled) colors.border else Color.Transparent,
                 disabledBorderColor = Color.Transparent,
-                focusedLabelColor = OrangePrimary,
-                unfocusedLabelColor = TextSecondaryGray,
-                focusedTextColor = TextPrimaryDark,
-                unfocusedTextColor = TextPrimaryDark,
-                disabledTextColor = TextPrimaryDark
+                focusedLabelColor = colors.primaryOrange,
+                unfocusedLabelColor = colors.textSecondary,
+                focusedTextColor = colors.textPrimary,
+                unfocusedTextColor = colors.textPrimary,
+                disabledTextColor = colors.textPrimary
             ),
             shape = RoundedCornerShape(8.dp),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
@@ -638,6 +725,8 @@ fun TooltipBubble(
     text: String,
     onDismiss: () -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     LaunchedEffect(Unit) {
         delay(4000)
         onDismiss()
@@ -647,7 +736,7 @@ fun TooltipBubble(
         shape = RoundedCornerShape(12.dp, 12.dp, 0.dp, 12.dp),
         shadowElevation = 8.dp,
         modifier = Modifier.width(200.dp),
-        color = PrestadorOrange
+        color = colors.primaryOrange
     ) {
         Box(
             modifier = Modifier.padding(10.dp)
@@ -669,6 +758,8 @@ fun ServiceChipsList(
     services: List<String>,
     onRemove: (String) -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     if (services.isEmpty()) {
         Box(
             modifier = Modifier
@@ -678,7 +769,7 @@ fun ServiceChipsList(
         ) {
             Text(
                 "No hay servicios seleccionados",
-                color = TextSecondaryGray,
+                color = colors.textSecondary,
                 fontSize = 14.sp,
                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
             )
@@ -705,6 +796,8 @@ fun ServiceChip(
     text: String,
     onRemove: () -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Surface(
         modifier = Modifier.wrapContentSize(),
         shape = RoundedCornerShape(10.dp),
@@ -734,7 +827,7 @@ fun ServiceChip(
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Eliminar",
-                        tint = OrangePrimary,
+                        tint = colors.primaryOrange,
                         modifier = Modifier.size(10.dp)
                     )
                 }
@@ -750,9 +843,11 @@ fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Column(modifier = Modifier.fillMaxWidth()) {
         Divider(
-            color = DividerLight,
+            color = colors.divider,
             modifier = Modifier.padding(top = 8.dp)
         )
         
@@ -769,12 +864,12 @@ fun SwitchRow(
                     title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Normal,
-                    color = TextPrimaryDark
+                    color = colors.textPrimary
                 )
                 Text(
                     subtitle,
                     fontSize = 12.sp,
-                    color = TextSecondaryGray,
+                    color = colors.textSecondary,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
@@ -783,8 +878,8 @@ fun SwitchRow(
                 checked = checked,
                 onCheckedChange = null,
                 colors = CheckboxDefaults.colors(
-                    checkedColor = OrangePrimary,
-                    uncheckedColor = Color(0xFF8696A0)
+                    checkedColor = colors.primaryOrange,
+                    uncheckedColor = colors.border
                 )
             )
         }
@@ -802,13 +897,15 @@ fun BusinessDetailsForm(
     sucursales: List<Sucursal>,
     onSucursalesChange: (List<Sucursal>) -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         shape = RoundedCornerShape(8.dp),
-        color = Color(0xFFFAFAFA),
-        border = BorderStroke(1.dp, Color(0xFFF0F0F0))
+        color = colors.surfaceElevated,
+        border = BorderStroke(1.dp, colors.border)
     ) {
         Column(
             modifier = Modifier
@@ -883,9 +980,9 @@ fun BusinessDetailsForm(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = OrangePrimary
+                    contentColor = colors.primaryOrange
                 ),
-                border = BorderStroke(1.dp, OrangePrimary),
+                border = BorderStroke(1.dp, colors.primaryOrange),
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Icon(
@@ -914,14 +1011,16 @@ fun BranchBlock(
     showDelete: Boolean,
     onDelete: () -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFFAFAFA))
+            .background(colors.surfaceElevated)
             .drawBehind {
                 // Dibujar línea izquierda naranja
                 drawRect(
-                    color = androidx.compose.ui.graphics.Color(0xFFF97316), // PrestadorOrange
+                    color = androidx.compose.ui.graphics.Color(0xFFF97316), // Keep orange for accent
                     topLeft = androidx.compose.ui.geometry.Offset(0f, 0f),
                     size = androidx.compose.ui.geometry.Size(12f, size.height)
                 )
@@ -935,7 +1034,7 @@ fun BranchBlock(
         ) {
             Text(
                 title,
-                color = PrestadorOrange,
+                color = colors.primaryOrange,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp,
@@ -947,7 +1046,7 @@ fun BranchBlock(
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Eliminar sucursal",
-                        tint = ErrorRed
+                        tint = colors.error
                     )
                 }
             }
@@ -984,10 +1083,12 @@ fun ServiceSelectionModal(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = SurfaceWhite,
+            color = colors.surfaceColor,
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.8f)
@@ -999,7 +1100,7 @@ fun ServiceSelectionModal(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(PrestadorOrange)
+                        .background(colors.primaryOrange)
                         .padding(16.dp)
                 ) {
                     Row(
@@ -1048,8 +1149,8 @@ fun ServiceSelectionModal(
                                 checked = isSelected,
                                 onCheckedChange = null,
                                 colors = CheckboxDefaults.colors(
-                                    checkedColor = OrangePrimary,
-                                    uncheckedColor = Color(0xFF8696A0)
+                                    checkedColor = colors.primaryOrange,
+                                    uncheckedColor = colors.border
                                 )
                             )
                             
@@ -1058,11 +1159,11 @@ fun ServiceSelectionModal(
                             Text(
                                 service,
                                 fontSize = 16.sp,
-                                color = TextPrimaryDark
+                                color = colors.textPrimary
                             )
                         }
                         
-                        Divider(color = Color(0xFFF0F2F5))
+                        Divider(color = colors.divider)
                     }
                 }
                 
@@ -1074,13 +1175,13 @@ fun ServiceSelectionModal(
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancelar", color = OrangePrimary)
+                        Text("Cancelar", color = colors.primaryOrange)
                     }
                     
                     Button(
                         onClick = onConfirm,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = PrestadorOrange
+                            containerColor = colors.primaryOrange
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -1098,11 +1199,13 @@ fun SuggestionItem(
     text: String,
     onClick: () -> Unit
 ) {
+    val colors = getPrestadorColors()
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .background(Color.White)
+            .background(colors.surfaceColor)
     ) {
         Row(
             modifier = Modifier
@@ -1114,20 +1217,20 @@ fun SuggestionItem(
             Text(
                 text = text,
                 fontSize = 16.sp,
-                color = TextPrimaryDark,
+                color = colors.textPrimary,
                 modifier = Modifier.weight(1f)
             )
             
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Agregar",
-                tint = PrestadorOrange,
+                tint = colors.primaryOrange,
                 modifier = Modifier.size(20.dp)
             )
         }
         
         Divider(
-            color = Color(0xFFF0F2F5),
+            color = colors.divider,
             thickness = 1.dp
         )
     }

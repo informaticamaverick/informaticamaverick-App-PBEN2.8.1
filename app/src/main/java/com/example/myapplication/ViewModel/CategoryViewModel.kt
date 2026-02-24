@@ -1,9 +1,9 @@
-package com.example.myapplication.ViewModel
+package com.example.myapplication.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.Data.Model.Category
-import com.example.myapplication.Data.Repository.CategoryRepository
+import com.example.myapplication.data.model.Category
+import com.example.myapplication.data.repository.CategoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -101,3 +101,8 @@ class CategoryViewModel @Inject constructor(
             ?.id
     }
 }
+
+/**
+ * CategoryViewModel: Gestiona categorías de servicios (Electricista, Plomero, etc.),
+ * permite cargar, buscar, agregar categorías y poblar Firebase con datos iniciales.
+ */

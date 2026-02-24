@@ -2,8 +2,17 @@ package com.example.myapplication.prestador.ui.calendar
 
 import android.R
 import android.app.DatePickerDialog
+import android.app.Service
 import android.app.TimePickerDialog
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -43,6 +52,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.myapplication.prestador.data.local.entity.AppointmentEntity
+import com.example.myapplication.prestador.data.model.ServiceType
+import com.example.myapplication.prestador.ui.appointments.CreateAppointmentDialog
+import com.example.myapplication.prestador.ui.theme.getPrestadorColors
+import com.example.myapplication.prestador.utils.getServiceTypeConfig
+import com.example.myapplication.prestador.viewmodel.RentalSpacesViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
@@ -57,6 +73,7 @@ import java.util.*
 // Modelo de datos para las citas del prestador
 data class Appointment(
     val id: String,
+    val clientId: String, // ID del cliente para navegación
     val date: String, // Formato "yyyy-MM-dd"
     val time: String, // Ej: "10:30"
     val service: String,
@@ -68,25 +85,26 @@ data class Appointment(
 enum class AppointmentStatus {
     CONFIRMED,    // Confirmada
     PENDING,      // Pendiente
-    CANCELLED     // Cancelada
+    CANCELLED,    // Cancelada
+    COMPLETED     // Completada
 }
 
 // Datos de ejemplo (luego los conectaremos con Firebase)
 val SAMPLE_APPOINTMENTS = listOf(
-    Appointment("1", "2026-01-23", "10:30",
-        "Instalación Eléctrica", "Juan Pérez",
-        AppointmentStatus.CONFIRMED,
+    Appointment("apt_maria_001", "cliente_001", "2026-02-21", "15:00",
+        "Sesión de corte y color", "María González",
+        AppointmentStatus.PENDING,
         Color(0xFF6366F1)),
-    Appointment("2", "2026-01-23", "14:00",
-        "Reparación Plomería", "María García",
-        AppointmentStatus.PENDING, Color(0xFFEC4899)),
-    Appointment("3", "2026-01-25", "09:00",
-        "Pintura de Fachada", "Carlos López",
-        AppointmentStatus.CONFIRMED,
+    Appointment("apt_carlos_001", "cliente_002", "2026-02-24", "10:00",
+        "Corte de cabello", "Carlos Rodríguez",
+        AppointmentStatus.CONFIRMED, Color(0xFFEC4899)),
+    Appointment("apt_ana_001", "cliente_003", "2026-02-25", "14:00",
+        "Peinado para evento", "Ana López",
+        AppointmentStatus.PENDING,
         Color(0xFF10B981)),
-    Appointment("4", "2026-01-25", "16:30",
-        "Revisión HVAC", "Ana Martínez",
-        AppointmentStatus.PENDING, Color(0xFFF59E0B))
+    Appointment("apt_juan_001", "cliente_004", "2026-02-27", "11:30",
+        "Corte y barba", "Juan Pérez",
+        AppointmentStatus.CONFIRMED, Color(0xFFF59E0B))
 )
 
 
@@ -95,8 +113,35 @@ val SAMPLE_APPOINTMENTS = listOf(
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PrestadorCalendarScreen(
-    onBack: () -> Unit = {}
+    onNavigateToChat: (clientId: String, clientName: String, newDate: String, newTime: String, appointmentId: String) -> Unit,
+    onNavigateToPresupuesto: (appointmentId: String) -> Unit = {},
+    onBack: () -> Unit = {},
+    appointmentViewModel: com.example.myapplication.prestador.viewmodel.AppointmentViewModel = hiltViewModel(),
+    editProfileViewModel: com.example.myapplication.prestador.viewmodel.EditProfileViewModel = hiltViewModel(),
+    rentalSpacesViewModel: RentalSpacesViewModel = hiltViewModel(),
+    empleadosViewModel: com.example.myapplication.prestador.viewmodel.EmpleadosViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
+    // Obtener estado del perfil
+    val profileState by editProfileViewModel.profileState.collectAsState()
+    
+    // Obtener configuración según tipo de servicio del provider (REACTIVO)
+    val serviceTypeConfig by remember {
+        derivedStateOf {
+            when (profileState) {
+                is com.example.myapplication.prestador.viewmodel.ProfileState.Success -> {
+                    val provider = (profileState as com.example.myapplication.prestador.viewmodel.ProfileState.Success).provider
+                    println("🔥 CALENDAR: ServiceType cambió a ${provider.serviceType}")
+                    getServiceTypeConfig(ServiceType.fromString(provider.serviceType))
+                }
+                else -> {
+                    println("⚠️ CALENDAR: ProfileState = $profileState")
+                    getServiceTypeConfig(ServiceType.PROFESSIONAL) // Default mientras carga
+                }
+            }
+        }
+    }
+    
     // Paginación infinita para deslizar entre meses
     val indiceInicial = 5000
     val pagerState = rememberPagerState(
@@ -119,18 +164,16 @@ fun PrestadorCalendarScreen(
         currentDate = newDate
     }
     
-    //Lista de citas
-    var appointments by remember { mutableStateOf(SAMPLE_APPOINTMENTS) }
+    // 🎯 CARGAR CITAS DESDE ROOM DATABASE
+    val appointmentsFromDb by appointmentViewModel.appointments.collectAsState()
+    
     //Formato de fecha para la comparacion
     val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     //Filtrar citas del dia seleccionado
     val selectedDateStr = dateFormat.format(selectedDate.time)
-    val appointmentsForSelectedDay = appointments.filter { it.date == selectedDateStr }
-    //dias que tienen citas
-    val daysWithAppointments = appointments.filter { it.status != AppointmentStatus.CANCELLED }.map { it.date }.toSet()
     
-    // Estado para controlar si la lista de citas está expandida
-    var isExpanded by remember { mutableStateOf(false) }
+    // Estado para controlar si la lista de citas está expandida (calendario minimizado)
+    var isExpanded by remember { mutableStateOf(true) }
     
     // Estados para el modal de cancelación
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -139,8 +182,109 @@ fun PrestadorCalendarScreen(
     // Estados para el modal de reprogramación
     var showRescheduleDialog by remember { mutableStateOf(false) }
     var appointmentToReschedule by remember { mutableStateOf<Appointment?>(null) }
+
+    // Estado para el modal de edición
+    var showEditDialog by remember { mutableStateOf(false) }
+    var appointmentEntityToEdit by remember { mutableStateOf<com.example.myapplication.prestador.data.local.entity.AppointmentEntity?>(null) }
+
+    // Estado para el modal de crear cita
+    var showCreateDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScopeSnackbar = rememberCoroutineScope()
+
+    // Obtener providerId del perfil
+    val providerId = remember(profileState) {
+        when (profileState) {
+            is com.example.myapplication.prestador.viewmodel.ProfileState.Success ->
+                (profileState as com.example.myapplication.prestador.viewmodel.ProfileState.Success).provider.id
+            else -> ""
+        }
+    }
+
+    // Obtener serviceType actual
+    val currentServiceType = remember(profileState) {
+        when (profileState) {
+            is com.example.myapplication.prestador.viewmodel.ProfileState.Success ->
+                ServiceType.fromString((profileState as com.example.myapplication.prestador.viewmodel.ProfileState.Success).provider.serviceType)
+            else -> ServiceType.PROFESSIONAL
+        }
+    }
+
+    // Transformar AppointmentEntity a Appointment (modelo local)
+    val appointments = remember(appointmentsFromDb, currentServiceType) {
+        appointmentsFromDb
+            .filter { it.serviceType == currentServiceType.name }
+            .map { entity ->
+            Appointment(
+                id = entity.id,
+                clientId = entity.clientId,
+                date = entity.date,
+                time = entity.time,
+                service = entity.service,
+                clientName = entity.clientName,
+                status = when (entity.status) {
+                    "confirmed" -> AppointmentStatus.CONFIRMED
+                    "pending" -> AppointmentStatus.PENDING
+                    "cancelled" -> AppointmentStatus.CANCELLED
+                    "completed" -> AppointmentStatus.COMPLETED
+                    else -> AppointmentStatus.PENDING
+                },
+                avatarColor = generateColorFromId(entity.clientId)
+            )
+        }
+    }
+
+    //Filtrar citas del dia seleccionado
+    val appointmentsForSelectedDay = appointments.filter { it.date == selectedDateStr }
+    //dias que tienen citas
+    val daysWithAppointments = appointments.filter { it.status != AppointmentStatus.CANCELLED }.map { it.date }.toSet()
+
+    // Cargar espacios si es RENTAL
+    LaunchedEffect(providerId, currentServiceType) {
+        if (currentServiceType == ServiceType.RENTAL && providerId.isNotBlank()) {
+            rentalSpacesViewModel.setProviderId(providerId)
+        }
+    }
+
+    val rentalSpaces by rentalSpacesViewModel.rentalSpaces.collectAsState()
+    val availableSpaces = remember(rentalSpaces) {
+        rentalSpaces.filter { it.isActive }.map { it.id to it.name }
+    }
+
+    //Cargar slots cuando se abre el dialogo y es professional
+    val availableSlots by appointmentViewModel.availabilitySlots.collectAsState()
+    LaunchedEffect(showCreateDialog,
+        currentServiceType, selectedDateStr) {
+        if (showCreateDialog && currentServiceType == ServiceType.PROFESSIONAL && providerId.isNotBlank()){
+            appointmentViewModel.loadAvailabilitySlots(providerId, selectedDateStr)
+
+    }
+    }
+
+    //Cargar empleados para TECHNICAL
+    val empleadosState by empleadosViewModel.uiState.collectAsState()
+    val availableEmployees = remember(empleadosState) {
+        when (val state = empleadosState) {
+            is com.example.myapplication.prestador.viewmodel.EmpleadosUiState.Success ->
+                state.empleados.filter { it.activo }.map { it.id to it.nombreCompleto() }
+            else -> emptyList()
+        }
+    }
     
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showCreateDialog = true },
+                containerColor = Color(0xFFFF6B35),
+                contentColor = Color.White
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = serviceTypeConfig.createAction
+                )
+            }
+        },
         topBar = {
             Box(
                 modifier = Modifier
@@ -157,7 +301,7 @@ fun PrestadorCalendarScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            "Mis Citas",
+                            serviceTypeConfig.calendarTitle,
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp,
                             color = Color.White
@@ -222,6 +366,7 @@ fun PrestadorCalendarScreen(
                             daysWithAppointments = daysWithAppointments,
                             onDateSelected = { newDate ->
                                 selectedDate = newDate
+                                isExpanded = true // Minimizar calendario automáticamente
                             }
                         )
                     }
@@ -230,24 +375,42 @@ fun PrestadorCalendarScreen(
                 }
             }
             
-            // Lista de citas del día seleccionado
+            // Lista de citas (todas del tipo, el componente filtra internamente)
             AppointmentsList(
-                appointments = appointmentsForSelectedDay,
+                appointments = appointments,
                 selectedDate = selectedDate,
                 isExpanded = isExpanded,
+                serviceTypeConfig = serviceTypeConfig,
                 onExpandClick = { isExpanded = !isExpanded },
                 onReschedule = { appointmentId ->
-                    // Encontar la cita a reprogramar
-                    val  appointment = appointments.find { it.id == appointmentId }
-                    if (appointment != null) {
-                        appointmentToReschedule = appointment
-                        showRescheduleDialog = true
+                    val entity = appointmentsFromDb.find { it.id == appointmentId }
+                    if (entity != null) {
+                        appointmentEntityToEdit = entity
+                        showEditDialog = true
                     }
                 },
 
                 onCancel = { appointmentId ->
                     appointmentToCancel = appointmentId
                     showCancelDialog = true
+                },
+                onConfirm = { appointmentId ->
+                    coroutineScope.launch {
+                        appointmentViewModel.confirmAppointment(appointmentId)
+                        // Programar recordatorios al confirmar
+                        appointmentsFromDb.find { it.id == appointmentId }?.let {
+                            com.example.myapplication.prestador.utils.AppointmentReminderScheduler.schedule(context, it)
+                        }
+                    }
+                },
+                onComplete = { appointmentId ->
+                    coroutineScope.launch {
+                        appointmentViewModel.completeAppointment(appointmentId)
+                        com.example.myapplication.prestador.utils.AppointmentReminderScheduler.cancel(context, appointmentId)
+                    }
+                },
+                onGenerarPresupuesto = { appointmentId, _ ->
+                    onNavigateToPresupuesto(appointmentId)
                 }
             )
         }
@@ -256,11 +419,12 @@ fun PrestadorCalendarScreen(
     // Diálogo de confirmación de cancelación
     if (showCancelDialog) {
         CancelAppointmentDialog(
+            serviceTypeConfig = serviceTypeConfig,
             onConfirm = {
                 appointmentToCancel?.let { id ->
-                    appointments = appointments.map {
-                        if (it.id == id) it.copy(status = AppointmentStatus.CANCELLED)
-                        else it
+                    coroutineScope.launch {
+                        appointmentViewModel.cancelAppointment(id)
+                        com.example.myapplication.prestador.utils.AppointmentReminderScheduler.cancel(context, id)
                     }
                 }
                 showCancelDialog = false
@@ -282,28 +446,121 @@ fun PrestadorCalendarScreen(
                 appointmentToReschedule = null
             },
             onConfirm = { newDate, newTime ->
-                // Actualizar la cita con la nueva fecha y hora
-                appointments = appointments.map { appointment ->
-                    if (appointment.id == appointmentToReschedule?.id) {
-                        appointment.copy(date = newDate, time = newTime)
-                    } else {
-                        appointment
-                    }
-                }
+                println("🟣 Reprogramación confirmada - Nueva fecha: $newDate, hora: $newTime")
+                println("🟣 Navegando al chat con nueva fecha/hora")
+                println("🟣 ClientId: ${appointmentToReschedule?.clientId}, Nombre: ${appointmentToReschedule?.clientName}")
+                println("🟣 AppointmentId ORIGINAL: ${appointmentToReschedule?.id}")
                 
-                // Actualizar la fecha seleccionada para mostrar el nuevo día
-                val dateParts = newDate.split("-")
-                val newCalendar = Calendar.getInstance()
-                newCalendar.set(
-                    dateParts[0].toInt(),
-                    dateParts[1].toInt() - 1,
-                    dateParts[2].toInt()
+                // Navegar al chat con los datos de la reprogramación
+                onNavigateToChat(
+                    appointmentToReschedule!!.clientId,
+                    appointmentToReschedule!!.clientName,
+                    newDate,
+                    newTime,
+                    appointmentToReschedule!!.id  // ✅ Pasar ID original de la cita
                 )
-                selectedDate = newCalendar
                 
                 showRescheduleDialog = false
                 appointmentToReschedule = null
             }
+        )
+    }
+
+    // Diálogo de editar cita existente
+    if (showEditDialog && appointmentEntityToEdit != null) {
+        val entity = appointmentEntityToEdit!!
+        CreateAppointmentDialog(
+            serviceType = currentServiceType,
+            onDismiss = { showEditDialog = false; appointmentEntityToEdit = null },
+            onConfirm = { clientName, service, date, time, duration, rentalSpaceId, scheduleId, notes, assignedEmployeeIds, peopleCount ->
+                val updated = entity.copy(
+                    clientName = clientName,
+                    service = service,
+                    date = date,
+                    time = time,
+                    duration = duration,
+                    rentalSpaceId = rentalSpaceId,
+                    scheduleId = scheduleId,
+                    notes = notes,
+                    assignedEmployeeIds = assignedEmployeeIds,
+                    peopleCount = peopleCount,
+                    status = "pending",
+                    updatedAt = System.currentTimeMillis()
+                )
+                appointmentViewModel.updateAppointment(updated)
+
+                // Notificar al cliente por chat
+                val rescheduleMessage = com.example.myapplication.prestador.data.model.Message(
+                    id = "msg_reschedule_${System.currentTimeMillis()}_${entity.clientId}",
+                    text = "Propuesta de cambio de cita",
+                    timestamp = System.currentTimeMillis(),
+                    isFromCurrentUser = true,
+                    type = com.example.myapplication.prestador.data.model.Message.MessageType.APPOINTMENT,
+                    appointmentDate = date,
+                    appointmentTime = time,
+                    appointmentId = entity.id,
+                    appointmentStatus = com.example.myapplication.prestador.data.model.Message.AppointmentProposalStatus.PENDING,
+                    appointmentTitle = service
+                )
+                com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(entity.clientId, rescheduleMessage)
+
+                showEditDialog = false
+                appointmentEntityToEdit = null
+            },
+            colors = com.example.myapplication.prestador.ui.theme.getPrestadorColors(),
+            availableSpaces = availableSpaces,
+            availableSlots = availableSlots,
+            availableEmployees = if (currentServiceType == ServiceType.TECHNICAL) availableEmployees else emptyList(),
+            initialClientName = entity.clientName,
+            initialService = entity.service,
+            initialDate = entity.date,
+            initialTime = entity.time,
+            initialDuration = entity.duration,
+            initialNotes = entity.notes,
+            initialPeopleCount = entity.peopleCount ?: 1,
+            isEditMode = true
+        )
+    }
+
+    // Diálogo de crear nueva cita/servicio/reserva
+    if (showCreateDialog) {
+        CreateAppointmentDialog(
+            serviceType = currentServiceType,
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { clientName, service, date, time, duration, rentalSpaceId, scheduleId, notes, assignedEmployeeIds, peopleCount ->
+                val newAppointment = AppointmentEntity(
+                    id = java.util.UUID.randomUUID().toString(),
+                    clientId = "",
+                    clientName = clientName,
+                    providerId = providerId,
+                    service = service,
+                    date = date,
+                    time = time,
+                    duration = duration,
+                    status = "pending",
+                    notes = notes,
+                    serviceType = currentServiceType.name,
+                    rentalSpaceId = rentalSpaceId,
+                    scheduleId = scheduleId,
+                    assignedEmployeeIds = assignedEmployeeIds,
+                    peopleCount = peopleCount
+                )
+                appointmentViewModel.validateAndSave(
+                    appointment = newAppointment,
+                    serviceType = currentServiceType,
+                    onSuccess = { showCreateDialog = false },
+                    onError = { msg ->
+                        coroutineScopeSnackbar.launch {
+                            snackbarHostState.showSnackbar(msg)
+                        }
+                    }
+                )
+            },
+            colors = getPrestadorColors(),
+            availableSpaces = availableSpaces,
+            availableSlots = availableSlots,
+            availableEmployees = if (currentServiceType == ServiceType.TECHNICAL)
+            availableEmployees else emptyList()
         )
     }
 }
@@ -533,9 +790,13 @@ fun AppointmentsList(
     appointments: List<Appointment>,
     selectedDate: Calendar,
     isExpanded: Boolean,
+    serviceTypeConfig: com.example.myapplication.prestador.utils.ServiceTypeConfig,
     onExpandClick: () -> Unit,
     onReschedule: (String) -> Unit,
-    onCancel: (String) -> Unit
+    onCancel: (String) -> Unit,
+    onConfirm: (String) -> Unit = {},
+    onComplete: (String) -> Unit = {},
+    onGenerarPresupuesto: (appointmentId: String, clientName: String) -> Unit = { _, _ -> }
 ) {
     val dateFormat = SimpleDateFormat("d 'de' MMMM", Locale.getDefault())
     val monthNames = listOf(
@@ -543,16 +804,34 @@ fun AppointmentsList(
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
     )
 
+    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Calendar.getInstance().time)
+
+    // Separar en próximas (pending/confirmed con fecha >= hoy) e historial (completed/cancelled o pasadas)
+    val upcoming = appointments.filter {
+        (it.status == AppointmentStatus.PENDING || it.status == AppointmentStatus.CONFIRMED) && it.date >= today
+    }.sortedBy { it.date + it.time }
+
+    val history = appointments.filter {
+        it.status == AppointmentStatus.COMPLETED || it.status == AppointmentStatus.CANCELLED ||
+        ((it.status == AppointmentStatus.PENDING || it.status == AppointmentStatus.CONFIRMED) && it.date < today)
+    }.sortedByDescending { it.date + it.time }
+
+    var selectedTab by remember { mutableStateOf(0) }
+    val displayList = if (selectedTab == 0) upcoming else history
+
+    // Estado para controlar qué cita está expandida (solo una a la vez)
+    var expandedAppointmentId by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // Título con botón expandir/minimizar
+        // Header con fecha del día seleccionado y toggle expandir
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
+                .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -564,7 +843,11 @@ fun AppointmentsList(
                     color = Color(0xFF1F2937)
                 )
                 Text(
-                    text = if (appointments.isEmpty()) "Sin citas" else "${appointments.size} cita${if (appointments.size != 1) "s" else ""}",
+                    text = if (appointments.isEmpty()) {
+                        "Sin ${serviceTypeConfig.appointmentsName}"
+                    } else {
+                        "${appointments.size} ${if (appointments.size == 1) serviceTypeConfig.appointmentName else serviceTypeConfig.appointmentsName}"
+                    },
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF6B7280)
@@ -579,50 +862,108 @@ fun AppointmentsList(
             )
         }
 
-        if (appointments.isEmpty()) {
-            // sin citas
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
+        // Tabs Próximas / Historial
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Próximas" to upcoming.size, "Historial" to history.size).forEachIndexed { index, (label, count) ->
+                val isSelected = selectedTab == index
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { selectedTab = index; expandedAppointmentId = null },
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) Color(0xFFFF6B35) else Color(0xFFF3F4F6)
                 ) {
-                    // Ícono de calendario personalizado
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .border(2.dp, Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
-                            .padding(8.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "📅",
-                            fontSize = 32.sp
+                            text = label,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) Color.White else Color(0xFF6B7280)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isSelected) Color.White.copy(alpha = 0.3f) else Color(0xFFE5E7EB)
+                        ) {
+                            Text(
+                                text = count.toString(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else Color(0xFF9CA3AF),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "No hay citas para este día",
-                        fontSize = 14.sp,
-                        color = Color(0xFF9CA3AF),
-                        textAlign = TextAlign.Center
-                    )
                 }
             }
-        } else {
-            // Lista de citas
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(appointments) { appointment ->
-                    AppointmentCard(
-                        appointment = appointment,
-                        onReschedule = onReschedule,
-                        onCancel = onCancel
-                    )
+        }
+
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = {
+                val direction = if (targetState > initialState) 1 else -1
+                (slideInHorizontally { it * direction } + fadeIn(tween(250))) togetherWith
+                (slideOutHorizontally { -it * direction } + fadeOut(tween(200)))
+            },
+            label = "tab_content"
+        ) { tab ->
+            val list = if (tab == 0) upcoming else history
+            if (list.isEmpty()) {
+                // sin citas
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .border(2.dp, Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = if (tab == 0) "📅" else "🗂️", fontSize = 32.sp)
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = if (tab == 0)
+                                "No hay ${serviceTypeConfig.appointmentsName} próximas"
+                            else
+                                "Sin historial de ${serviceTypeConfig.appointmentsName}",
+                            fontSize = 14.sp,
+                            color = Color(0xFF9CA3AF),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(list) { appointment ->
+                        AppointmentCard(
+                            appointment = appointment,
+                            isExpanded = expandedAppointmentId == appointment.id,
+                            onToggleExpand = {
+                                expandedAppointmentId = if (expandedAppointmentId == appointment.id) null else appointment.id
+                            },
+                            serviceTypeConfig = serviceTypeConfig,
+                            onReschedule = onReschedule,
+                            onCancel = onCancel,
+                            onConfirm = onConfirm,
+                            onComplete = onComplete,
+                            onGenerarPresupuesto = onGenerarPresupuesto
+                        )
+                    }
                 }
             }
         }
@@ -635,11 +976,19 @@ fun AppointmentsList(
 @Composable
 fun AppointmentCard(
     appointment: Appointment,
+    isExpanded: Boolean = false,
+    onToggleExpand: () -> Unit = {},
+    serviceTypeConfig: com.example.myapplication.prestador.utils.ServiceTypeConfig,
     onReschedule: (String) -> Unit = {},
-    onCancel: (String) -> Unit = {}
+    onCancel: (String) -> Unit = {},
+    onConfirm: (String) -> Unit = {},
+    onComplete: (String) -> Unit = {},
+    onGenerarPresupuesto: (appointmentId: String, clientName: String) -> Unit = { _, _ -> }
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggleExpand() },
         shape = RoundedCornerShape(12.dp),
         color = Color.White,
         shadowElevation = 2.dp
@@ -703,13 +1052,15 @@ fun AppointmentCard(
                         AppointmentStatus.CONFIRMED -> Color(0xFF10B981).copy(alpha = 0.1f)
                         AppointmentStatus.PENDING -> Color(0xFFF59E0B).copy(alpha = 0.1f)
                         AppointmentStatus.CANCELLED -> Color(0xFFEF4444).copy(alpha = 0.1f)
+                        AppointmentStatus.COMPLETED -> Color(0xFF6366F1).copy(alpha = 0.1f)
                     }
                 ) {
                     Text(
                         text = when (appointment.status) {
-                            AppointmentStatus.CONFIRMED -> "Confirmada"
-                            AppointmentStatus.PENDING -> "Pendiente"
-                            AppointmentStatus.CANCELLED -> "Cancelada"
+                            AppointmentStatus.CONFIRMED -> serviceTypeConfig.confirmedStatus
+                            AppointmentStatus.PENDING -> serviceTypeConfig.pendingStatus
+                            AppointmentStatus.CANCELLED -> serviceTypeConfig.cancelledStatus
+                            AppointmentStatus.COMPLETED -> "Completada"
                         },
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
@@ -717,53 +1068,112 @@ fun AppointmentCard(
                             AppointmentStatus.CONFIRMED -> Color(0xFF10B981)
                             AppointmentStatus.PENDING -> Color(0xFFF59E0B)
                             AppointmentStatus.CANCELLED -> Color(0xFFEF4444)
+                            AppointmentStatus.COMPLETED -> Color(0xFF6366F1)
                         },
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
             
-            // Botones de acción (solo si no está cancelada)
-            if (appointment.status != AppointmentStatus.CANCELLED) {
-                HorizontalDivider(color = Color(0xFFF3F4F6))
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Botón Reprogramar
-                    Button(
-                        onClick = { onReschedule(appointment.id) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF6B35)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "Reprogramar",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+            // Botones de acción (solo si está expandida y no está cancelada ni completada)
+            AnimatedVisibility(
+                visible = isExpanded && appointment.status != AppointmentStatus.CANCELLED && appointment.status != AppointmentStatus.COMPLETED,
+                enter = expandVertically(
+                    animationSpec = tween(300),
+                    expandFrom = Alignment.Top
+                ) + fadeIn(animationSpec = tween(300)),
+                exit = shrinkVertically(
+                    animationSpec = tween(300),
+                    shrinkTowards = Alignment.Top
+                ) + fadeOut(animationSpec = tween(300))
+            ) {
+                Column {
+                    HorizontalDivider(color = Color(0xFFF3F4F6))
                     
-                    // Botón Cancelar
-                    OutlinedButton(
-                        onClick = { onCancel(appointment.id) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFFEF4444)
-                        ),
-                        border = BorderStroke(1.dp, Color(0xFFEF4444)),
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "Cancelar",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        val btnPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        val btnModifier = Modifier.weight(1f).height(36.dp)
+
+                        // Botón Confirmar (solo si está pendiente)
+                        if (appointment.status == AppointmentStatus.PENDING) {
+                            Button(
+                                onClick = { onConfirm(appointment.id) },
+                                modifier = btnModifier,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = btnPadding
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(text = "Confirmar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Botón Completar (solo si está confirmada)
+                        if (appointment.status == AppointmentStatus.CONFIRMED) {
+                            Button(
+                                onClick = { onComplete(appointment.id) },
+                                modifier = btnModifier,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1)),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = btnPadding
+                            ) {
+                                Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(text = "Completar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Botón Presupuesto (pending o confirmed)
+                        Button(
+                            onClick = { onGenerarPresupuesto(appointment.id, appointment.clientName) },
+                            modifier = btnModifier,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = btnPadding
+                        ) {
+                            Icon(Icons.Default.AttachMoney, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(text = "Presupuesto", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Botón Reprogramar
+                        Button(
+                            onClick = { onReschedule(appointment.id) },
+                            modifier = btnModifier,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6B35)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = btnPadding
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(text = serviceTypeConfig.rescheduleAction, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Botón Cancelar
+                        OutlinedButton(
+                            onClick = { onCancel(appointment.id) },
+                            modifier = btnModifier,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                            border = BorderStroke(1.dp, Color(0xFFEF4444)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = btnPadding
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(text = serviceTypeConfig.cancelAction, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
@@ -776,6 +1186,7 @@ fun AppointmentCard(
  */
 @Composable
 fun CancelAppointmentDialog(
+    serviceTypeConfig: com.example.myapplication.prestador.utils.ServiceTypeConfig,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -817,7 +1228,7 @@ fun CancelAppointmentDialog(
 
                 // Título
                 Text(
-                    text = "¿Cancelar Cita?",
+                    text = "¿${serviceTypeConfig.cancelAction}?",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF1F2937),
@@ -828,7 +1239,7 @@ fun CancelAppointmentDialog(
 
                 // Descripción
                 Text(
-                    text = "Esta acción eliminará la cita programada. ¿Estás seguro de que quieres continuar?",
+                    text = "Esta acción eliminará la ${serviceTypeConfig.appointmentName} programada. ¿Estás seguro de que quieres continuar?",
                     fontSize = 14.sp,
                     color = Color(0xFF6B7280),
                     textAlign = TextAlign.Center,
@@ -852,7 +1263,7 @@ fun CancelAppointmentDialog(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "Sí, cancelar cita",
+                            text = "Sí, ${serviceTypeConfig.cancelAction.lowercase()}",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(vertical = 4.dp)
@@ -1334,4 +1745,22 @@ fun CustomTimePickerDialog(
             }
         }
     }
+}
+
+
+// Función helper para generar color único basado en clientId
+private fun generateColorFromId(clientId: String): Color {
+    val colors = listOf(
+        Color(0xFF6366F1), // Indigo
+        Color(0xFFEC4899), // Pink
+        Color(0xFF10B981), // Green
+        Color(0xFFF59E0B), // Amber
+        Color(0xFF8B5CF6), // Purple
+        Color(0xFF06B6D4), // Cyan
+        Color(0xFFEF4444), // Red
+        Color(0xFF14B8A6)  // Teal
+    )
+    val hash = clientId.hashCode()
+    val index = kotlin.math.abs(hash) % colors.size
+    return colors[index]
 }

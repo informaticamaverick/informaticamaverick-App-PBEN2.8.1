@@ -1,6 +1,8 @@
 package com.example.myapplication.prestador.ui.dashboard
 
+import android.os.Build
 import android.provider.CalendarContract
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -10,8 +12,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.Modifier
@@ -25,31 +29,64 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.prestador.ui.chat.PrestadorChatScreen
 import com.example.myapplication.prestador.ui.calendar.PrestadorCalendarScreen
+import com.example.myapplication.prestador.ui.presupuesto.PresupuestosScreen
+import com.example.myapplication.prestador.ui.theme.getPrestadorColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun PreviewDashboard() {
-    MaterialTheme {
-        PrestadorDashboardScreen(
-            onNavigateToEditProfile = {},
-            onNavigateToServiceConfig = {},
-            onLogout = {}
-        )
-    }
+    // Preview sin ViewModel (no es posible testearlo con Hilt)
+    // MaterialTheme {
+    //     PrestadorDashboardScreen(...)
+    // }
 }
 
 @Composable
 fun PrestadorDashboardScreen(
     onNavigateToEditProfile: () -> Unit = {},
     onNavigateToServiceConfig: () -> Unit = {},
-    onLogout: () -> Unit = {}, // Nuevo parametro
-    onNavigateToPresupuesto: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onNavigateToPresupuesto: () -> Unit = {},
+    onNavigateToPresupuestoCita: (appointmentId: String) -> Unit = {},
+    onNavigateToPresupuestos: () -> Unit = {},
+    onNavigateToPromotion: () -> Unit = {},
+    onNavigateToPromotionList: () -> Unit = {},
+    onNavigateToThemeDemo: () -> Unit = {},
+    chatSimulationViewModel: com.example.myapplication.prestador.viewmodel.ChatSimulationViewModel  // Pasar ViewModel
 ) {
-    var selectedTab by remember { mutableStateOf(2) } // Inicia en Home (2)
+    val colors = getPrestadorColors()
+    var selectedTab by rememberSaveable { mutableStateOf(2) } // Inicia en Home (2), persiste en navegación
     var isInConversation by remember { mutableStateOf(false) }
+    var targetChatUserId by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope() // Para manejar delays
+
 
     Scaffold(
+        floatingActionButton = {
+            // Mostrar FAB solo en Home (tab 2) y no en conversación
+            if (selectedTab == 2 && !isInConversation) {
+                FloatingActionButton(
+                    onClick = onNavigateToPromotion,
+                    containerColor = colors.primaryOrange,
+                    contentColor = Color.White,
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 6.dp,
+                        pressedElevation = 12.dp
+                    ),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Campaign,
+                        contentDescription = "Crear promoción",
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+        },
         bottomBar = {
             // Ocultar barra de navegación cuando se está en una conversación individual
             if (!(selectedTab == 3 && isInConversation)) {
@@ -64,7 +101,7 @@ fun PrestadorDashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color(0xFFFFF8F3))
+                .background(colors.backgroundColor)
         ) {
             // Animación suave al cambiar de tab
             AnimatedContent(
@@ -79,20 +116,69 @@ fun PrestadorDashboardScreen(
             ) { currentTab ->
                 // Contenido según el tab seleccionado
                 when (currentTab) {
-                    0 -> PresupuestoContent()
+                    0 -> PresupuestoContent(onNavigateToPresupuesto = onNavigateToPresupuesto, onBackToHome = { selectedTab = 2 })
                     1 -> PrestadorCalendarScreen(
-                        onBack = { selectedTab = 2 }
+                        onBack = { selectedTab = 2 },
+                        onNavigateToPresupuesto = onNavigateToPresupuestoCita,
+                        onNavigateToChat = { clientId, clientName, newDate, newTime, existingAppointmentId ->
+                            println("🔥 DASHBOARD: onNavigateToChat recibido")
+                            println("🔥 ClientId: $clientId, Nombre: $clientName")
+                            println("🔥 Nueva Fecha: $newDate, Nueva Hora: $newTime")
+                            println("🔥 AppointmentId: $existingAppointmentId")
+                            
+                            // 🎯 USAR NUEVO MANAGER INMUTABLE
+                            com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.updateAppointmentProposal(
+                                clientId = clientId,
+                                appointmentId = existingAppointmentId,
+                                newDate = newDate,
+                                newTime = newTime
+                            )
+                            println("🔥 Mensaje actualizado a PENDING con nueva fecha/hora")
+
+                            // Configurar qué chat abrir PRIMERO
+                            targetChatUserId = clientId
+                            println("🔥 targetChatUserId configurado: $targetChatUserId")
+                            
+                            // Delay para asegurar que el estado se actualiza antes de navegar
+                            coroutineScope.launch {
+                                delay(100) // Esperar 100ms
+                                // Cambiar al tab de chat
+                                selectedTab = 3
+                                println("🔥 Tab cambiado a: $selectedTab (chat)")
+                            }
+                        }
                     )
                     2 -> InicioContent(
                         onNavigateToEditProfile = onNavigateToEditProfile,
                         onNavigateToServiceConfig = onNavigateToServiceConfig,
-                        onLogout = onLogout
+                        onLogout = onLogout,
+                        onNavigateToPromotionList = onNavigateToPromotionList,
+                        onNavigateToThemeDemo = onNavigateToThemeDemo
                     )
-                    3 -> PrestadorChatScreen(
-                        onBack = { selectedTab = 2 },
-                        onInConversationChange = { isInConversation = it },
-                        onNavigateToPresupuesto = onNavigateToPresupuesto
-                    )
+                    3 -> {
+                        println("🔥 DASHBOARD: Renderizando tab de chat")
+                        println("🔥 targetChatUserId actual: $targetChatUserId")
+                        
+                        // Efecto para manejar la navegación al chat específico
+                        LaunchedEffect(targetChatUserId) {
+                            if (targetChatUserId != null) {
+                                println("🔥 LaunchedEffect: targetChatUserId = $targetChatUserId")
+                                // Esperar un frame para que el chat se renderice
+                                kotlinx.coroutines.delay(100)
+                            }
+                        }
+                        
+                        PrestadorChatScreen(
+                            chatSimulationViewModel = chatSimulationViewModel,
+                            onBack = {
+                                selectedTab = 2
+                                targetChatUserId = null
+                            },
+                            onInConversationChange = { isInConversation = it },
+                            onNavigateToPresupuesto = onNavigateToPresupuesto,
+                            initialChatUserId = targetChatUserId
+                        )
+                    }
                     4 -> NotificacionesContent()
                 }
             }
@@ -105,6 +191,7 @@ fun PrestadorBottomNavigationBar(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
+    val colors = getPrestadorColors()
     // Animación para el botón central
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -118,13 +205,15 @@ fun PrestadorBottomNavigationBar(
     )
 
     BottomAppBar(
-        modifier = Modifier.height(70.dp),
-        containerColor = Color.White,
+        modifier = Modifier
+            .navigationBarsPadding(), // AÑADIDO: Respeta el espacio de gestos
+        containerColor = colors.surfaceColor,
         tonalElevation = 8.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(70.dp) // Altura del contenido
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
@@ -155,9 +244,9 @@ fun PrestadorBottomNavigationBar(
                 FloatingActionButton(
                     onClick = { onTabSelected(2) },
                     containerColor = if (selectedTab == 2) {
-                        Color(0xFFFF6B35) // Naranja intenso
+                        colors.primaryOrange // Naranja intenso
                     } else {
-                        Color(0xFFFF9F66) // Naranja medio
+                        colors.primaryOrange.copy(alpha = 0.7f) // Naranja medio
                     },
                     elevation = FloatingActionButtonDefaults.elevation(
                         defaultElevation = 6.dp,
@@ -206,8 +295,9 @@ fun RowScope.BottomNavItem(
     showBadge: Boolean = false,
     badgeCount: Int = 0
 ) {
-    val selectedColor = Color(0xFFFF6B35) // Naranja
-    val unselectedColor = Color(0xFF9CA3AF) // Gris
+    val colors = getPrestadorColors()
+    val selectedColor = colors.primaryOrange // Naranja
+    val unselectedColor = colors.textSecondary // Gris
 
     Box(
         modifier = Modifier.weight(1f),
@@ -215,13 +305,15 @@ fun RowScope.BottomNavItem(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(vertical = 4.dp)
+            verticalArrangement = Arrangement.Top, // Cambio: alineación superior
+            modifier = Modifier
+                .padding(top = 4.dp, bottom = 2.dp) // Menos padding
         ) {
             BadgedBox(
                 badge = {
                     if (showBadge && badgeCount > 0) {
                         Badge(
-                            containerColor = Color(0xFFFF6B35), // Rojo
+                            containerColor = colors.primaryOrange,
                             contentColor = Color.White
                         ) {
                             Text(
@@ -235,22 +327,25 @@ fun RowScope.BottomNavItem(
             ) {
                 IconButton(
                     onClick = onClick,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(36.dp) // Más compacto
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = label,
                         tint = if (isSelected) selectedColor else unselectedColor,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
+            
+            Spacer(modifier = Modifier.height(0.dp)) // Sin espacio extra
 
             Text(
                 text = label,
-                fontSize = 11.sp,
+                fontSize = 10.sp, // Más pequeño
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isSelected) selectedColor else unselectedColor
+                color = if (isSelected) selectedColor else unselectedColor,
+                maxLines = 1
             )
         }
     }
@@ -258,68 +353,39 @@ fun RowScope.BottomNavItem(
 
 // ==================== CONTENIDO DE CADA TAB ====================
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun PresupuestoContent() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFFF6B35),
-                            Color(0xFFFF9F66)
-                        )
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Edit,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(60.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Presupuesto",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF6B35)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Gestiona tus cotizaciones",
-            fontSize = 16.sp,
-            color = Color(0xFF6B7280)
-        )
-    }
+fun PresupuestoContent(
+    onNavigateToPresupuesto: () -> Unit = {},
+    onBackToHome: () -> Unit = {}
+) {
+    // Mostrar directamente la lista de presupuestos sin TopBar
+    PresupuestosScreen(
+        onBack = onBackToHome, // Regresar al tab de Inicio
+        onCrearNuevo = onNavigateToPresupuesto, // Navegar a crear presupuesto
+        onVerDetalle = { presupuesto ->
+            // TODO: Navegar a detalle
+        },
+        showTopBar = false // Ocultar TopBar porque ya está en el dashboard
+    )
 }
 
 @Composable
 fun InicioContent(
     onNavigateToEditProfile: () -> Unit = {},
     onNavigateToServiceConfig: () -> Unit = {},
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onNavigateToCreatePromo: () -> Unit = {},
+    onNavigateToPromotionList: () -> Unit = {},
+    onNavigateToThemeDemo: () -> Unit = {}
 ) {
+    val colors = getPrestadorColors()
     var showMenu by remember { mutableStateOf(false) }
     
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFFF8F3))
+            .background(colors.backgroundColor)
     ) {
         // Header naranja con avatar y menú
         Box(
@@ -328,8 +394,8 @@ fun InicioContent(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFFF6B35),
-                            Color(0xFFFF9F66)
+                            colors.primaryOrange,
+                            colors.primaryOrange.copy(alpha = 0.8f)
                         )
                     ),
                     shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
@@ -359,7 +425,7 @@ fun InicioContent(
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .background(Color(0xFF10B981), shape = CircleShape)
+                                    .background(colors.success, shape = CircleShape)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
@@ -398,7 +464,7 @@ fun InicioContent(
                         DropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
-                            modifier = Modifier.background(Color.White)
+                            modifier = Modifier.background(colors.surfaceColor)
                         ) {
                             DropdownMenuItem(
                                 text = {
@@ -409,14 +475,14 @@ fun InicioContent(
                                         Icon(
                                             imageVector = Icons.Default.Person,
                                             contentDescription = null,
-                                            tint = Color(0xFFFF6B35),
+                                            tint = colors.primaryOrange,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
                                             text = "Editar Perfil",
                                             fontSize = 14.sp,
-                                            color = Color(0xFF1E293B)
+                                            color = colors.textPrimary
                                         )
                                     }
                                 },
@@ -426,7 +492,7 @@ fun InicioContent(
                                 }
                             )
                             
-                            HorizontalDivider(color = Color(0xFFE2E8F0))
+                            HorizontalDivider(color = colors.divider)
                             
                             DropdownMenuItem(
                                 text = {
@@ -437,14 +503,14 @@ fun InicioContent(
                                         Icon(
                                             imageVector = Icons.Default.Settings,
                                             contentDescription = null,
-                                            tint = Color(0xFFFF6B35),
+                                            tint = colors.primaryOrange,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
                                             text = "Configurar Servicio",
                                             fontSize = 14.sp,
-                                            color = Color(0xFF1E293B)
+                                            color = colors.textPrimary
                                         )
                                     }
                                 },
@@ -454,7 +520,7 @@ fun InicioContent(
                                 }
                             )
                             
-                            HorizontalDivider(color = Color(0xFFE2E8F0))
+                            HorizontalDivider(color = colors.divider)
                             
                             DropdownMenuItem(
                                 text = {
@@ -465,14 +531,14 @@ fun InicioContent(
                                         Icon(
                                             imageVector = Icons.Default.ExitToApp,
                                             contentDescription = null,
-                                            tint = Color(0xFFEF4444),
+                                            tint = colors.error,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
                                             text = "Cerrar Sesión",
                                             fontSize = 14.sp,
-                                            color = Color(0xFFEF4444)
+                                            color = colors.error
                                         )
                                     }
                                 },
@@ -498,7 +564,7 @@ fun InicioContent(
             Text(
                 text = "Contenido del Dashboard",
                 fontSize = 16.sp,
-                color = Color(0xFF6B7280)
+                color = colors.textSecondary
             )
         }
     }
@@ -506,6 +572,7 @@ fun InicioContent(
 
 @Composable
 fun CalendarioContent() {
+    val colors = getPrestadorColors()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -519,8 +586,8 @@ fun CalendarioContent() {
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFFF6B35),
-                            Color(0xFFFF9F66)
+                            colors.primaryOrange,
+                            colors.primaryOrange.copy(alpha = 0.7f)
                         )
                     ),
                     shape = RoundedCornerShape(24.dp)
@@ -541,7 +608,7 @@ fun CalendarioContent() {
             text = "Calendario",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF6B35)
+            color = colors.primaryOrange
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -549,13 +616,14 @@ fun CalendarioContent() {
         Text(
             text = "Gestiona tus citas y horarios",
             fontSize = 16.sp,
-            color = Color(0xFF6B7280)
+            color = colors.textSecondary
         )
     }
 }
 
 @Composable
 fun ChatContent() {
+    val colors = getPrestadorColors()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -569,8 +637,8 @@ fun ChatContent() {
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFFF6B35),
-                            Color(0xFFFF9F66)
+                            colors.primaryOrange,
+                            colors.primaryOrange.copy(alpha = 0.7f)
                         )
                     ),
                     shape = RoundedCornerShape(24.dp)
@@ -591,7 +659,7 @@ fun ChatContent() {
             text = "Chat",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF6B35)
+            color = colors.primaryOrange
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -599,7 +667,7 @@ fun ChatContent() {
         Text(
             text = "Conversa con tus clientes",
             fontSize = 16.sp,
-            color = Color(0xFF6B7280)
+            color = colors.textSecondary
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -607,7 +675,7 @@ fun ChatContent() {
         // Badge de mensajes pendientes
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFEF4444).copy(alpha = 0.1f),
+            color = colors.error.copy(alpha = 0.1f),
             modifier = Modifier.padding(horizontal = 32.dp)
         ) {
             Row(
@@ -617,7 +685,7 @@ fun ChatContent() {
                 Icon(
                     imageVector = Icons.Default.Email,
                     contentDescription = null,
-                    tint = Color(0xFFEF4444),
+                    tint = colors.error,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -625,7 +693,7 @@ fun ChatContent() {
                     text = "Tienes 3 mensajes sin leer",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFFEF4444)
+                    color = colors.error
                 )
             }
         }
@@ -634,6 +702,7 @@ fun ChatContent() {
 
 @Composable
 fun NotificacionesContent() {
+    val colors = getPrestadorColors()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -647,8 +716,8 @@ fun NotificacionesContent() {
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFFF6B35),
-                            Color(0xFFFF9F66)
+                            colors.primaryOrange,
+                            colors.primaryOrange.copy(alpha = 0.7f)
                         )
                     ),
                     shape = RoundedCornerShape(24.dp)
@@ -669,7 +738,7 @@ fun NotificacionesContent() {
             text = "Notificaciones",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF6B35)
+            color = colors.primaryOrange
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -677,7 +746,7 @@ fun NotificacionesContent() {
         Text(
             text = "Mantente al día con alertas importantes",
             fontSize = 16.sp,
-            color = Color(0xFF6B7280)
+            color = colors.textSecondary
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -685,7 +754,7 @@ fun NotificacionesContent() {
         // Badge de notificaciones pendientes
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFFF6B35).copy(alpha = 0.1f),
+            color = colors.primaryOrange.copy(alpha = 0.1f),
             modifier = Modifier.padding(horizontal = 32.dp)
         ) {
             Row(
@@ -695,7 +764,7 @@ fun NotificacionesContent() {
                 Icon(
                     imageVector = Icons.Default.Warning,
                     contentDescription = null,
-                    tint = Color(0xFFFF6B35),
+                    tint = colors.primaryOrange,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -703,7 +772,7 @@ fun NotificacionesContent() {
                     text = "Tienes 5 notificaciones nuevas",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFFFF6B35)
+                    color = colors.primaryOrange
                 )
             }
         }

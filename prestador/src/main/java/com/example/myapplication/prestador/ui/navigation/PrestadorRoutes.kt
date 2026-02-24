@@ -9,6 +9,13 @@ sealed class PrestadorRoutes(val route: String) {
     object Profile : PrestadorRoutes("profile")
     object Services : PrestadorRoutes("servives")
     object ServiceConfig : PrestadorRoutes("service_config")
-    object  CrearPresupuesto : PrestadorRoutes("crear_presupuesto")
+    object CrearPresupuesto : PrestadorRoutes("crear_presupuesto?origin={origin}&appointmentId={appointmentId}") {
+        fun createRoute(origin: String, appointmentId: String = "") =
+            "crear_presupuesto?origin=$origin&appointmentId=$appointmentId"
+    }
+
+    object Presupuestos : PrestadorRoutes("presupuestos")
+    object CreatePromotion : PrestadorRoutes("create_promotion")
+    object PromotionsList : PrestadorRoutes("promotion_list")
 }
 

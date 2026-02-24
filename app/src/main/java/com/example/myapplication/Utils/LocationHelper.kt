@@ -1,4 +1,4 @@
-package com.example.myapplication.Utils
+package com.example.myapplication.utils
 
 import android.Manifest
 import android.content.Context
@@ -101,3 +101,8 @@ class LocationHelper(private val context: Context) {
         }
     }
 }
+
+/**
+ * LocationHelper: Helper que usa Google Play Services (FusedLocationProviderClient) para obtener
+ * coordenadas actuales, valida permisos y convierte coordenadas a nombres de ciudad mediante Geocoder.
+ */

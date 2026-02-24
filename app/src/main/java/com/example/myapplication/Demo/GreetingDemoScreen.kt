@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,10 +14,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication.Components.GreetingCard
-import com.example.myapplication.Components.SimpleGreetingText
-import com.example.myapplication.Components.EmojiGreetingText
-import com.example.myapplication.Utils.GreetingType
+import com.example.myapplication.presentation.components.GreetingCard
+import com.example.myapplication.presentation.components.SimpleGreetingText
+import com.example.myapplication.presentation.components.EmojiGreetingText
+import com.example.myapplication.core.utils.GreetingType
 
 @Composable
 fun GreetingDemoScreen() {
@@ -51,7 +52,7 @@ fun GreetingDemoScreen() {
                 Button(
                     onClick = { selectedGreetingType = type },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    colors = ButtonDefaults.buttonColors(
                         containerColor = if (selectedGreetingType == type) 
                             Color(0xFF3B82F6) else Color(0xFFE2E8F0)
                     )

@@ -1,4 +1,4 @@
-package com.example.myapplication.ViewModel
+package com.example.myapplication.viewmodel
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -13,3 +13,8 @@ class LocationViewModelFactory(private val context: Context) : ViewModelProvider
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+
+/**
+ * LocationViewModelFactory: Factory para crear instancias de LocationViewModel
+ * con inyección manual de dependencias (LocationManager).
+ */

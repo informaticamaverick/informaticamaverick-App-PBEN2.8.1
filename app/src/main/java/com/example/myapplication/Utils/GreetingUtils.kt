@@ -1,4 +1,4 @@
-package com.example.myapplication.Utils
+package com.example.myapplication.utils
 
 import java.util.Calendar
 
@@ -97,3 +97,8 @@ enum class GreetingType {
     FRIENDLY,
     PROFESSIONAL
 }
+
+/**
+ * GreetingUtils: Objeto utilitario que genera mensajes de saludo personalizados
+ * según hora del día (mañana/tarde/noche) con emojis, soporta varios tipos de saludo.
+ */

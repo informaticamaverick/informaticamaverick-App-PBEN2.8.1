@@ -1,4 +1,4 @@
-package com.example.myapplication.ViewModel
+package com.example.myapplication.viewmodel
 
 import android.Manifest
 import android.content.Context
@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.Utils.LocationManager
+import com.example.myapplication.utils.LocationManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -64,3 +64,8 @@ class LocationViewModel(private val context: Context) : ViewModel() {
         }
     }
 }
+
+/**
+ * LocationViewModel: Obtiene ubicación actual del dispositivo usando LocationManager,
+ * expone nombre de ubicación, latitud, longitud y estado de carga mediante StateFlows.
+ */

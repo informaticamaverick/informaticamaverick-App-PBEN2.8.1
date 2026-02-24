@@ -1,9 +1,9 @@
-package com.example.myapplication.ViewModel
+package com.example.myapplication.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.Model.OpenMeteoResponse
-import com.example.myapplication.Network.WeatherApi
+import com.example.myapplication.data.model.OpenMeteoResponse
+import com.example.myapplication.data.remote.WeatherApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -101,3 +101,11 @@ class WeatherViewModel : ViewModel() {
         }
     }
 }
+
+
+// Es el viewmodel que gestiona la logica de negocio y el estas del clima para la UI, actua com intermediario entre el repositori y la interfaz de usuario
+
+/**
+ * WeatherViewModel: ViewModel que gestiona estado del clima, obtiene datos de Open-Meteo API
+ * y expone temperatura, emoji, descripción, viento y humedad como StateFlows para la UI.
+ */

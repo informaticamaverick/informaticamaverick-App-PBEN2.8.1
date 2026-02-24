@@ -1,9 +1,9 @@
-package com.example.myapplication.ViewModel
+package com.example.myapplication.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.Data.Model.SubCategory
-import com.example.myapplication.Data.Repository.SubCategoryRepository
+import com.example.myapplication.data.model.SubCategory
+import com.example.myapplication.data.repository.SubCategoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -148,3 +148,8 @@ class SubCategoryViewModel @Inject constructor(
         }
     }
 }
+
+/**
+ * SubCategoryViewModel: ViewModel que gestiona subcategorías de servicios,
+ * permite cargar por categoría padre, agregar nuevas e inicializar datos de ejemplo en Firestore.
+ */
