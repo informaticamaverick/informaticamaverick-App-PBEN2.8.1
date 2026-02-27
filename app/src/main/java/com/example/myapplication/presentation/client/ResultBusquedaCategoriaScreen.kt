@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.myapplication.presentation.components.GeminiSplitFAB
 import com.example.myapplication.presentation.components.PrestadorCard
-import com.example.myapplication.presentation.components.SmallFabTool
+//import com.example.myapplication.presentation.components.SmallFabTool
 import com.example.myapplication.presentation.components.geminiGradientEffect
 import androidx.compose.foundation.interaction.MutableInteractionSource
 
@@ -40,6 +40,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 // import com.example.myapplication.data.model.fake.UserFalso
 
 // --- [SECCIÓN: MODELOS DE DATOS REALES] ---
+import com.example.myapplication.data.local.CategoryEntity
 import com.example.myapplication.data.model.CompanyProvider
 import com.example.myapplication.data.model.Provider
 import com.example.myapplication.ui.theme.MyApplicationTheme
@@ -61,13 +62,16 @@ fun ResultBusquedaCategoriaScreen(
     onBack: () -> Unit,
     onNavigateToProviderProfile: (String) -> Unit,
     onNavigateToChat: (String) -> Unit,
-    providerViewModel: ProviderViewModel = hiltViewModel()
+    providerViewModel: ProviderViewModel = hiltViewModel(),
+    categoryViewModel: CategoryViewModel = hiltViewModel()
 ) {
     // 🔥 [FLUJO DE DATOS REAL] - Obtenemos todos los prestadores desde Room
     val allProviders by providerViewModel.providers.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.categories.collectAsStateWithLifecycle()
 
     ResultBusquedaCategoriaContent(
         allProviders = allProviders,
+        allCategories = allCategories,
         categoryName = categoryName,
         onBack = onBack,
         onNavigateToProviderProfile = onNavigateToProviderProfile,
@@ -83,6 +87,7 @@ fun ResultBusquedaCategoriaScreen(
 @Composable
 fun ResultBusquedaCategoriaContent(
     allProviders: List<Provider>,
+    allCategories: List<CategoryEntity>,
     categoryName: String,
     onBack: () -> Unit,
     onNavigateToProviderProfile: (String) -> Unit,
@@ -197,6 +202,7 @@ fun ResultBusquedaCategoriaContent(
                 // 🔥 Lista Real
                 ProviderListContent(
                     professionals = filteredList,
+                    allCategories = allCategories,
                     onNavigateToProviderProfile = onNavigateToProviderProfile,
                     onNavigateToChat = onNavigateToChat,
                     onToggleFavorite = { id, isFav -> toggleFavoriteStatus(id, isFav) }
@@ -216,7 +222,7 @@ fun ResultBusquedaCategoriaContent(
                     onToggleExpand = { isFabMenuExpanded = !isFabMenuExpanded },
                     onActivateSearch = { isSearchActive = true },
                     onCloseSearch = closeSearch,
-                    expandedTools = {
+                   /** expandedTools = {
                         SmallFabTool(
                             label = if (subscribedOnly) "Top" else "Todos",
                             icon = if (subscribedOnly) Icons.Default.WorkspacePremium else Icons.Default.Group,
@@ -231,7 +237,7 @@ fun ResultBusquedaCategoriaContent(
                                 sortOrder = if (sortOrder == "Rating") "Name" else "Rating"
                             }
                         )
-                    }
+                    }  **/
                 )
             }
         }
@@ -306,6 +312,7 @@ fun TopSearchBarResult(
 @Composable
 fun ProviderListContent(
     professionals: List<Provider>,
+    allCategories: List<CategoryEntity>,
     onNavigateToProviderProfile: (String) -> Unit,
     onNavigateToChat: (String) -> Unit,
     onToggleFavorite: (String, Boolean) -> Unit
@@ -322,7 +329,8 @@ fun ProviderListContent(
                         provider = professional,
                         onClick = { onNavigateToProviderProfile(professional.id) },
                         onChat = { onNavigateToChat(professional.id) },
-                        onToggleFavorite = onToggleFavorite
+                        onToggleFavorite = onToggleFavorite,
+                        allCategories = allCategories
                     )
 
                     /**
@@ -473,6 +481,7 @@ fun ResultBusquedaCategoriaScreenPreview() {
     MyApplicationTheme {
         ResultBusquedaCategoriaContent(
             allProviders = sampleProviders,
+            allCategories = emptyList(),
             categoryName = "Informatica",
             onBack = {},
             onNavigateToProviderProfile = {},

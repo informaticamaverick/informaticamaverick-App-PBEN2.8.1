@@ -32,11 +32,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -55,10 +55,10 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.play.services.location)
 
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation(libs.androidx.ui)
-    //implementation("androidx.compose.material3:material3:1.3.1")
     implementation(libs.androidx.compose.animation)
+    implementation(libs.androidx.benchmark.traceprocessor)
 
 
     testImplementation(libs.junit)
@@ -77,13 +77,10 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
-    // Room components
-    //def room_version = "2.6.1" // O la versión más reciente
-   // implementation "androidx.room:room-runtime:$room_version"
-    //implementation "androidx.room:room-ktx:$room_version" // Para usar corrutinas
-    //ksp "androidx.room:room-compiler:$room_version" // Usa ksp en lugar de kapt si es posible
-
-
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    ksp("androidx.room:room-compiler:$room_version") // Asegúrate de tener el plugin de KSP
 
     // Retrofit
     implementation(libs.retrofit)
@@ -98,13 +95,12 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     // Navigation
-   // implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.8.5")
-    implementation("com.google.accompanist:accompanist-pager:0.32.0")
-    implementation("com.google.accompanist:accompanist-pager-indicators:0.32.0")
+    implementation("com.google.accompanist:accompanist-pager:0.36.0")
+    implementation("com.google.accompanist:accompanist-pager-indicators:0.36.0")
 
 
     // Google Sign In
@@ -120,12 +116,9 @@ dependencies {
     implementation(libs.firebase.storage)
     
     // Retrofit para clima (Gson)
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.google.code.gson:gson:2.11.0")
     
     // Image Loading
     implementation(libs.coil.compose)
-
-    // Coil para cargar imagenes
-    //implementation("io.coil-kt:coil-compose:2.5.0")
 }

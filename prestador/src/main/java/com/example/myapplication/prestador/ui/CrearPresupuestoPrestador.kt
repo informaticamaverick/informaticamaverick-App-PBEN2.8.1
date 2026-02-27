@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,9 +51,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.example.myapplication.prestador.data.PPrestadorProfileFalso
 import com.example.myapplication.prestador.data.PPrestadorSampleDataFalso
+import com.example.myapplication.prestador.ui.theme.getPrestadorColors
+import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -105,7 +113,10 @@ enum class AttachmentType { IMAGE, PDF }
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrearPresupuestoPrestadorScreen() {
+fun CrearPresupuestoPrestadorScreen(
+    onBack: () -> Unit = {}
+) {
+    val colors = getPrestadorColors()
     // --- STATE MANAGEMENT ---
     val prestador = remember {
         PPrestadorProfileFalso(
@@ -147,12 +158,12 @@ fun CrearPresupuestoPrestadorScreen() {
 
 
     // --- SECTION EXPANSION STATES ---
-    var isArticlesExpanded by remember { mutableStateOf(false) }
-    var isServicesExpanded by remember { mutableStateOf(false) }
-    var isProfessionalFeesExpanded by remember { mutableStateOf(false) }
-    var isMiscExpanded by remember { mutableStateOf(false) }
-    var isTaxesExpanded by remember { mutableStateOf(false) }
-    var isAttachmentsExpanded by remember { mutableStateOf(false) }
+    var isArticlesExpanded by remember { mutableStateOf(true) }
+    var isServicesExpanded by remember { mutableStateOf(true) }
+    var isProfessionalFeesExpanded by remember { mutableStateOf(true) }
+    var isMiscExpanded by remember { mutableStateOf(true) }
+    var isTaxesExpanded by remember { mutableStateOf(true) }
+    var isAttachmentsExpanded by remember { mutableStateOf(true) }
 
     // --- SECTION VISIBILITY STATES ---
     var showArticlesSection by remember { mutableStateOf(true) }
@@ -168,13 +179,25 @@ fun CrearPresupuestoPrestadorScreen() {
     var notes by remember { mutableStateOf("") }
 
     // --- CALCULATED TOTALS ---
-    val itemsSubtotal = items.sumOf {
+    // Calcular subtotal base (sin impuestos ni descuentos)
+    val itemsBaseSubtotal = items.sumOf { it.unitPrice * it.quantity }
+
+    // Calcular impuestos totales
+    val itemsTaxTotal = items.sumOf {
+        val base = it.unitPrice * it.quantity
+        base * (it.taxPercentage / 100)
+    }
+
+    // Calcular descuentos totales
+    val itemsDiscountTotal = items.sumOf {
         val base = it.unitPrice * it.quantity
         val taxAmount = base * (it.taxPercentage / 100)
         val withTax = base + taxAmount
-        val discountAmount = withTax * (it.discountPercentage / 100)
-        withTax - discountAmount
+        withTax * (it.discountPercentage / 100)
     }
+
+    // Subtotal de items después de impuestos y descuentos
+    val itemsSubtotal = itemsBaseSubtotal + itemsTaxTotal - itemsDiscountTotal
 
     val servicesSubtotal = services.sumOf { it.total }
     val professionalFeesSubtotal = professionalFees.sumOf { it.total }
@@ -200,14 +223,28 @@ fun CrearPresupuestoPrestadorScreen() {
     }
 
     Scaffold(
+        containerColor = colors.backgroundColor,
         topBar = {
             TopAppBar(
-                title = { Text("Crear Presupuesto") },
+                title = {
+                    Text(
+                        "Crear Presupuesto",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = { /* TODO: Handle back */ }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = Color.White
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = colors.primaryOrange
+                )
             )
         },
         floatingActionButton = {
@@ -215,24 +252,35 @@ fun CrearPresupuestoPrestadorScreen() {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FloatingActionButton(onClick = { sheetType = SheetType.Client }) {
+                FloatingActionButton(
+                    onClick = { sheetType = SheetType.Client },
+                    containerColor = Color(0xFFFF6B35), // Naranja
+                    contentColor = Color.White
+                ) {
                     Icon(Icons.Default.Person, contentDescription = "Cliente")
                 }
-                FloatingActionButton(onClick = { showPreviewDialog = true }) {
+                FloatingActionButton(
+                    onClick = { showPreviewDialog = true },
+                    containerColor = colors.primaryOrange,
+                    contentColor = Color.White
+                ) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar")
                 }
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)) {
             LazyColumn(
                 state = lazyListState,
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
                 item { PrestadorHeader(prestador, onFilterClick = { sheetType = SheetType.Sections }) }
-                item { HorizontalDivider() }
 
                 // --- SECTIONS ---
                 if (showArticlesSection) {
@@ -428,27 +476,66 @@ fun CrearPresupuestoPrestadorScreen() {
                 }
 
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Observaciones", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        OutlinedTextField(
-                            value = notes,
-                            onValueChange = { notes = it },
-                            label = { Text("Escriba aquí sus observaciones...") },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            maxLines = 5
-                        )
-
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Presupuesto válido por", style = MaterialTheme.typography.bodyMedium)
-                            CompactTextField(
-                                value = validity,
-                                onValueChange = { validity = it.filter { char -> char.isDigit() } },
-                                modifier = Modifier.width(60.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                textStyle = TextStyle(textAlign = TextAlign.Center)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = colors.surfaceColor
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 4.dp
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                "Observaciones",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.textPrimary
                             )
-                            Text("días.", style = MaterialTheme.typography.bodyMedium)
+                            OutlinedTextField(
+                                value = notes,
+                                onValueChange = { notes = it },
+                                label = { Text("Escriba aquí sus observaciones...") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3,
+                                maxLines = 5,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.primaryOrange,
+                                    unfocusedBorderColor = colors.border,
+                                    focusedLabelColor = colors.primaryOrange,
+                                    unfocusedLabelColor = colors.textSecondary,
+                                    cursorColor = colors.primaryOrange,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary
+                                )
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    "Presupuesto válido por",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.textPrimary
+                                )
+                                CompactTextField(
+                                    value = validity,
+                                    onValueChange = { validity = it.filter { char -> char.isDigit() } },
+                                    modifier = Modifier.width(60.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                    textStyle = TextStyle(textAlign = TextAlign.Center)
+                                )
+                                Text(
+                                    "días.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.textPrimary
+                                )
+                            }
                         }
                     }
                 }
@@ -465,22 +552,27 @@ fun CrearPresupuestoPrestadorScreen() {
 
             // --- PREVIEW DIALOG ---
             if (showPreviewDialog) {
-                BudgetPreviewDialog(
-                    onDismiss = { showPreviewDialog = false },
-                    onConfirm = { showPreviewDialog = false },
+                BudgetPreviewPDFDialog(
                     prestador = prestador,
                     items = items,
                     services = services,
                     professionalFees = professionalFees,
                     miscExpenses = miscExpenses,
                     taxes = taxes,
-                    grandTotal = grandTotal
+                    grandTotal = grandTotal,
+                    subtotal = subtotal,
+                    taxAmount = itemsTaxTotal + taxesSubtotal,
+                    discountAmount = itemsDiscountTotal,
+                    onDismiss = { showPreviewDialog = false }
                 )
             }
 
             // --- BOTTOM SHEETS ---
             if (sheetType != null) {
-                ModalBottomSheet(onDismissRequest = { sheetType = null }) {
+                ModalBottomSheet(
+                    onDismissRequest = { sheetType = null },
+                    containerColor = colors.backgroundColor
+                ) {
                     when (sheetType) {
                         SheetType.Article -> AddArticleSheetContent(
                             itemToEdit = itemToEdit as? BudgetItem,
@@ -571,18 +663,13 @@ fun CompactTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     textStyle: TextStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
 ) {
-    // FIX: Se rediseñó el Composable para evitar la superposición de texto.
-    // COMENTARIO: El error ocurría porque se forzaba una altura fija de '26.dp' en un 'OutlinedTextField',
-    // lo cual es insuficiente para renderizar el texto, el label y el borde sin que se superpongan.
-    // La solución es usar 'BasicTextField' con 'OutlinedTextFieldDefaults.DecorationBox'.
-    // Esto nos da control total sobre el 'contentPadding' para crear un campo de texto verdaderamente compacto
-    // sin sacrificar la legibilidad y manteniendo el estilo de Material Design.
+    val colors = getPrestadorColors()
     val interactionSource = remember { MutableInteractionSource() }
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier,
-        textStyle = textStyle,
+        textStyle = textStyle.copy(color = colors.textPrimary),
         keyboardOptions = keyboardOptions,
         singleLine = true,
         interactionSource = interactionSource,
@@ -595,7 +682,38 @@ fun CompactTextField(
                 visualTransformation = VisualTransformation.None,
                 interactionSource = interactionSource,
                 label = label,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp) // Padding compacto
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primaryOrange,
+                    unfocusedBorderColor = colors.border,
+                    focusedLabelColor = colors.primaryOrange,
+                    unfocusedLabelColor = colors.textSecondary,
+                    cursorColor = colors.primaryOrange,
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledBorderColor = colors.border,
+                    disabledLabelColor = Color(0xFF9CA3AF), // Gris
+                    disabledTextColor = Color(0xFF9CA3AF), // Gris
+                    errorBorderColor = Color(0xFFEF4444), // Rojo para errores
+                    errorLabelColor = Color(0xFFEF4444),
+                    errorCursorColor = Color(0xFFEF4444)
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), // Padding compacto
+                container = {
+                    OutlinedTextFieldDefaults.ContainerBox(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interactionSource,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFF6B35),
+                            unfocusedBorderColor = Color(0xFFD1D5DB),
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
             )
         }
     )
@@ -609,6 +727,7 @@ fun AddArticleSheetContent(
     onAddItem: (BudgetItem) -> Unit,
     onUpdateItem: (BudgetItem) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetItem()) }
 
@@ -622,7 +741,7 @@ fun AddArticleSheetContent(
     var discountAmountStr by remember { mutableStateOf(if (currentItem.discountPercentage > 0) "%.2f".format(baseWithTax * currentItem.discountPercentage / 100) else "") }
 
     LaunchedEffect(baseAmount) {
-         if (baseAmount > 0) {
+        if (baseAmount > 0) {
             val taxP = taxPercentStr.toDoubleOrNull() ?: 0.0
             if (taxP > 0) taxAmountStr = "%.2f".format(baseAmount * taxP / 100)
 
@@ -633,14 +752,31 @@ fun AddArticleSheetContent(
         }
     }
 
-    Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding()) {
-        Text(if (isEditMode) "Editar Artículo" else "Agregar Nuevo Artículo", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .verticalScroll(rememberScrollState())
+        .imePadding()
+        .navigationBarsPadding()
+        .background(colors.backgroundColor)) {
+        Text(
+            if (isEditMode) "Editar Artículo" else "Agregar Nuevo Artículo",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
 
         BudgetItemRow(item = currentItem, onUpdate = { currentItem = it })
 
         Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
-        Text("Impuestos y Descuentos", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
+        HorizontalDivider(color = colors.border)
+        Text(
+            "Impuestos y Descuentos",
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.primaryOrange,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactTextField(
@@ -649,12 +785,12 @@ fun AddArticleSheetContent(
                     taxPercentStr = it
                     val p = it.toDoubleOrNull()
                     if (p != null && baseAmount > 0) {
-                         val tAmount = baseAmount * p / 100
-                         taxAmountStr = "%.2f".format(tAmount)
-                         currentItem = currentItem.copy(taxPercentage = p)
-                         val newBaseWithTax = baseAmount + tAmount
-                         val currentDiscP = discountPercentStr.toDoubleOrNull() ?: 0.0
-                         if (currentDiscP > 0) discountAmountStr = "%.2f".format(newBaseWithTax * currentDiscP / 100)
+                        val tAmount = baseAmount * p / 100
+                        taxAmountStr = "%.2f".format(tAmount)
+                        currentItem = currentItem.copy(taxPercentage = p)
+                        val newBaseWithTax = baseAmount + tAmount
+                        val currentDiscP = discountPercentStr.toDoubleOrNull() ?: 0.0
+                        if (currentDiscP > 0) discountAmountStr = "%.2f".format(newBaseWithTax * currentDiscP / 100)
                     } else if (it.isEmpty()) {
                         taxAmountStr = ""
                         currentItem = currentItem.copy(taxPercentage = 0.0)
@@ -673,9 +809,9 @@ fun AddArticleSheetContent(
                         val p = (a / baseAmount) * 100
                         taxPercentStr = "%.2f".format(p)
                         currentItem = currentItem.copy(taxPercentage = p)
-                         val newBaseWithTax = baseAmount + a
-                         val currentDiscP = discountPercentStr.toDoubleOrNull() ?: 0.0
-                         if (currentDiscP > 0) discountAmountStr = "%.2f".format(newBaseWithTax * currentDiscP / 100)
+                        val newBaseWithTax = baseAmount + a
+                        val currentDiscP = discountPercentStr.toDoubleOrNull() ?: 0.0
+                        if (currentDiscP > 0) discountAmountStr = "%.2f".format(newBaseWithTax * currentDiscP / 100)
                     } else if (it.isEmpty()) {
                         taxPercentStr = ""
                         currentItem = currentItem.copy(taxPercentage = 0.0)
@@ -696,8 +832,8 @@ fun AddArticleSheetContent(
                     discountPercentStr = it
                     val p = it.toDoubleOrNull()
                     if (p != null && baseWithTax > 0) {
-                         discountAmountStr = "%.2f".format(baseWithTax * p / 100)
-                         currentItem = currentItem.copy(discountPercentage = p)
+                        discountAmountStr = "%.2f".format(baseWithTax * p / 100)
+                        currentItem = currentItem.copy(discountPercentage = p)
                     } else if (it.isEmpty()) {
                         discountAmountStr = ""
                         currentItem = currentItem.copy(discountPercentage = 0.0)
@@ -731,9 +867,16 @@ fun AddArticleSheetContent(
         Button(
             onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = currentItem.description.isNotBlank() && currentItem.unitPrice > 0 && currentItem.quantity > 0
+            enabled = currentItem.description.isNotBlank() && currentItem.unitPrice > 0 && currentItem.quantity > 0,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primaryOrange,
+                contentColor = Color.White
+            )
         ) {
-            Text(if (isEditMode) "Guardar Cambios" else "Agregar Artículo")
+            Text(
+                if (isEditMode) "Guardar Cambios" else "Agregar Artículo",
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -744,19 +887,37 @@ fun AddServiceSheetContent(
     onAddItem: (BudgetService) -> Unit,
     onUpdateItem: (BudgetService) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetService()) }
 
-    Column(modifier = Modifier.padding(16.dp).imePadding().navigationBarsPadding()) {
-        Text(if (isEditMode) "Editar Servicio" else "Agregar Nuevo Servicio", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .imePadding()
+        .navigationBarsPadding()
+        .background(colors.backgroundColor)) {
+        Text(
+            if (isEditMode) "Editar Servicio" else "Agregar Nuevo Servicio",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         BudgetServiceRow(service = currentItem, onUpdate = { currentItem = it })
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = currentItem.description.isNotBlank() && currentItem.total > 0
+            enabled = currentItem.description.isNotBlank() && currentItem.total > 0,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primaryOrange,
+                contentColor = Color.White
+            )
         ) {
-            Text(if (isEditMode) "Guardar Cambios" else "Agregar Servicio")
+            Text(
+                if (isEditMode) "Guardar Cambios" else "Agregar Servicio",
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -767,19 +928,37 @@ fun AddProfessionalFeeSheetContent(
     onAddItem: (BudgetProfessionalFee) -> Unit,
     onUpdateItem: (BudgetProfessionalFee) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetProfessionalFee()) }
 
-    Column(modifier = Modifier.padding(16.dp).imePadding().navigationBarsPadding()) {
-        Text(if (isEditMode) "Editar Honorario" else "Agregar Honorario Profesional", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .imePadding()
+        .navigationBarsPadding()
+        .background(colors.backgroundColor)) {
+        Text(
+            if (isEditMode) "Editar Honorario" else "Agregar Honorario Profesional",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         BudgetProfessionalFeeRow(fee = currentItem, onUpdate = { updatedItem -> currentItem = updatedItem })
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = currentItem.description.isNotBlank() && currentItem.total > 0
+            enabled = currentItem.description.isNotBlank() && currentItem.total > 0,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primaryOrange,
+                contentColor = Color.White
+            )
         ) {
-            Text(if (isEditMode) "Guardar Cambios" else "Agregar Honorario")
+            Text(
+                if (isEditMode) "Guardar Cambios" else "Agregar Honorario",
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -796,6 +975,7 @@ fun AddMiscExpenseSheetContent(
     onAddItem: (List<BudgetMiscExpense>) -> Unit,
     onUpdateItem: (BudgetMiscExpense) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     val initialList = if (itemToEdit != null) {
         listOf(TempMiscExpense(description = itemToEdit.description, amount = if(itemToEdit.amount > 0) itemToEdit.amount.toString() else ""))
@@ -820,22 +1000,39 @@ fun AddMiscExpenseSheetContent(
             .verticalScroll(rememberScrollState())
             .imePadding()
             .navigationBarsPadding()
+            .background(colors.backgroundColor)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(if (isEditMode) "Editar Gasto" else "Agregar Gastos Varios", style = MaterialTheme.typography.titleLarge)
+            Text(
+                if (isEditMode) "Editar Gasto" else "Agregar Gastos Varios",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
             if (!isEditMode) {
-                IconButton(onClick = { expenseRows.add(TempMiscExpense()) }, modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape)) {
-                    Icon(Icons.Default.Add, contentDescription = "Agregar fila", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                IconButton(
+                    onClick = { expenseRows.add(TempMiscExpense()) },
+                    modifier = Modifier.background(colors.primaryOrange, CircleShape)
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Agregar fila",
+                        tint = Color.White
+                    )
                 }
             }
         }
 
         expenseRows.forEachIndexed { index, row ->
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CompactTextField(
                     value = row.description,
                     onValueChange = { expenseRows[index] = row.copy(description = it) },
@@ -851,16 +1048,33 @@ fun AddMiscExpenseSheetContent(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done)
                 )
                 if (!isEditMode && expenseRows.size > 1) {
-                    IconButton(onClick = { expenseRows.removeAt(index) }) { Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error) }
+                    IconButton(onClick = { expenseRows.removeAt(index) }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Eliminar",
+                            tint = Color(0xFFEF4444)
+                        )
+                    }
                 }
             }
         }
 
         if (!isEditMode) {
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            Text("Gastos Comunes", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp), fontWeight = FontWeight.Bold)
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 16.dp),
+                color = colors.border
+            )
+            Text(
+                "Gastos Comunes",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp),
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
             commonRows.forEachIndexed { index, row ->
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactTextField(value = row.description, onValueChange = { commonRows[index] = row.copy(description = it) }, label = { Text("Descripción") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
                     CompactTextField(
                         value = row.amount,
@@ -876,7 +1090,15 @@ fun AddMiscExpenseSheetContent(
 
         Spacer(modifier = Modifier.height(16.dp))
         val totalAmount = (expenseRows + commonRows).sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
-        Text(text = "Total Gasto: \$${"%.2f".format(totalAmount)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.End).padding(vertical = 8.dp))
+        Text(
+            text = "Total Gasto: \$${"%.2f".format(totalAmount)}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = colors.primaryOrange,
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(vertical = 8.dp)
+        )
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
@@ -895,9 +1117,16 @@ fun AddMiscExpenseSheetContent(
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = totalAmount > 0
+            enabled = totalAmount > 0,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primaryOrange,
+                contentColor = Color.White
+            )
         ) {
-            Text(if (isEditMode) "Guardar Cambios" else "Agregar Gastos")
+            Text(
+                if (isEditMode) "Guardar Cambios" else "Agregar Gastos",
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -908,6 +1137,7 @@ fun AddTaxSheetContent(
     onAddItem: (List<BudgetTax>) -> Unit,
     onUpdateItem: (BudgetTax) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     val initialList = if (itemToEdit != null) {
         listOf(BudgetTax(description = itemToEdit.description, amount = itemToEdit.amount))
@@ -917,33 +1147,71 @@ fun AddTaxSheetContent(
     val taxRows = remember { mutableStateListOf<BudgetTax>().apply { addAll(initialList) } }
     val commonTaxes = remember { mutableStateListOf(BudgetTax(description = "IVA 21%"), BudgetTax(description = "IVA 10.5%"), BudgetTax(description = "Retenciones"), BudgetTax(description = "Ingresos Brutos")) }
 
-    Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(if (isEditMode) "Editar Impuesto" else "Agregar Impuestos", style = MaterialTheme.typography.titleLarge)
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .verticalScroll(rememberScrollState())
+        .imePadding()
+        .navigationBarsPadding()
+        .background(colors.backgroundColor)) {
+        Row(modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                if (isEditMode) "Editar Impuesto" else "Agregar Impuestos",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
             if (!isEditMode) {
-                IconButton(onClick = { taxRows.add(BudgetTax()) }, modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape)) {
-                    Icon(Icons.Default.Add, contentDescription = "Agregar fila", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                IconButton(
+                    onClick = { taxRows.add(BudgetTax()) },
+                    modifier = Modifier.background(colors.primaryOrange, CircleShape)
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Agregar fila",
+                        tint = Color.White
+                    )
                 }
             }
         }
 
         taxRows.forEachIndexed { index, row ->
             var amountStr by remember { mutableStateOf("") }
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CompactTextField(value = row.description, onValueChange = { taxRows[index] = row.copy(description = it) }, label = { Text("Descripción") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
                 CompactTextField(value = amountStr, onValueChange = { amountStr = it; taxRows[index] = row.copy(amount = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Importe ($)") }, modifier = Modifier.width(100.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done))
                 if (!isEditMode && taxRows.size > 1) {
-                    IconButton(onClick = { taxRows.removeAt(index) }) { Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error) }
+                    IconButton(onClick = { taxRows.removeAt(index) }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Eliminar",
+                            tint = Color(0xFFEF4444)
+                        )
+                    }
                 }
             }
         }
 
         if (!isEditMode) {
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            Text("Impuestos Comunes", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp), fontWeight = FontWeight.Bold)
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 16.dp),
+                color = colors.border
+            )
+            Text(
+                "Impuestos Comunes",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp),
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
             commonTaxes.forEachIndexed { index, row ->
                 var amountStr by remember { mutableStateOf("") }
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactTextField(value = row.description, onValueChange = { commonTaxes[index] = row.copy(description = it) }, label = { Text("Descripción") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
                     CompactTextField(value = amountStr, onValueChange = { amountStr = it; commonTaxes[index] = row.copy(amount = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Importe ($)") }, modifier = Modifier.width(100.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done))
                     Spacer(modifier = Modifier.size(48.dp))
@@ -961,9 +1229,16 @@ fun AddTaxSheetContent(
                     if (newTaxes.isNotEmpty()) onAddItem(newTaxes)
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primaryOrange,
+                contentColor = Color.White
+            )
         ) {
-            Text(if (isEditMode) "Guardar Cambios" else "Agregar Impuestos")
+            Text(
+                if (isEditMode) "Guardar Cambios" else "Agregar Impuestos",
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -974,6 +1249,7 @@ fun AddAttachmentSheetContent(
     onAddItem: (BudgetAttachment) -> Unit,
     onUpdateItem: (BudgetAttachment) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetAttachment()) }
     val launcher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -982,29 +1258,69 @@ fun AddAttachmentSheetContent(
         }
     }
 
-    Column(modifier = Modifier.padding(16.dp).imePadding().navigationBarsPadding()) {
-        Text("Adjuntar Archivo", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .imePadding()
+        .navigationBarsPadding()
+        .background(colors.backgroundColor)) {
+        Text(
+            "Adjuntar Archivo",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         Box(
-            modifier = Modifier.fillMaxWidth().height(150.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).clickable { launcher.launch("*/*") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp)
+                .background(Color(0xFFFFE5D9), RoundedCornerShape(12.dp))
+                .clickable { launcher.launch("*/*") },
             contentAlignment = Alignment.Center
         ) {
             if (currentItem.uri != null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(imageVector = if (currentItem.type == AttachmentType.PDF) Icons.Default.PictureAsPdf else Icons.Default.Image, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text("Archivo seleccionado", style = MaterialTheme.typography.bodySmall)
+                    Icon(
+                        imageVector = if (currentItem.type == AttachmentType.PDF) Icons.Default.PictureAsPdf else Icons.Default.Image,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = colors.primaryOrange
+                    )
+                    Text(
+                        "Archivo seleccionado",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textPrimary
+                    )
                 }
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Toque para seleccionar (Imagen/PDF)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(
+                        Icons.Default.AttachFile,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = colors.primaryOrange
+                    )
+                    Text(
+                        "Toque para seleccionar (Imagen/PDF)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textSecondary
+                    )
                 }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
         CompactTextField(value = currentItem.description, onValueChange = { currentItem = currentItem.copy(description = it) }, label = { Text("Descripción / Detalle") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) }, modifier = Modifier.fillMaxWidth(), enabled = currentItem.uri != null) {
-            Text("Adjuntar")
+        Button(
+            onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = currentItem.uri != null,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primaryOrange,
+                contentColor = Color.White
+            )
+        ) {
+            Text("Adjuntar", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1024,8 +1340,18 @@ fun SectionsSheetContent(
     onShowTaxesChange: (Boolean) -> Unit,
     onShowAttachmentsChange: (Boolean) -> Unit
 ) {
-    Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
-        Text("Mostrar/Ocultar Secciones", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
+    val colors = getPrestadorColors()
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding()
+        .background(colors.backgroundColor)) {
+        Text(
+            "Mostrar/Ocultar Secciones",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         SectionSwitch(title = "Artículos", checked = showArticles, onCheckedChange = onShowArticlesChange)
         SectionSwitch(title = "Mano de Obra / Servicios", checked = showServices, onCheckedChange = onShowServicesChange)
         SectionSwitch(title = "Honorarios del Profesional", checked = showProfessionalFees, onCheckedChange = onShowProfessionalFeesChange)
@@ -1041,27 +1367,56 @@ fun SectionSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val colors = getPrestadorColors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = title, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = colors.textPrimary
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = colors.primaryOrange,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = colors.border
+            )
+        )
     }
 }
 
 @Composable
 fun ClientDetailsSheetContent() {
-    Column(modifier = Modifier.padding(16.dp).navigationBarsPadding()) {
-        Text("Datos del Cliente", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
-        Text("Funcionalidad en desarrollo", style = MaterialTheme.typography.bodyMedium)
+    val colors = getPrestadorColors()
+    Column(modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding()
+        .background(colors.backgroundColor)) {
+        Text(
+            "Datos del Cliente",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        Text(
+            "Funcionalidad en desarrollo",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textSecondary
+        )
     }
 }
 
 @Composable
 fun BudgetItemRow(item: BudgetItem, onUpdate: (BudgetItem) -> Unit) {
+    val colors = getPrestadorColors()
     val base = item.unitPrice * item.quantity
     val taxAmount = base * (item.taxPercentage / 100)
     val withTax = base + taxAmount
@@ -1076,7 +1431,14 @@ fun BudgetItemRow(item: BudgetItem, onUpdate: (BudgetItem) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactTextField(value = if (item.quantity == 0) "" else item.quantity.toString(), onValueChange = { onUpdate(item.copy(quantity = it.toIntOrNull() ?: 0)) }, label = { Text("Cant.") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next))
             CompactTextField(value = if (item.unitPrice == 0.0) "" else item.unitPrice.toString(), onValueChange = { onUpdate(item.copy(unitPrice = it.toDoubleOrNull() ?: 0.0)) }, label = { Text("P. Unit.") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done))
-            Text("Total: \$${"%.2f".format(total)}", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Total: \$${"%.2f".format(total)}",
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.primaryOrange
+            )
         }
     }
 }
@@ -1084,7 +1446,7 @@ fun BudgetItemRow(item: BudgetItem, onUpdate: (BudgetItem) -> Unit) {
 @Composable
 fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CompactTextField(value = service.code, onValueChange = { onUpdate(service.copy(code = it)) }, label = { Text("Cód.") }, modifier = Modifier.weight(0.25f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
             CompactTextField(value = service.description, onValueChange = { onUpdate(service.copy(description = it)) }, label = { Text("Descripción") }, modifier = Modifier.weight(0.75f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
         }
@@ -1097,7 +1459,7 @@ fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) 
 @Composable
 fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, onUpdate: (BudgetProfessionalFee) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CompactTextField(value = fee.code, onValueChange = { onUpdate(fee.copy(code = it)) }, label = { Text("Cód.") }, modifier = Modifier.weight(0.25f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
             CompactTextField(value = fee.description, onValueChange = { onUpdate(fee.copy(description = it)) }, label = { Text("Descripción") }, modifier = Modifier.weight(0.75f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
         }
@@ -1109,307 +1471,216 @@ fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, onUpdate: (BudgetProfes
 
 @Composable
 fun ArticleSummaryRow(modifier: Modifier = Modifier, item: BudgetItem) {
+    val colors = getPrestadorColors()
     val base = item.unitPrice * item.quantity
     val taxAmount = base * (item.taxPercentage / 100)
     val withTax = base + taxAmount
     val discountAmount = withTax * (item.discountPercentage / 100)
     val total = withTax - discountAmount
 
-    Row(modifier = modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(item.description.ifBlank { "(Sin descripción)" }, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-            Text("${item.quantity} x \$${"%.2f".format(item.unitPrice)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(
+                item.description.ifBlank { "(Sin descripción)" },
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textPrimary
+            )
+            Text(
+                "${item.quantity} x \$${"%.2f".format(item.unitPrice)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textSecondary
+            )
         }
         Spacer(modifier = Modifier.width(8.dp))
-        Text("\$${"%.2f".format(total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "\$${"%.2f".format(total)}",
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.primaryOrange
+        )
     }
 }
 
 @Composable
 fun ServiceSummaryRow(modifier: Modifier = Modifier, item: BudgetService) {
-    Row(modifier = modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+    val colors = getPrestadorColors()
+    Row(modifier = modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            item.description.ifBlank { "(Sin descripción)" },
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textPrimary
+        )
         Spacer(modifier = Modifier.width(8.dp))
-        Text("\$${"%.2f".format(item.total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "\$${"%.2f".format(item.total)}",
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.primaryOrange
+        )
     }
 }
 
 @Composable
 fun ProfessionalFeeSummaryRow(modifier: Modifier = Modifier, item: BudgetProfessionalFee) {
-    Row(modifier = modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+    val colors = getPrestadorColors()
+    Row(modifier = modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            item.description.ifBlank { "(Sin descripción)" },
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textPrimary
+        )
         Spacer(modifier = Modifier.width(8.dp))
-        Text("\$${"%.2f".format(item.total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "\$${"%.2f".format(item.total)}",
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.primaryOrange
+        )
     }
 }
 
 @Composable
 fun TaxSummaryRow(modifier: Modifier = Modifier, item: BudgetTax) {
-    Row(modifier = modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+    val colors = getPrestadorColors()
+    Row(modifier = modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            item.description.ifBlank { "(Sin descripción)" },
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textPrimary
+        )
         Spacer(modifier = Modifier.width(8.dp))
-        Text("\$${"%.2f".format(item.amount)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "\$${"%.2f".format(item.amount)}",
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.primaryOrange
+        )
     }
 }
 
 @Composable
 fun AttachmentSummaryRow(modifier: Modifier = Modifier, item: BudgetAttachment) {
-    Row(modifier = modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(imageVector = if (item.type == AttachmentType.PDF) Icons.Default.PictureAsPdf else Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
+    val colors = getPrestadorColors()
+    Row(modifier = modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = if (item.type == AttachmentType.PDF) Icons.Default.PictureAsPdf else Icons.Default.Image,
+            contentDescription = null,
+            tint = colors.primaryOrange,
+            modifier = Modifier.size(24.dp)
+        )
         Spacer(modifier = Modifier.width(8.dp))
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-        Icon(Icons.Default.CheckCircle, contentDescription = "Adjunto", tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+        Text(
+            item.description.ifBlank { "(Sin descripción)" },
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textPrimary
+        )
+        Icon(
+            Icons.Default.CheckCircle,
+            contentDescription = "Adjunto",
+            tint = Color(0xFF10B981),
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
 @Composable
 fun MiscExpenseSummaryRow(modifier: Modifier = Modifier, item: BudgetMiscExpense) {
-    Row(modifier = modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+    val colors = getPrestadorColors()
+    Row(modifier = modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            item.description.ifBlank { "(Sin descripción)" },
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textPrimary
+        )
         Spacer(modifier = Modifier.width(8.dp))
-        Text("\$${"%.2f".format(item.amount)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "\$${"%.2f".format(item.amount)}",
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.primaryOrange
+        )
     }
 }
 
 @Composable
 fun TotalsSummary(modifier: Modifier = Modifier, isExpanded: Boolean, grandTotal: Double) {
+    val colors = getPrestadorColors()
     val priceTextStyle = if (isExpanded) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge
     val verticalPadding = if (isExpanded) 12.dp else 4.dp
-    Surface(modifier = modifier.fillMaxWidth(), shadowElevation = 8.dp, tonalElevation = 8.dp) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shadowElevation = 8.dp,
+        color = colors.surfaceColor
+    ) {
         Column(
-            modifier = Modifier.animateContentSize().padding(horizontal = 16.dp, vertical = verticalPadding),
+            modifier = Modifier
+                .animateContentSize()
+                .padding(horizontal = 16.dp, vertical = verticalPadding),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("TOTAL GENERAL", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = "\$${"%.2f".format(grandTotal)}", style = priceTextStyle, fontWeight = FontWeight.Bold)
+            Text(
+                "TOTAL GENERAL",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.textSecondary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "\$${"%.2f".format(grandTotal)}",
+                style = priceTextStyle,
+                fontWeight = FontWeight.ExtraBold,
+                color = colors.primaryOrange
+            )
         }
     }
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun BudgetPreviewDialog(
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-    prestador: PPrestadorProfileFalso,
-    items: List<BudgetItem>,
-    services: List<BudgetService>,
-    professionalFees: List<BudgetProfessionalFee>,
-    miscExpenses: List<BudgetMiscExpense>,
-    taxes: List<BudgetTax>,
-    grandTotal: Double
-) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            containerColor = Color.White,
-            floatingActionButton = {
-                ExtendedFloatingActionButton(onClick = onConfirm, containerColor = Color(0xFF1976D2), contentColor = Color.White) {
-                    Text("GUARDAR Y ENVIAR", fontWeight = FontWeight.Bold)
-                }
-            }
-        ) { padding ->
-            Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).background(Color.White)) {
-                // Header con título
-                Text(
-                    text = "Vista Previa del Presupuesto",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-                
-                // Información del prestador
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Prestador", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1976D2))
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(prestador.name, fontWeight = FontWeight.SemiBold)
-                        Text(prestador.email, fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-                
-                // Artículos
-                if (items.isNotEmpty()) {
-                    Text(
-                        "Artículos",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                    )
-                    items.forEachIndexed { index, item ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("${index + 1}. ${item.description}", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Cantidad: ${item.quantity}", fontSize = 12.sp, color = Color.Gray)
-                                    Text("Precio: $${String.format("%.2f", item.unitPrice)}", fontSize = 12.sp, color = Color.Gray)
-                                }
-                                if (item.taxPercentage > 0 || item.discountPercentage > 0) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        if (item.taxPercentage > 0) Text("IVA: ${item.taxPercentage}%", fontSize = 12.sp, color = Color.Gray)
-                                        if (item.discountPercentage > 0) Text("Desc: ${item.discountPercentage}%", fontSize = 12.sp, color = Color.Gray)
-                                    }
-                                }
-                                val itemTotal = item.unitPrice * item.quantity * (1 + item.taxPercentage / 100) * (1 - item.discountPercentage / 100)
-                                Text("Total: $${String.format("%.2f", itemTotal)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                            }
-                        }
-                    }
-                }
-                
-                // Servicios
-                if (services.isNotEmpty()) {
-                    Text(
-                        "Servicios",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                    )
-                    services.forEach { service ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(service.description, fontWeight = FontWeight.Medium)
-                                    if (service.code.isNotEmpty()) {
-                                        Text("Código: ${service.code}", fontSize = 12.sp, color = Color.Gray)
-                                    }
-                                }
-                                Text("$${String.format("%.2f", service.total)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                            }
-                        }
-                    }
-                }
-                
-                // Honorarios profesionales
-                if (professionalFees.isNotEmpty()) {
-                    Text(
-                        "Honorarios Profesionales",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                    )
-                    professionalFees.forEach { fee ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(fee.description, fontWeight = FontWeight.Medium)
-                                    if (fee.code.isNotEmpty()) {
-                                        Text("Código: ${fee.code}", fontSize = 12.sp, color = Color.Gray)
-                                    }
-                                }
-                                Text("$${String.format("%.2f", fee.total)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                            }
-                        }
-                    }
-                }
-                
-                // Gastos varios
-                if (miscExpenses.isNotEmpty()) {
-                    Text(
-                        "Gastos Varios",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                    )
-                    miscExpenses.forEach { expense ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(expense.description, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                Text("$${String.format("%.2f", expense.amount)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                            }
-                        }
-                    }
-                }
-                
-                // Impuestos
-                if (taxes.isNotEmpty()) {
-                    Text(
-                        "Impuestos",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                    )
-                    taxes.forEach { tax ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(tax.description, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                Text("$${String.format("%.2f", tax.amount)}", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                            }
-                        }
-                    }
-                }
-                
-                // Total final
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2))
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("TOTAL GENERAL", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text("$${String.format("%.2f", grandTotal)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(80.dp)) // Space for FAB
-            }
-        }
-    }
-}
 
 @Composable
 fun BudgetMetaBox(title: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth().border(1.dp, Color.Black, RoundedCornerShape(4.dp))) {
-        Text(text = title, modifier = Modifier.fillMaxWidth().background(Color(0xFF1976D2)).padding(2.dp), color = Color.White, fontSize = 9.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
-        Text(text = value, modifier = Modifier.fillMaxWidth().background(Color.White).padding(4.dp), fontSize = 10.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .border(1.dp, Color.Black, RoundedCornerShape(4.dp))) {
+        Text(text = title, modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1976D2))
+            .padding(2.dp), color = Color.White, fontSize = 9.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+        Text(text = value, modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .padding(4.dp), fontSize = 10.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 fun SectionHeader(text: String) {
-    Surface(color = Color(0xFF1976D2), modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))) {
+    Surface(color = Color(0xFF1976D2), modifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))) {
         Text(text = text, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
     }
 }
@@ -1424,58 +1695,83 @@ fun <T> CollapsibleSection(
     onAddClick: () -> Unit,
     itemContent: @Composable (item: T, index: Int) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val rotationAngle by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f, label = "arrowRotation")
 
     Box(modifier = Modifier.padding(top = 18.dp)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                .padding(12.dp)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = colors.surfaceColor
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 4.dp
+            ),
+            shape = RoundedCornerShape(16.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onToggleExpand)
+                    .padding(12.dp)
             ) {
-                Badge(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onToggleExpand)
                 ) {
-                    Text(
-                        text = "${items.size}",
-                        modifier = Modifier.padding(horizontal = 6.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = if (isExpanded) "Colapsar" else "Expandir",
-                    modifier = Modifier.rotate(rotationAngle)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-            }
-
-            AnimatedVisibility(visible = isExpanded) {
-                Column {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    if (items.isEmpty()) {
+                    Badge(
+                        containerColor = colors.primaryOrange,
+                        contentColor = Color.White
+                    ) {
                         Text(
-                            "No hay ítems agregados.",
-                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "${items.size}",
+                            modifier = Modifier.padding(horizontal = 6.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else {
-                        Column {
-                            items.forEachIndexed { index, item ->
-                                itemContent(item, index)
-                                if (index < items.size - 1) {
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = if (isExpanded) "Colapsar" else "Expandir",
+                        modifier = Modifier.rotate(rotationAngle),
+                        tint = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+
+                AnimatedVisibility(visible = isExpanded) {
+                    Column {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = colors.border
+                        )
+                        if (items.isEmpty()) {
+                            Text(
+                                "No hay ítems agregados.",
+                                modifier = Modifier
+                                    .padding(16.dp)
+                                    .fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                color = colors.textSecondary
+                            )
+                        } else {
+                            Column {
+                                items.forEachIndexed { index, item ->
+                                    itemContent(item, index)
+                                    if (index < items.size - 1) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 4.dp),
+                                            color = colors.border
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1489,7 +1785,8 @@ fun <T> CollapsibleSection(
                 .align(Alignment.TopEnd)
                 .offset(x = 4.dp, y = (-18).dp),
             shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = colors.primaryOrange,
+            contentColor = Color.White
         ) {
             Icon(Icons.Default.Add, contentDescription = "Añadir ${title.substringBefore(' ')}")
         }
@@ -1499,15 +1796,16 @@ fun <T> CollapsibleSection(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .offset(x = 4.dp, y = 12.dp),
-                shape = RoundedCornerShape(4.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-                tonalElevation = 3.dp
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFFFFF3E0),
+                border = BorderStroke(1.dp, colors.primaryOrange.copy(alpha = 0.3f))
             ) {
                 Text(
                     text = "Subtotal: \$${"%.2f".format(sectionTotal)}",
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primaryOrange,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
         }
@@ -1517,22 +1815,79 @@ fun <T> CollapsibleSection(
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun PrestadorHeader(prestador: PPrestadorProfileFalso, onFilterClick: () -> Unit) {
+    val colors = getPrestadorColors()
     val currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            AsyncImage(model = prestador.profileImageUrl, contentDescription = "Foto de perfil", modifier = Modifier.size(56.dp).clip(CircleShape), contentScale = ContentScale.Crop)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(prestador.companyName ?: "${prestador.name} ${prestador.lastName}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(prestador.address, style = MaterialTheme.typography.bodyMedium)
-                Text("Email: ${prestador.email}", style = MaterialTheme.typography.bodyMedium)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = colors.surfaceColor
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                AsyncImage(
+                    model = prestador.profileImageUrl,
+                    contentDescription = "Foto de perfil",
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        prestador.companyName ?: "${prestador.name} ${prestador.lastName}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        prestador.address,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textSecondary
+                    )
+                    Text(
+                        "Email: ${prestador.email}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textSecondary
+                    )
+                }
+                IconButton(onClick = onFilterClick) {
+                    Icon(
+                        Icons.Filled.FilterList,
+                        contentDescription = "Filtrar Secciones",
+                        tint = colors.primaryOrange
+                    )
+                }
             }
-            IconButton(onClick = onFilterClick) { Icon(Icons.Filled.FilterList, contentDescription = "Filtrar Secciones") }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Presupuesto Nº: 0001", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-            Text("Fecha: $currentDate", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = colors.border)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Presupuesto Nº: 0001",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+                Text(
+                    "Fecha: $currentDate",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+            }
         }
     }
 }
@@ -1542,6 +1897,534 @@ fun Modifier.drawDottedLineBottom() = this.drawBehind {
     val y = size.height - strokeWidth / 2
     drawLine(color = Color.Gray, start = androidx.compose.ui.geometry.Offset(0f, y), end = androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = strokeWidth, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
 }
+
+
+private val Slate50 = Color(0xFFF8FAFC)
+private val Slate100 = Color(0xFFF1F5F9)
+private val Slate200 = Color(0xFFE2E8F0)
+private val Slate300 = Color(0xFFCBD5E1)
+private val Slate400 = Color(0xFF94A3B8)
+private val Slate500 = Color(0xFF64748B)
+private val Slate600 = Color(0xFF475569)
+private val Slate700 = Color(0xFF334155)
+private val Slate800 = Color(0xFF1E293B)
+private val MaverickBlueEnd = Color(0xFF2563EB)
+private val MaverickBlueStart = Color(0xFF1E40AF)
+private val MaverickGradient = Brush.linearGradient(colors = listOf(MaverickBlueStart, MaverickBlueEnd))
+data class PresupuestoItemDisplay(
+    val cantidad: String,
+    val descripcion: String,
+    val unitario: String,
+    val total: String,
+    val isSpecial: Boolean = false
+)
+
+//Dimensiones A4
+val A4_WIDTH = 450.dp
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun BudgetPreviewPDFDialog(
+    prestador: PPrestadorProfileFalso,
+    items: List<BudgetItem>,
+    services: List<BudgetService>,
+    professionalFees: List<BudgetProfessionalFee>,
+    miscExpenses: List<BudgetMiscExpense>,
+    taxes: List<BudgetTax>,
+    grandTotal: Double,
+    subtotal: Double,
+    taxAmount: Double,
+    discountAmount: Double,
+    onDismiss: () -> Unit
+) {
+    //CONVERTIR ITEMS A FORMATO DE DISPLAY
+
+    val displayItems = mutableListOf<PresupuestoItemDisplay>()
+
+    //Agregar articulos
+    items.forEach { item ->
+        val base = item.unitPrice * item.quantity
+        val taxAmount = base * (item.taxPercentage / 100)
+        val withTax = base + taxAmount
+        val discountAmount = withTax * (item.discountPercentage / 100)
+        val total = withTax - discountAmount
+
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = item.quantity.toString(),
+                descripcion = item.description,
+                unitario = "$ ${String.format("%,.2f", item.unitPrice)}",
+                total = "$ ${String.format("%,.2f", total)}"
+            )
+        )
+    }
+
+    // Agregar servicios
+    services.forEach { service ->
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = "-",
+                descripcion = service.description,
+                unitario = "-",
+                total = "$ ${String.format("%,.2f", service.total)}",
+                isSpecial = true
+            )
+        )
+    }
+
+    // Agregar honorarios profesionales
+    professionalFees.forEach { fee ->
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = "-",
+                descripcion = fee.description,
+                unitario = "-",
+                total = "$ ${String.format("%,.2f", fee.total)}",
+                isSpecial = true
+            )
+        )
+    }
+
+    // Agregar gastos varios
+    miscExpenses.forEach { expense ->
+        displayItems.add(
+            PresupuestoItemDisplay(
+                cantidad = "-",
+                descripcion = expense.description,
+                unitario = "-",
+                total = "$ ${String.format("%,.2f", expense.amount)}"
+            )
+        )
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val screenWidth = maxWidth
+            val initialFitScale = remember (screenWidth) {
+                ((screenWidth - 32.dp) / A4_WIDTH).coerceAtMost(1f)
+            }
+            // Estados de zoom y paneo
+            var scale by remember { mutableFloatStateOf(initialFitScale) }
+            var offset by remember { mutableStateOf(Offset.Zero) }
+
+            //Contenedor principal (visor)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF202020))
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(initialFitScale, 4f)
+                            offset += pan
+                        }
+                    }
+            ) {
+                // La hoja de papel A4
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        )
+                        .width(A4_WIDTH)
+                        .wrapContentHeight()
+                        .shadow(elevation = 12.dp)
+                        .background(Color.White)
+
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Slate300)
+                    ) {
+                        //Franja decorativa
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .background(MaverickGradient)
+                        )
+
+                        // Encabezado
+                        A4HeaderSection(prestador)
+                        HorizontalDivider(color = Slate200)
+
+                        // Datos Cliente
+                        A4ClientInfoSection(prestador)
+
+                        // Tabla de items
+                        A4ItemsTable(displayItems)
+                        //Footer
+                        A4FooterSection(
+                            subtotal = subtotal,
+                            taxAmount = taxAmount,
+                            discountAmount = discountAmount,
+                            total = grandTotal
+                        )
+                    }
+                }
+
+                //Boton cerrar
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                        .size(48.dp)
+                        .zIndex(10f)
+                ) {
+                    Icon(Icons.Default.Close, "Cerrar", tint = Slate800)
+                }
+
+                //Controles de zoom
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                        .background(Slate800.copy(alpha = 0.9f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .zIndex(10f), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            scale = (scale * 0.8f).coerceAtLeast(initialFitScale)
+                            offset = Offset.Zero
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Remove, "Alejar", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                    Text(
+                        text = "${(scale / initialFitScale * 100).toInt()}%",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.widthIn(min = 50.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    IconButton(
+                        onClick = {
+                            scale = (scale * 1.25f).coerceAtMost(4f)
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Add, "Acercar", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            scale = initialFitScale
+                            offset = Offset.Zero
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, "Resetear", tint = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun A4HeaderSection(prestador: PPrestadorProfileFalso) {
+    val currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        // Logo y dirección
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaverickGradient)
+                    .padding(6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Home, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    "${prestador.name} ${prestador.lastName}".uppercase(),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Slate800,
+                    letterSpacing = (-0.5).sp,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    prestador.services.firstOrNull() ?: "SERVICIOS",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Slate400,
+                    letterSpacing = 1.5.sp,
+                    lineHeight = 11.sp
+                )
+            }
+        }
+
+        // La "X" con PRESUPUESTO debajo
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .border(2.dp, Slate800, RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("X", fontSize = 26.sp, fontWeight = FontWeight.Black, color = Slate800)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("PRESUPUESTO", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Slate600, letterSpacing = 0.5.sp)
+        }
+
+        // Datos
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 3.dp)
+                    .background(Slate50)
+                    .border(1.dp, Slate300, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text("N° ${prestador.id.takeLast(8)}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Slate800)
+            }
+            Text(currentDate, fontSize = 10.sp, color = Slate600, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+fun A4ClientInfoSection(prestador: PPrestadorProfileFalso) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+        // Emisor
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text("DE:", fontSize = 10.sp,
+                fontWeight = FontWeight.Bold, color = Slate400)
+            Text(
+                prestador.companyName ?: "${prestador.name} ${prestador.lastName}",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Normal,
+                color = Slate600
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        //Receptor
+
+        Column {
+            Text("PARA:", fontSize = 10.sp,
+                fontWeight = FontWeight.Bold, color = Slate400)
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 2.dp).width(20.dp),
+                color = Slate300
+            )
+
+            Column(modifier = Modifier.padding(bottom = 4.dp)) {
+                Text("CLIENTE / EMPRESA", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Cliente", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800, lineHeight = 13.sp)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .width(1.dp)
+                            .height(13.dp)
+                            .background(Slate400)
+                    )
+                    Text(prestador.companyName ?: "", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800, lineHeight = 13.sp)
+                }
+                HorizontalDivider(color = Slate400, thickness = 1.dp)
+            }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("DIRECCIÓN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                    Text("A definir", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                    HorizontalDivider(color = Slate300, thickness = 1.dp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("MÉTODO DE PAGO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                    Text("A definir", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                    HorizontalDivider(color = Slate300, thickness = 1.dp)
+                }
+            }
+            Column {
+                Text("TRABAJO / PROYECTO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                Text("Proyecto de servicio", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                HorizontalDivider(color = Slate300, thickness = 1.dp)
+            }
+        }
+    }
+}
+
+@Composable
+fun A4ItemsTable(items: List<PresupuestoItemDisplay>) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier.border(1.dp, Slate300)) {
+            // Header
+            Row(modifier = Modifier.background(Slate100).height(IntrinsicSize.Min)) {
+                A4TableCell("Cant", 0.15f, true)
+                A4TableCell("Descripción", 0.55f, true)
+                A4TableCell("Unitario", 0.3f, true, alignRight = true)
+                A4TableCell("Total", 0.3f, true, alignRight = true, isLast = true)
+            }
+            HorizontalDivider(color = Slate300)
+
+            // Items
+            items.forEach { item ->
+                val bg = if (item.isSpecial) Color(0xFFEFF6FF) else Color.White
+                val color = if (item.isSpecial) MaverickBlueEnd else Slate800
+                val weight = if (item.isSpecial) FontWeight.Bold else FontWeight.Normal
+
+                Row(modifier = Modifier.background(bg).height(IntrinsicSize.Min)) {
+                    A4TableCell(if(item.isSpecial) "-" else item.cantidad, 0.15f, color = Slate600)
+                    A4TableCell(item.descripcion, 0.55f, color = color, fontWeight = weight)
+                    A4TableCell(item.unitario, 0.3f, alignRight = true, color = Slate600)
+                    A4TableCell(item.total, 0.3f, alignRight = true, fontWeight = FontWeight.Bold, color = color, isLast = true)
+                }
+                HorizontalDivider(color = Slate300)
+            }
+        }
+    }
+}
+
+@Composable
+fun RowScope.A4TableCell(
+    text: String,
+    weight: Float,
+    isHeader: Boolean = false,
+    alignRight: Boolean = false,
+    isLast: Boolean = false,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null
+) {
+    val finalColor = if (color == Color.Unspecified) (if (isHeader) Slate600 else Slate800) else color
+    val finalWeight = fontWeight ?: (if (isHeader) FontWeight.Bold else FontWeight.Normal)
+
+    Box(
+        modifier = Modifier
+            .weight(weight)
+            .fillMaxHeight()
+            .then(if (!isLast) Modifier.border(width = 0.5.dp, color = Slate300.copy(alpha = 0.5f)) else Modifier)
+            .padding(6.dp),
+        contentAlignment = if (alignRight) Alignment.CenterEnd else Alignment.CenterStart
+    ) {
+        Text(
+            text = text,
+            fontSize = if (isHeader) 9.sp else 10.sp,
+            fontWeight = finalWeight,
+            color = finalColor,
+            textAlign = if (alignRight) TextAlign.End else TextAlign.Start,
+            lineHeight = if (isHeader) 11.sp else 12.sp
+        )
+    }
+}
+
+@Composable
+fun A4FooterSection(
+    subtotal: Double,
+    taxAmount: Double,
+    discountAmount: Double,
+    total: Double
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Slate50)
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Nota Legal
+            Text(
+                text = "Nota: Los precios están expresados en Pesos Argentinos.\nVálido por 15 días.",
+                fontSize = 10.sp,
+                color = Slate400,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                lineHeight = 14.sp,
+                modifier = Modifier.width(180.dp)
+            )
+
+            // Cuadro de Totales
+            Column(
+                modifier = Modifier
+                    .width(220.dp)
+                    .shadow(2.dp, RoundedCornerShape(4.dp))
+                    .background(Color.White, RoundedCornerShape(4.dp))
+                    .border(1.dp, Slate300, RoundedCornerShape(4.dp))
+                    .padding(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Subtotal:", fontSize = 11.sp, color = Slate600)
+                    Text("$ ${String.format("%,.2f", subtotal)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                }
+
+                if (taxAmount > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Impuestos:", fontSize = 11.sp, color = Slate600)
+                        Text("$ ${String.format("%,.2f", taxAmount)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                    }
+                }
+
+                if (discountAmount > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Descuento:", fontSize = 11.sp, color = Slate600)
+                        Text("- $ ${String.format("%,.2f", discountAmount)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Slate200)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("TOTAL", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Slate800)
+                    Text("$ ${String.format("%,.2f", total)}", fontSize = 20.sp, fontWeight = FontWeight.Black, color = MaverickBlueEnd)
+                }
+            }
+        }
+    }
+}
+
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Preview(showBackground = true)

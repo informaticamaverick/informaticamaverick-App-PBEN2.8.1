@@ -2,6 +2,7 @@
 package com.example.myapplication.presentation.profile
 
 data class ProfileUiState(
+    val uid: String = "", // <--- AGREGA ESTO PRIMERO PARA CONECTAR CON EL CHAT
     val displayName: String = "",
     val email: String = "",
     val phoneNumber: String = "",

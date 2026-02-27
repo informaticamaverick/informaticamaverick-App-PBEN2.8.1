@@ -45,7 +45,7 @@ import com.example.myapplication.data.model.Provider
 import com.example.myapplication.data.model.CompanyProvider
 import com.example.myapplication.data.model.EmployeeProvider
 import com.example.myapplication.presentation.components.GeminiSplitFAB
-import com.example.myapplication.presentation.components.SmallFabTool
+//import com.example.myapplication.presentation.components.SmallFabTool
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -87,7 +87,9 @@ fun PerfilPrestadorCliente(
  * [ACTUALIZADO] Mapeo completo a modelos reales.
  */
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class,
+    ExperimentalLayoutApi::class
+)
 @Composable
 fun PerfilPrestadorContent(
     provider: Provider,
@@ -337,11 +339,11 @@ fun PerfilPrestadorContent(
                     onToggleExpand = { isFabExpanded = !isFabExpanded },
                     onActivateSearch = { },
                     onCloseSearch = { },
-                    secondaryActions = { },
-                    expandedTools = {
-                        SmallFabTool("Contactar", Icons.Default.Chat, onClick = {})
-                        SmallFabTool("Compartir", Icons.Default.Share, onClick = {})
-                    }
+                   // secondaryActions = { },
+                   // expandedTools = {
+                     //   SmallFabTool("Contactar", Icons.Default.Chat, onClick = {})
+                      //  SmallFabTool("Compartir", Icons.Default.Share, onClick = {})
+                   // }
                 )
             }
         }

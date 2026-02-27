@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * --- DATA ACCESS OBJECT (DAO) PARA PROVEEDORES ---
- * [ACTUALIZADO] Soporte para flujos individuales por ID.
+ * [ACTUALIZADO] Soporte para flujos individuales por ID y búsqueda por categoría.
  */
 @Dao
 interface ProviderDao {
@@ -24,6 +24,13 @@ interface ProviderDao {
 
     @Query("SELECT * FROM provider_profile WHERE id = :providerId")
     suspend fun getProviderById(providerId: String): ProviderEntity?
+
+    /**
+     * 🔥 [NUEVO] Obtiene todos los prestadores de una categoría específica.
+     * Utilizado para simular respuestas a licitaciones.
+     */
+    @Query("SELECT * FROM provider_profile WHERE category = :category")
+    suspend fun getProvidersByCategory(category: String): List<ProviderEntity>
 
     /**
      * Obtiene un flujo de datos de un proveedor específico para observar cambios en tiempo real.

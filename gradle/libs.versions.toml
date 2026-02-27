@@ -1,22 +1,22 @@
 [versions]
-agp = "8.13.2"
-kotlin = "2.0.21"
-coreKtx = "1.10.1"
+agp = "8.7.3"
+kotlin = "2.1.0"
+coreKtx = "1.15.0"
 junit = "4.13.2"
-junitVersion = "1.1.5"
-espressoCore = "3.5.1"
-lifecycleKtx = "2.6.1"
+junitVersion = "1.2.1"
+espressoCore = "3.6.1"
+lifecycleKtx = "2.8.7"
 hiltNavigationCompose = "1.2.0"
-activityCompose = "1.8.0"
-composeBom = "2026.01.01"
-coil = "2.5.0"
-room = "2.6.1" # <-- AÑADIDO
+activityCompose = "1.9.3"
+composeBom = "2024.12.01"
+coil = "2.7.0"
+room = "2.6.1"
 
-ksp = "2.0.21-1.0.26"
-hilt = "2.51.1"
-retrofit = "2.9.0"
+ksp = "2.1.0-1.0.29"
+hilt = "2.52"
+retrofit = "2.11.0"
 okhttp = "4.12.0"
-serialization = "1.6.3"
+serialization = "1.7.3"
 navigationCompose = "2.8.5"
 securityCrypto = "1.1.0-alpha06"
 googleGmsAuth = "21.2.0"
@@ -24,9 +24,9 @@ credentialsAuth = "1.3.0"
 firebaseBom = "33.7.0"
 googleServices = "4.4.2"
 playServicesLocation = "21.3.0"
-ui = "1.10.2"
-animation = "1.10.2"
-
+ui = "1.7.6"
+animation = "1.7.6"
+benchmarkTraceprocessor = "1.4.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -46,13 +46,13 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 
-# Room <-- AÑADIDO
+# Room
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 
 # Hilt
-hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt"}
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
 
 # Retrofit
@@ -76,19 +76,20 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "googleGmsAuth" }
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentialsAuth" }
 androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialsAuth" }
-googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version = "1.1.1" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version = "1.1.0" }
 
 # Firebase
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
-firebase-auth = { group = "com.google.firebase", name = "firebase-auth-ktx" }
-firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore-ktx" }
-firebase-storage = { group = "com.google.firebase", name = "firebase-storage-ktx" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 # Image Loading
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "ui" }
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
+androidx-benchmark-traceprocessor = { group = "androidx.benchmark", name = "benchmark-traceprocessor", version.ref = "benchmarkTraceprocessor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -7,9 +7,10 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Scaffold
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,18 +33,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel // <--- IMPORTANTE
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -52,27 +46,21 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.myapplication.presentation.profile.ProfileSharedViewModel
-//import com.example.myapplication.ui.screens.HomeScreenComplete
+import com.example.myapplication.ui.theme.MyApplicationTheme
 
 // 1. DEFINICIÓN CENTRALIZADA DE TODAS LAS RUTAS
 sealed class Screen(val route: String, val title: String) {
-    // Pantallas Principales
     object Home : Screen("home", "Inicio")
     object Presupuestos : Screen("presupuestos", "Presupuestos")
     object Chat : Screen("chat?providerId={providerId}", "Chat")
     object Calendar : Screen("calendar", "Calendario")
     object Promo : Screen("promo", "Promociones")
-
-    // Pantallas Secundarias
     object CrearLicitacion : Screen("crear_licitacion", "Crear Licitación")
     object PerfilPrestador : Screen("perfil_prestador/{providerId}", "Perfil del Prestador")
     object PerfilCliente : Screen("perfil_cliente", "Mi Perfil")
-    // Se eliminó AddCompany de las rutas de navegación
     object ResultBusqueda : Screen("result_busqueda/{category}", "Resultados de Búsqueda")
     object ChatConversation : Screen("chat_conversation/{providerId}", "Conversación de Chat")
-    
-    // Pantalla de Login (Agregada)
+    object Fast : Screen("fast", "Maverick FAST")
     object Login : Screen("login", "Iniciar Sesión")
 }
 
@@ -117,7 +105,6 @@ fun AppNavigation() {
             startDestination = Screen.Home.route,
             modifier = Modifier.fillMaxSize()
         ) {
-            // 1. HOME
             composable(
                 route = Screen.Home.route,
                 enterTransition = {
@@ -144,17 +131,17 @@ fun AppNavigation() {
                     bottomPadding = innerPadding
                 )
             }
-/**
-            // 2. PRESUPUESTOS
+
             composable(Screen.Presupuestos.route) {
+                val budgetViewModel: BudgetViewModel = hiltViewModel()
                 PresupuestosScreen(
+                    viewModel = budgetViewModel,
                     onBack = { navController.popBackStack() },
-                    onChatClick = { pid -> navController.navigate("chat?providerId=$pid") },
-                    onProfileClick = { pid -> navController.navigate("perfil_prestador/$pid") }
+                    onChatClick = { pid: String -> navController.navigate("chat?providerId=$pid") },
+                    bottomPadding = innerPadding // PASAMOS EL PADDING PARA LA UBICACIÓN DEL FAB
                 )
             }
-**/
-            // 3. CHAT
+
             composable(
                 route = Screen.Chat.route,
                 arguments = listOf(navArgument("providerId") {
@@ -170,15 +157,11 @@ fun AppNavigation() {
                 )
             }
 
-            // 4. CALENDAR & PROMO
             composable(Screen.Calendar.route) { CalendarScreen(onBack = { navController.popBackStack() }) }
 
-   /**
             composable(Screen.Promo.route) {
                 PromoScreen(navController = navController, onBack = { navController.popBackStack() })
             }
-**/
-            // --- PANTALLAS SECUNDARIAS ---
 
             composable(Screen.CrearLicitacion.route) { CrearLicScreen(onBack = { navController.popBackStack() }) }
 
@@ -186,7 +169,6 @@ fun AppNavigation() {
                 PerfilUsuarioScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onLogout = { /* Lógica de logout */ }
-                    // Ya no se pasa onNavigateToCreateCompany
                 )
             }
 
@@ -210,11 +192,10 @@ fun AppNavigation() {
                 val providerId = backStackEntry.arguments?.getString("providerId") ?: ""
                 PerfilPrestadorCliente(providerId = providerId, onBack = { navController.popBackStack() })
             }
-            
-            // Ruta de Login (Placeholder para evitar errores, asumiendo que LoginScreen existe o se implementará)
+
+            composable(Screen.Fast.route) { FastScreen() }
+
             composable(Screen.Login.route) {
-                // Aquí deberías llamar a tu pantalla de Login.
-                // Como no tengo el archivo LoginScreen.kt a mano, pondré un Text provisional.
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Pantalla de Login")
                 }
@@ -223,17 +204,14 @@ fun AppNavigation() {
     }
 }
 
-// ... (El código de AppBottomNavigationBar se queda igual que en tu archivo original) ...
 @Composable
 fun AppBottomNavigationBar(navController: NavHostController, allItems: List<Screen>, currentRoute: String?) {
-    // ... Copia aquí tu código de BottomBar si lo necesitas, o déjalo como estaba abajo ...
-    // (Por espacio no lo repito, pero asegúrate de que esté en el archivo)
     val isDark = isSystemInDarkTheme()
     val navBarColor = if (isDark) Color.Black.copy(alpha = 1f) else MaterialTheme.colorScheme.surface
 
     NavigationBar(
         modifier = Modifier
-            .height(80.dp)
+            .height(55.dp)
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
         containerColor = navBarColor,
@@ -281,5 +259,34 @@ fun getEmojiForScreen(screen: Screen): String {
         Screen.Calendar -> "📅"
         Screen.Promo -> "🔥"
         else -> ""
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun AppNavigationPreview() {
+    MyApplicationTheme {
+        AppNavigation()
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun AppBottomNavigationBarPreview() {
+    val navController = rememberNavController()
+    val navItems = listOf(
+        Screen.Home,
+        Screen.Presupuestos,
+        Screen.Chat,
+        Screen.Calendar,
+        Screen.Promo
+    )
+    MyApplicationTheme {
+        AppBottomNavigationBar(
+            navController = navController,
+            allItems = navItems,
+            currentRoute = Screen.Home.route
+        )
     }
 }

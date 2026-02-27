@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.map
 
 /**
  * --- REPOSITORIO PARA PROVEEDORES ---
- * [ACTUALIZADO] Soporte para búsqueda por ID y flujo de datos real.
+ * [ACTUALIZADO] Soporte para búsqueda por ID, flujo de datos real y filtros por categoría.
  */
 class ProviderRepository(private val providerDao: ProviderDao) {
 
@@ -30,6 +30,14 @@ class ProviderRepository(private val providerDao: ProviderDao) {
      */
     fun getProviderById(providerId: String): Flow<Provider?> {
         return providerDao.getProviderFlowById(providerId).map { it?.toDomain() }
+    }
+
+    /**
+     * 🔥 [NUEVO] Obtiene prestadores por categoría (No observable).
+     * Útil para procesos de simulación masiva.
+     */
+    suspend fun getProvidersByCategory(category: String): List<Provider> {
+        return providerDao.getProvidersByCategory(category).map { it.toDomain() }
     }
 
     /**

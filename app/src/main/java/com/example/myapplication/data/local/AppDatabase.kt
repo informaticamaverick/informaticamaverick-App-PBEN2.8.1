@@ -7,40 +7,44 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.example.myapplication.data.model.fake.CategorySampleDataFalso // Tus datos de categorías
-import com.example.myapplication.data.model.fake.PrestadorSampleDataFalso // Descomenta si usas prestadores falsos
+import com.example.myapplication.data.model.fake.CategorySampleDataFalso
+import com.example.myapplication.data.model.fake.PrestadorSampleDataFalso
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * --- BASE DE DATOS MAESTRA ---
- * Centraliza la persistencia de Usuarios, Prestadores y Categorías.
+ * --- BASE DE DATOS MAESTRA (AppDatabase) ---
+ * Centraliza la persistencia de Usuarios, Prestadores, Categorías,
+ * Licitaciones, Presupuestos y Mensajes de Chat.
  */
 @Database(
     entities = [
         UserEntity::class,      // Tabla de Usuarios
         ProviderEntity::class,  // Tabla de Prestadores
-        CategoryEntity::class   // Tabla de Categorías
+        CategoryEntity::class,  // Tabla de Categorías
+        TenderEntity::class,    // Tabla de Licitaciones (Pedidos del cliente)
+        BudgetEntity::class,    // Tabla de Presupuestos (Ofertas de prestadores)
+        MessageEntity::class    // Tabla de Mensajes (Historial de Chat)
     ],
-    version = 5, // 🔥 [ACTUALIZADO] Versión 5 para habilitar la carga masiva de prestadores
+    version = 10, // 🔥 [CORREGIDO] Incrementado a 10 para solucionar el error de integridad.
     exportSchema = false
 )
-// Aquí registramos el convertidor que arreglamos en el paso anterior
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
-    // --- DAOs: Accesos a tablas ---
+    // --- DAOs: Accesos a las tablas ---
     abstract fun userDao(): UserDao
     abstract fun providerDao(): ProviderDao
     abstract fun categoryDao(): CategoryDao
+    abstract fun budgetDao(): BudgetDao
+    abstract fun chatDao(): ChatDao
 
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
         /**
-         * Obtiene la instancia de la base de datos (Singleton).
-         * @param scope El alcance de corrutina para operaciones de inicialización.
+         * Obtiene la instancia Singleton de la base de datos.
          */
         fun getDatabase(context: Context, scope: CoroutineScope): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -49,8 +53,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                    .addCallback(AppDatabaseCallback(scope)) 
-                    .fallbackToDestructiveMigration() // 🔥 Limpia la base de datos si el esquema cambia
+                    .addCallback(AppDatabaseCallback(scope))
+                    .fallbackToDestructiveMigration() // Limpia la BD al cambiar versión
                     .build()
                 INSTANCE = instance
                 instance
@@ -60,7 +64,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     /**
      * --- CALLBACK DE INICIALIZACIÓN ---
-     * Se ejecuta cuando la base de datos se crea por primera vez.
+     * Se activa únicamente la primera vez que se crea la base de datos física.
      */
     private class AppDatabaseCallback(
         private val scope: CoroutineScope
@@ -69,16 +73,19 @@ abstract class AppDatabase : RoomDatabase() {
             super.onCreate(db)
             INSTANCE?.let { database ->
                 scope.launch {
-                    
-                    // ===================================================
-                    // SECCIÓN 1: CARGA DE CATEGORÍAS
-                    // ===================================================
+                    // Obtenemos los DAOs necesarios
                     val categoryDao = database.categoryDao()
+                    val providerDao = database.providerDao()
+                    val budgetDao = database.budgetDao()
+                    val chatDao = database.chatDao()
+
+                    // ===================================================
+                    // 1. CARGA DE CATEGORÍAS
+                    // ===================================================
                     val categoryEntities = CategorySampleDataFalso.categories.map { item ->
                         CategoryEntity(
                             name = item.name,
                             icon = item.icon,
-                            // Convertimos Color -> Long aquí mismo
                             color = item.color.toArgb().toLong(),
                             superCategory = item.superCategory,
                             providerIds = item.providerIds,
@@ -91,17 +98,26 @@ abstract class AppDatabase : RoomDatabase() {
                     categoryDao.insertAll(categoryEntities)
 
                     // ===================================================
-                    // SECCIÓN 2: 🔥 CARGA DE PRESTADORES (INCLUYE MAVERICK)
-                    // 🔥 A futuro: Integrar Firebase Auth y Firestore para
-                    // descargar prestadores reales y sincronizarlos aquí.
+                    // 2. GENERACIÓN DE DATOS SEMILLA (SIMULACIÓN TOTAL)
+                    // Llamamos a generateAll() que ahora lee internamente de las categorías.
                     // ===================================================
-                    val providerDao = database.providerDao()
-                    
-                    // Genera Maverick (ID 1001) + entre 5 y 20 por categoría
-                    val sampleProviders = PrestadorSampleDataFalso.generate()
-                    
-                    // Persistencia real en Room
-                    providerDao.insertAll(sampleProviders)
+                    val seedData = PrestadorSampleDataFalso.generateAll(categoryEntities)
+
+                    // 3. CARGA DE PRESTADORES
+                    providerDao.insertAll(seedData.providers)
+
+                    // 4. CARGA DE LICITACIONES (RE-HABILITADO)
+                    seedData.tenders.forEach { tender ->
+                        budgetDao.insertTender(tender)
+                    }
+
+                    // 5. CARGA DE PRESUPUESTOS (DESACTIVADO POR USUARIO)
+                    // seedData.budgets.forEach { budget ->
+                    //    budgetDao.insertBudget(budget)
+                    // }
+
+                    // 6. CARGA DE MENSAJES DE CHAT (DESACTIVADO POR USUARIO)
+                    // chatDao.insertAllMessages(seedData.messages)
                 }
             }
         }

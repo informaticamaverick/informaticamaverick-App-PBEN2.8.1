@@ -38,7 +38,7 @@ import com.example.myapplication.data.model.AddressClient
 import com.example.myapplication.data.model.BranchClient
 import com.example.myapplication.data.model.CompanyClient
 import com.example.myapplication.data.model.RepresentativeClient
-import com.example.myapplication.presentation.components.SmallFabTool
+//import com.example.myapplication.presentation.components.SmallFabTool
 import com.example.myapplication.presentation.components.geminiGradientEffect
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
@@ -241,7 +241,7 @@ fun PerfilUsuarioScreen(
 // --- SECCIÓN 2: ESTRUCTURA DE LA PANTALLA DE VISUALIZACIÓN ---
 // =================================================================================
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PerfilUsuarioContent(
     user: UserEntity,
@@ -761,8 +761,8 @@ fun SimplifiedGeminiFAB(isExpanded: Boolean, onToggleExpand: () -> Unit, onEdit:
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         AnimatedVisibility(visible = isExpanded, enter = fadeIn() + slideInHorizontally(), exit = fadeOut() + slideOutHorizontally()) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallFabTool("Negocio", Icons.Default.AddBusiness, onClick = onCreateCompany)
-                SmallFabTool("Editar", Icons.Default.Edit, onClick = onEdit)
+                //SmallFabTool("Negocio", Icons.Default.AddBusiness, onClick = onCreateCompany)
+                //SmallFabTool("Editar", Icons.Default.Edit, onClick = onEdit)
             }
         }
         Surface(onClick = onToggleExpand, modifier = Modifier.size(56.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surface, border = BorderStroke(2.5.dp, rainbowBrush), shadowElevation = 12.dp) {
