@@ -15,7 +15,7 @@ data class CategoryEntity(
     val color: Long,
 
     val superCategory: String,
-
+    val superCategoryIcon: String = "📂",
     // [ARREGLO 2] Usamos List normal para que coincida con tu archivo Converters.kt
     val providerIds: List<String> = emptyList(),
 

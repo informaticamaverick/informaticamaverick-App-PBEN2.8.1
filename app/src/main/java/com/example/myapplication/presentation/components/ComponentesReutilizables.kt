@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -19,12 +20,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -39,11 +42,15 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -58,6 +65,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
@@ -67,16 +77,16 @@ import com.example.myapplication.data.local.CategoryEntity
 import com.example.myapplication.data.model.Provider
 import com.example.myapplication.data.model.CompanyProvider
 import com.example.myapplication.ui.theme.MyApplicationTheme
-import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
-import androidx.compose.material3.carousel.rememberCarouselState
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.util.lerp
+import androidx.compose.ui.draw.alpha
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.absoluteValue
 
 // ==========================================================================================
@@ -149,7 +159,7 @@ data class ControlItem(
 )
 
 // ==========================================================================================
-// --- BOTONES COMPACTOS RESTAURADOS ---
+// --- BOTONES COMPACTOS (ACCIONES LATERALES DEL FAB) ---
 // ==========================================================================================
 
 @Composable
@@ -195,164 +205,365 @@ fun SmallActionFab(
 // --- GEMINI SPLIT FAB CON PANEL TÁCTICO ANIMADO V2 (UX PRO) ---
 // ==========================================================================================
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeminiSplitFAB(
     isExpanded: Boolean,
     isSearchActive: Boolean,
     isSecondaryPanelVisible: Boolean = false,
+
+    isMultiSelectionActive: Boolean = false,
     onToggleExpand: () -> Unit,
     onActivateSearch: () -> Unit,
     onCloseSearch: () -> Unit,
     onCloseSecondaryPanel: () -> Unit = {},
-    // Estados del Panel Táctico
+
+    showCategories: Boolean = true,
+    showFilters: Boolean = true,
+    showSort: Boolean = true,
+    showTools: Boolean = true,
+
+    onCompareClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+
     activeFilters: Set<String> = emptySet(),
-    dynamicCategories: List<ControlItem> = emptyList(), // Si está vacía, no renderiza categorías (ideal para Home)
+    dynamicCategories: List<ControlItem> = emptyList(),
     onAction: (String) -> Unit = {},
     onResetAll: () -> Unit = {},
-    // Botones Horizontales
+
     secondaryActions: @Composable RowScope.() -> Unit = {}
 ) {
     val colors = MaterialTheme.colorScheme
     val rainbowBrush = geminiGradientEffect()
+    val density = LocalDensity.current
 
-    // Si el panel está expandido, mostramos la X girada.
+    val popupOffset = remember {
+        with(density) { IntOffset((-8).dp.roundToPx(), (-75).dp.roundToPx()) }
+    }
+
     val fabIconRotation by animateFloatAsState(
-        targetValue = if (isExpanded) 90f else 0f,
+        targetValue = if (isExpanded || isMultiSelectionActive) 90f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "fabRotation"
     )
 
+    // --- ESTADOS PARA EL RANGO DE FECHAS PERSONALIZADO ---
+    var showCustomDatePopup by remember { mutableStateOf(false) }
+    var selectingDateType by remember { mutableStateOf<String?>(null) } // "start" o "end"
+    var tempStartDate by remember { mutableStateOf<Long?>(null) }
+    var tempEndDate by remember { mutableStateOf<Long?>(null) }
+    val dateFormatter = SimpleDateFormat("dd MMM, yyyy", Locale.getDefault())
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
 
-        // --- POPUP: CENTRO DE CONTROL TÁCTICO V2 ---
-        if (isExpanded) {
-            Popup(
-                alignment = Alignment.BottomCenter,
-                offset = IntOffset(x = 0, y = -260),
-                onDismissRequest = onToggleExpand, // Permite cerrar tocando afuera
-                properties = PopupProperties(focusable = true)
+        // --- POPUP CUSTOM PARA RANGO DE FECHAS ---
+        if (showCustomDatePopup) {
+            Dialog(
+                onDismissRequest = { showCustomDatePopup = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
-                TacticalControlPanel(
-                    activeFilters = activeFilters,
-                    dynamicCategories = dynamicCategories,
-                    onAction = onAction,
-                    onResetAll = {
-                        onResetAll()
-                        onToggleExpand()
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.85f),
+                    shape = RoundedCornerShape(32.dp),
+                    color = Color(0xFF161C24),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    shadowElevation = 24.dp
+                ) {
+                    Column(Modifier.padding(24.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DateRange, null, tint = Color(0xFF2197F5))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Filtrar por Rango", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // Botón Fecha Inicio
+                        Text("FECHA DE INICIO", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Surface(
+                            onClick = { selectingDateType = "start" },
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White.copy(0.05f),
+                            border = BorderStroke(1.dp, if (tempStartDate != null) Color(0xFF2197F5) else Color.White.copy(0.1f))
+                        ) {
+                            Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.padding(horizontal = 16.dp)) {
+                                Text(
+                                    text = tempStartDate?.let { dateFormatter.format(Date(it)) } ?: "Toca para seleccionar",
+                                    color = if (tempStartDate != null) Color.White else Color.Gray,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Botón Fecha Fin
+                        Text("FECHA DE FIN", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Surface(
+                            onClick = { selectingDateType = "end" },
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White.copy(0.05f),
+                            border = BorderStroke(1.dp, if (tempEndDate != null) Color(0xFF9B51E0) else Color.White.copy(0.1f))
+                        ) {
+                            Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.padding(horizontal = 16.dp)) {
+                                Text(
+                                    text = tempEndDate?.let { dateFormatter.format(Date(it)) } ?: "Toca para seleccionar",
+                                    color = if (tempEndDate != null) Color.White else Color.Gray,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(32.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            TextButton(
+                                onClick = { showCustomDatePopup = false },
+                                modifier = Modifier.weight(1f).height(48.dp)
+                            ) {
+                                Text("Cancelar", color = Color.Gray, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = {
+                                    if (tempStartDate != null && tempEndDate != null) {
+                                        onAction("date_range_${tempStartDate}_${tempEndDate}")
+                                        showCustomDatePopup = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                enabled = tempStartDate != null && tempEndDate != null
+                            ) {
+                                Text("APLICAR", color = Color.White, fontWeight = FontWeight.Black)
+                            }
+                        }
                     }
+                }
+            }
+        }
+
+        // --- SELECTOR DE FECHA NATIVO (Se abre desde el PopUp) ---
+        if (selectingDateType != null) {
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = if (selectingDateType == "start") tempStartDate else tempEndDate
+            )
+            DatePickerDialog(
+                onDismissRequest = { selectingDateType = null },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (selectingDateType == "start") tempStartDate = datePickerState.selectedDateMillis
+                        else tempEndDate = datePickerState.selectedDateMillis
+                        selectingDateType = null
+                    }) {
+                        Text("Confirmar", color = Color(0xFF2197F5), fontWeight = FontWeight.Black)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { selectingDateType = null }) { Text("Atrás", color = Color.Gray) }
+                },
+                colors = DatePickerDefaults.colors(containerColor = Color(0xFF161C24))
+            ) {
+                DatePicker(
+                    state = datePickerState,
+                    title = { Text(if (selectingDateType == "start") "Fecha de Inicio" else "Fecha de Fin", modifier = Modifier.padding(16.dp)) },
+                    colors = DatePickerDefaults.colors(
+                        titleContentColor = Color.White,
+                        headlineContentColor = Color.White,
+                        selectedDayContainerColor = Color(0xFF2197F5),
+                        todayContentColor = Color(0xFF2197F5),
+                        todayDateBorderColor = Color(0xFF2197F5)
+                    )
                 )
             }
         }
 
+        // --- SCRIM OSCURO REQUERIDO (Fondo translúcido al abrir el panel) ---
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = fadeIn(tween(300)),
+            exit = fadeOut(tween(300))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.75f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onToggleExpand // Cierra al tocar fuera
+                    )
+            )
+        }
+
+        // --- CENTRO DE CONTROL TÁCTICO V2 ---
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = fadeIn(animationSpec = tween(250)) +
+                    scaleIn(
+                        initialScale = 0.8f,
+                        transformOrigin = TransformOrigin(1f, 1f),
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    ) +
+                    slideInVertically(
+                        initialOffsetY = { 100 },
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    ),
+            exit = fadeOut(animationSpec = tween(200)) +
+                    scaleOut(
+                        targetScale = 0.8f,
+                        transformOrigin = TransformOrigin(1f, 1f),
+                        animationSpec = tween(200)
+                    ) +
+                    slideOutVertically(targetOffsetY = { 100 }, animationSpec = tween(200)),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 90.dp, end = 16.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {}
+                )
+        ) {
+            TacticalControlPanel(
+                activeFilters = activeFilters,
+                dynamicCategories = dynamicCategories,
+                onAction = onAction,
+                onApply = {
+                    onAction("apply_filters")
+                    onToggleExpand()
+                },
+                isMultiSelectionActive = isMultiSelectionActive,
+                onCompareClick = onCompareClick,
+                onDeleteClick = onDeleteClick,
+                onShareClick = onShareClick,
+                showCategories = showCategories,
+                showFilters = showFilters,
+                showSort = showSort,
+                showTools = showTools,
+                onOpenCalendar = { showCustomDatePopup = true } // <-- AQUÍ SE CONECTA EL POPUP
+            )
+        }
+
         // --- BOTONES FAB PRINCIPALES Y SECUNDARIOS ---
         Row(
-            modifier = Modifier.padding(24.dp).navigationBarsPadding(),
+            modifier = Modifier.padding(12.dp).navigationBarsPadding(),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // --- BOTONES LATERALES ---
             AnimatedVisibility(
                 visible = !isSearchActive && !isExpanded && !isSecondaryPanelVisible,
                 enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
                 exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Bottom) {
-
-                    // 🔥 BOTÓN MÁGICO DE LIMPIEZA RÁPIDA (Aparece solo si hay filtros activos)
-                    AnimatedVisibility(visible = activeFilters.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+                    AnimatedVisibility(visible = activeFilters.isNotEmpty() && !isMultiSelectionActive) {
                         Surface(
                             onClick = {
                                 onResetAll()
-                                if(isExpanded) onToggleExpand()
+                                if (isExpanded) onToggleExpand()
                             },
-                            modifier = Modifier.height(56.dp).wrapContentWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFFEF4444).copy(alpha = 0.15f),
-                            border = BorderStroke(1.5.dp, Color(0xFFEF4444).copy(alpha = 0.4f))
+                            modifier = Modifier.size(height = 56.dp, width = 56.dp),
+                            shape = CircleShape,
+                            color = Color(0xFFEF4444),
+                            shadowElevation = 8.dp
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
-                                Icon(Icons.Default.Close, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("LIMPIAR", color = Color(0xFFEF4444), fontSize = 11.sp, fontWeight = FontWeight.Black)
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.DeleteSweep, contentDescription = "Limpiar Filtros", tint = Color.White, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
 
-                    secondaryActions()
+                    AnimatedVisibility(visible = isMultiSelectionActive) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+                            SmallActionFab(icon = Icons.AutoMirrored.Filled.CompareArrows, label = "Comp.", iconColor = Color(0xFF2197F5), onClick = onCompareClick)
+                            SmallActionFab(icon = Icons.Default.Delete, label = "Elim.", iconColor = Color(0xFFE91E63), onClick = onDeleteClick)
+                        }
+                    }
+
+                    if (!isMultiSelectionActive) {
+                        secondaryActions()
+                    }
                 }
             }
 
-            // --- FABS PRINCIPALES (Búsqueda Pill y Engranaje Circular) ---
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // FAB BUSCAR (Con texto y más ancho - Pill Shape)
                 AnimatedVisibility(
-                    visible = !isSearchActive,
+                    visible = !isSearchActive && !isMultiSelectionActive,
                     enter = expandHorizontally() + fadeIn(),
                     exit = shrinkHorizontally() + fadeOut()
                 ) {
+                    // BOTÓN BÚSQUEDA ASIMÉTRICO MODERNO
                     Surface(
                         onClick = onActivateSearch,
                         modifier = Modifier.height(56.dp).wrapContentWidth().defaultMinSize(minWidth = 56.dp),
-                        shape = CircleShape, // Pill
+                        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 8.dp, bottomEnd = 8.dp),
                         color = colors.surface,
-                        border = BorderStroke(2.5.dp, rainbowBrush),
-                        shadowElevation = 12.dp
+                        border = BorderStroke(2.dp, rainbowBrush),
+                        shadowElevation = 8.dp
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                            modifier = Modifier.padding(start = 20.dp, end = 16.dp)
                         ) {
-                            Icon(Icons.Default.Search, null, tint = colors.onSurface, modifier = Modifier.size(26.dp))
+                            Icon(Icons.Default.Search, null, tint = colors.onSurface.copy(0.8f), modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Buscar", fontSize = 15.sp, fontWeight = FontWeight.Black, color = colors.onSurface)
+                            Text("Buscar", fontSize = 14.sp, fontWeight = FontWeight.Black, color = colors.onSurface)
                         }
                     }
                 }
 
-                // FAB AJUSTES (Siempre Redondo con Badge Dinámico)
-                Surface(
-                    onClick = {
-                        when {
-                            isSecondaryPanelVisible -> onCloseSecondaryPanel()
-                            isSearchActive -> onCloseSearch()
-                            else -> onToggleExpand()
-                        }
-                    },
-                    modifier = Modifier.size(56.dp),
-                    shape = CircleShape, // SIEMPRE CIRCULAR
-                    color = colors.surface,
-                    border = BorderStroke(2.5.dp, rainbowBrush),
-                    shadowElevation = 12.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (isExpanded || isSearchActive || isSecondaryPanelVisible) Icons.Default.Close else Icons.Default.Settings,
-                            contentDescription = null,
-                            tint = colors.onSurface,
-                            modifier = Modifier.size(30.dp).rotate(fabIconRotation) // Icono animado
-                        )
-
-                        // 🔥 EL BADGE NOTIFICADOR DE FILTROS ACTIVOS
-                        if (!isExpanded && !isSearchActive && activeFilters.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = (-4).dp, y = 4.dp)
-                                    .size(20.dp)
-                                    .background(Color(0xFFE91E63), CircleShape)
-                                    .border(2.dp, colors.surface, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = activeFilters.size.toString(),
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Black
-                                )
+                // CONTENEDOR BOX PARA EL FAB CIRCULAR + BADGE SUPERPUESTO REAL
+                Box(contentAlignment = Alignment.TopEnd) {
+                    Surface(
+                        onClick = {
+                            when {
+                                isSecondaryPanelVisible -> onCloseSecondaryPanel()
+                                isSearchActive -> onCloseSearch()
+                                isMultiSelectionActive -> onAction("toggle_multiselect")
+                                else -> onToggleExpand()
                             }
+                        },
+                        modifier = Modifier.size(56.dp),
+                        shape = CircleShape,
+                        color = colors.surface,
+                        border = BorderStroke(2.dp, rainbowBrush),
+                        shadowElevation = 8.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isExpanded || isSearchActive || isSecondaryPanelVisible || isMultiSelectionActive) Icons.Default.Close else Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = colors.onSurface,
+                                modifier = Modifier.size(26.dp).rotate(fabIconRotation)
+                            )
+                        }
+                    }
+
+                    // BADGE SUPERPUESTO (Fuera del Surface principal)
+                    if (!isExpanded && !isSearchActive && !isMultiSelectionActive && activeFilters.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = 4.dp, y = (-4).dp)
+                                .size(22.dp)
+                                .background(Color(0xFFE91E63), CircleShape)
+                                .border(2.dp, Color(0xFF05070A), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = activeFilters.size.toString(),
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black
+                            )
                         }
                     }
                 }
@@ -362,128 +573,210 @@ fun GeminiSplitFAB(
 }
 
 /**
- * Panel Táctico Horizontal Animado V2 con Scroll dinámico
+ * Panel Táctico Horizontal Animado V2 con Soporte Multiselección y Diseño Ultra-Compacto
  */
 @Composable
 fun TacticalControlPanel(
     activeFilters: Set<String>,
     dynamicCategories: List<ControlItem>,
     onAction: (String) -> Unit,
-    onResetAll: () -> Unit
+    onApply: () -> Unit,
+    isMultiSelectionActive: Boolean = false,
+    showCategories: Boolean = true,
+    showFilters: Boolean = true,
+    showSort: Boolean = true,
+    showTools: Boolean = true,
+    onCompareClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+    onOpenCalendar: () -> Unit = {}
 ) {
-    // ESTADO PARA LA ANIMACIÓN DE ENTRADA MODERNA
-    var animateIn by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { animateIn = true }
+    var categoriesExpanded by rememberSaveable { mutableStateOf(true) }
+    var filtersExpanded by rememberSaveable { mutableStateOf(true) }
+    var orderExpanded by rememberSaveable { mutableStateOf(true) }
+    var toolsExpanded by rememberSaveable { mutableStateOf(false) } // 🔥 Por defecto colapsado
 
-    AnimatedVisibility(
-        visible = animateIn,
-        enter = slideInVertically(
-            initialOffsetY = { 200 }, // Sube desde más abajo
-            animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow)
-        ) + fadeIn(tween(300)) + scaleIn(initialScale = 0.9f, animationSpec = tween(300)),
-        exit = slideOutVertically(targetOffsetY = { 200 }) + fadeOut(tween(200))
-    ) {
-        Box(modifier = Modifier.fillMaxWidth(0.96f).wrapContentHeight()) {
+    val darkGradientBg = Brush.verticalGradient(listOf(Color(0xFF1A1F26), Color(0xFF05070A)))
 
-            // BOTÓN RESET MAESTRO (FLOTANTE FUERA DEL PANEL)
-            Surface(
-                onClick = onResetAll,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 10.dp, y = (-10).dp)
-                    .size(48.dp)
-                    .zIndex(10f),
-                shape = CircleShape,
-                color = Color(0xFF1F2937),
-                border = BorderStroke(2.dp, Color.White.copy(alpha = 0.3f)),
-                shadowElevation = 25.dp
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(24.dp))
-                }
+    Box(modifier = Modifier.fillMaxWidth(0.96f).wrapContentHeight()) {
+
+        Surface(
+            onClick = onApply,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 8.dp, y = (-8).dp)
+                .size(40.dp)
+                .zIndex(10f),
+            shape = CircleShape,
+            color = Color(0xFF10B981),
+            border = BorderStroke(1.5.dp, Color(0xFF059669)),
+            shadowElevation = 15.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, contentDescription = "Aplicar", tint = Color.White, modifier = Modifier.size(24.dp))
             }
+        }
 
-            // PANEL PRINCIPAL OSCURO (V2)
-            Surface(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 550.dp), // Límite de alto para pantallas chicas
-                color = Color(0xFF05070A).copy(alpha = 0.98f),
-                shape = RoundedCornerShape(44.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                shadowElevation = 50.dp
-            ) {
-                Column(modifier = Modifier.padding(vertical = 24.dp).verticalScroll(rememberScrollState())) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp),
+            color = Color.Transparent,
+            shape = RoundedCornerShape(32.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+            shadowElevation = 25.dp
+        ) {
+            Box(modifier = Modifier.background(darkGradientBg)) {
+                Column(modifier = Modifier.padding(vertical = 12.dp).verticalScroll(rememberScrollState())) {
 
-                    // --- SECCIÓN 1: CATEGORÍAS (Scroll Horizontal Dinámico) ---
-                    // Sólo se muestra si se pasan categorías al componente
-                    if (dynamicCategories.isNotEmpty()) {
-                        PanelSection(title = "Categorías en pantalla", icon = Icons.Default.Category) {
+                    // --- SECCIÓN 1: CATEGORÍAS ---
+                    if (showCategories && dynamicCategories.isNotEmpty()) {
+                        PanelSection(
+                            title = "Categorías",
+                            icon = Icons.Default.Category,
+                            isExpanded = categoriesExpanded,
+                            onToggleExpand = { categoriesExpanded = !categoriesExpanded }
+                        ) {
                             LazyRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                contentPadding = PaddingValues(horizontal = 24.dp) // Sangría exterior
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp)
                             ) {
                                 items(dynamicCategories) { item ->
-                                    EmojiItemButton(
+                                    CategoryTag(
                                         item = item,
                                         isSelected = activeFilters.contains(item.id),
-                                        modifier = Modifier.width(72.dp) // Ancho fijo para scroll
-                                    ) { onAction(item.id) }
+                                        onClick = { onAction(item.id) }
+                                    )
                                 }
                             }
                         }
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp), color = Color.White.copy(alpha = 0.1f))
                     }
 
                     // --- SECCIÓN 2: FILTROS TÉCNICOS ---
-                    Box(modifier = Modifier.padding(horizontal = 24.dp)) {
-                        PanelSection(title = "Refinar búsqueda", icon = Icons.Default.FilterList) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                val filters = listOf(
-                                    ControlItem("Verif.", Icons.Default.Verified, "✅", Color(0xFF9B51E0)),
-                                    ControlItem("Urgente", Icons.Default.FlashOn, "🚨", Color(0xFFFF3D00)),
-                                    ControlItem("Nuevos", Icons.Default.NotificationsActive, "🔔", Color(0xFFFACC15)),
-                                    ControlItem("Favs", Icons.Default.Favorite, "❤️", Color(0xFFE91E63))
-                                )
-                                filters.forEach { item ->
-                                    EmojiItemButton(item, activeFilters.contains(item.id), Modifier.weight(1f)) { onAction(item.id) }
+                    if (showFilters) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            PanelSection(
+                                title = "Refinar búsqueda",
+                                icon = Icons.Default.FilterList,
+                                isExpanded = filtersExpanded,
+                                onToggleExpand = { filtersExpanded = !filtersExpanded }
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // Fila 1 (6 espacios máximos)
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                                        val row1 = listOf(
+                                            ControlItem("Local", Icons.Default.Storefront, "", Color(0xFF2197F5), "filter_local"),
+                                            ControlItem("Casa", Icons.Default.HomeRepairService, "", Color(0xFF9B51E0), "filter_domicilio"),
+                                            ControlItem("24hs", Icons.Default.AccessTimeFilled, "", Color(0xFFFF9800), "filter_24hs"),
+                                            ControlItem("Turnos", Icons.Default.EventAvailable, "", Color(0xFF00FFC2), "filter_turnos"),
+                                            ControlItem("Fast", Icons.Default.Bolt, "", Color(0xFFFFEB3B), "filter_fast"),
+                                            ControlItem("Verif.", Icons.Default.Verified, "", Color(0xFF9B51E0), "filter_verif")
+                                        )
+                                        row1.forEach { item ->
+                                            CompactItemButton(item = item, isSelected = activeFilters.contains(item.id), onClick = { onAction(item.id) })
+                                        }
+                                    }
+                                    // Fila 2
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                                        val row2 = listOf(
+                                            ControlItem("Favs", Icons.Default.Favorite, "", Color(0xFFE91E63), "filter_favs"),
+                                            ControlItem("Cerca", Icons.Default.LocationOn, "", Color(0xFF4CAF50), "filter_cerca")
+                                        )
+                                        row2.forEach { item ->
+                                            CompactItemButton(item = item, isSelected = activeFilters.contains(item.id), onClick = { onAction(item.id) })
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp), color = Color.White.copy(alpha = 0.1f))
+                    // --- SECCIÓN 3: ORDEN TÁCTICO (Inteligente Toggle) ---
+                    if (showSort) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            PanelSection(
+                                title = "Orden táctico",
+                                icon = Icons.AutoMirrored.Filled.Sort,
+                                isExpanded = orderExpanded,
+                                onToggleExpand = { orderExpanded = !orderExpanded }
+                            ) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
 
-                    // --- SECCIÓN 3: ORDEN TÁCTICO ---
-                    Box(modifier = Modifier.padding(horizontal = 24.dp)) {
-                        PanelSection(title = "Orden táctico", icon = Icons.AutoMirrored.Filled.TrendingDown) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                val sorts = listOf(
-                                    ControlItem("Precio", Icons.AutoMirrored.Filled.TrendingDown, "📉", Color(0xFF2197F5)),
-                                    ControlItem("Rank", Icons.Default.Star, "⭐", Color(0xFFF59E0B)),
-                                    ControlItem("Entrega", Icons.Default.Timer, "⏱️", Color(0xFF94A3B8)),
-                                    ControlItem("Fecha", Icons.Default.CalendarToday, "📅", Color(0xFF64748B))
-                                )
-                                sorts.forEach { item ->
-                                    EmojiItemButton(item, activeFilters.contains(item.id), Modifier.weight(1f)) { onAction(item.id) }
+                                    // NOMBRE (A-Z / Z-A) con Icono + Flecha
+                                    val isNombreDesc = activeFilters.contains("sort_nombre_desc")
+                                    val isNombreAsc = activeFilters.contains("sort_nombre_asc")
+                                    val nombreItem = ControlItem("Alfabeto", Icons.Default.SortByAlpha, if (isNombreDesc) "🔽" else "🔼", Color(0xFF2197F5), "sort_nombre")
+                                    CompactItemButton(item = nombreItem, isSelected = isNombreDesc || isNombreAsc, onClick = {
+                                        if (isNombreDesc) { onAction("sort_nombre_desc"); onAction("sort_nombre_asc") }
+                                        else if (isNombreAsc) { onAction("sort_nombre_asc") }
+                                        else { onAction("sort_nombre_desc") }
+                                    })
+
+                                    // FECHA (Soporta Click Largo para abrir Rango de Fechas)
+                                    val isFechaDesc = activeFilters.contains("sort_fecha_desc")
+                                    val isFechaAsc = activeFilters.contains("sort_fecha_asc")
+                                    val hasDateRange = activeFilters.any { it.startsWith("date_range_") }
+                                    val fechaItem = ControlItem("Fecha", Icons.Default.CalendarToday, if (isFechaAsc) "🔼" else "🔽", Color(0xFFFACC15), "sort_fecha")
+                                    CompactItemButton(item = fechaItem, isSelected = isFechaDesc || isFechaAsc || hasDateRange, onClick = {
+                                        if (isFechaDesc) { onAction("sort_fecha_desc"); onAction("sort_fecha_asc") }
+                                        else if (isFechaAsc) { onAction("sort_fecha_asc") }
+                                        else { onAction("sort_fecha_desc") }
+                                    }, onLongClick = onOpenCalendar)
+
+                                    // PRECIO
+                                    val isPrecioDesc = activeFilters.contains("sort_precio_desc")
+                                    val isPrecioAsc = activeFilters.contains("sort_precio_asc")
+                                    val precioItem = ControlItem("Precio", Icons.Default.AttachMoney, if (isPrecioDesc) "🔽" else "🔼", Color(0xFF10B981), "sort_precio")
+                                    CompactItemButton(item = precioItem, isSelected = isPrecioDesc || isPrecioAsc, onClick = {
+                                        if (isPrecioDesc) { onAction("sort_precio_desc"); onAction("sort_precio_asc") }
+                                        else if (isPrecioAsc) { onAction("sort_precio_asc") }
+                                        else { onAction("sort_precio_desc") }
+                                    })
+
+                                    // RANKING
+                                    val isRankDesc = activeFilters.contains("sort_rank_desc")
+                                    val isRankAsc = activeFilters.contains("sort_rank_asc")
+                                    val rankItem = ControlItem("Rank", Icons.Default.Star, if (isRankAsc) "🔽" else "🔼", Color(0xFF9B51E0), "sort_rank")
+                                    CompactItemButton(item = rankItem, isSelected = isRankDesc || isRankAsc, onClick = {
+                                        if (isRankDesc) { onAction("sort_rank_desc"); onAction("sort_rank_asc") }
+                                        else if (isRankAsc) { onAction("sort_rank_asc") }
+                                        else { onAction("sort_rank_desc") }
+                                    })
                                 }
                             }
                         }
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp), color = Color.White.copy(alpha = 0.1f))
+                    // --- SECCIÓN 4: GESTIÓN Y HERRAMIENTAS ---
+                    if (showTools) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            PanelSection(
+                                title = "Herramientas",
+                                icon = Icons.Default.Build,
+                                isExpanded = toolsExpanded,
+                                onToggleExpand = { toolsExpanded = !toolsExpanded }
+                            ) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                                    val multiItem = ControlItem("Multi", Icons.Default.Layers, "", Color(0xFFE91E63), "toggle_multiselect")
 
-                    // --- SECCIÓN 4: HERRAMIENTAS Y SIMULACIÓN ---
-                    Box(modifier = Modifier.padding(horizontal = 24.dp)) {
-                        PanelSection(title = "Gestión y Simulación", icon = Icons.Default.Build) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                val tools = listOf(
-                                    ControlItem("Vista", Icons.Default.GridView, "🖼️", Color(0xFF00FFC2), "vista"),
-                                    ControlItem("Sim. Chat", Icons.Default.PrecisionManufacturing, "🤖", Color(0xFF9B51E0), "sim_chat"),
-                                    ControlItem("Sim. Lic.", Icons.Default.GroupAdd, "📝", Color(0xFFF87171), "sim_lic"),
-                                    ControlItem("Refresh", Icons.Default.Refresh, "🔄", Color(0xFF10B981), "refresh")
-                                )
-                                tools.forEach { item ->
-                                    EmojiItemButton(item, activeFilters.contains(item.id), Modifier.weight(1f)) { onAction(item.id) }
+                                    if (isMultiSelectionActive) {
+                                        CompactItemButton(item = multiItem, isSelected = true, onClick = { onAction("toggle_multiselect") })
+                                        val compareItem = ControlItem("Comparar", Icons.AutoMirrored.Filled.CompareArrows, "", Color(0xFF2197F5), "compare")
+                                        CompactItemButton(item = compareItem, isSelected = false, onClick = { onCompareClick() })
+                                        val deleteItem = ControlItem("Eliminar", Icons.Default.Delete, "", Color(0xFFEF4444), "delete")
+                                        CompactItemButton(item = deleteItem, isSelected = false, onClick = { onDeleteClick() })
+                                        val shareItem = ControlItem("Share", Icons.Default.Share, "", Color(0xFFFACC15), "share")
+                                        CompactItemButton(item = shareItem, isSelected = false, onClick = { onShareClick() })
+                                    } else {
+                                        CompactItemButton(item = multiItem, isSelected = false, onClick = { onAction("toggle_multiselect") })
+                                        val vistaItem = ControlItem("Vista", Icons.Default.GridView, "", Color(0xFF00FFC2), "vista")
+                                        CompactItemButton(item = vistaItem, isSelected = activeFilters.contains(vistaItem.id), onClick = { onAction(vistaItem.id) })
+                                        val simChatItem = ControlItem("Sim Chat", Icons.Default.PrecisionManufacturing, "", Color(0xFF9B51E0), "sim_chat")
+                                        CompactItemButton(item = simChatItem, isSelected = activeFilters.contains(simChatItem.id), onClick = { onAction(simChatItem.id) })
+                                        val simLicItem = ControlItem("Sim Lic", Icons.Default.Gavel, "", Color(0xFF2197F5), "sim_lic")
+                                        CompactItemButton(item = simLicItem, isSelected = activeFilters.contains(simLicItem.id), onClick = { onAction(simLicItem.id) })
+                                        val refreshItem = ControlItem("Refresh", Icons.Default.Refresh, "", Color(0xFF10B981), "refresh")
+                                        CompactItemButton(item = refreshItem, isSelected = activeFilters.contains(refreshItem.id), onClick = { onAction(refreshItem.id) })
+                                    }
                                 }
                             }
                         }
@@ -495,72 +788,170 @@ fun TacticalControlPanel(
 }
 
 /**
- * Modificado para no forzar un Row interno, permitiendo LazyRow en categorías.
+ * Encabezado colapsable para las secciones del panel táctico. Textos e iconos en BLANCO.
+ * Se cambió Spring por Tween para lograr animaciones más fluidas sin lag.
  */
 @Composable
-fun PanelSection(title: String, icon: ImageVector, content: @Composable () -> Unit) {
+fun PanelSection(title: String, icon: ImageVector, isExpanded: Boolean, onToggleExpand: () -> Unit, content: @Composable () -> Unit) {
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = if(title.contains("Categorías")) 24.dp else 8.dp, bottom = 14.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleExpand() }
+                .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            Icon(icon, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(12.dp))
+            Icon(icon, null, tint = Color.White, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
-            Text(title.uppercase(), fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color.White.copy(alpha = 0.5f), letterSpacing = 1.5.sp)
+            Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 1.sp)
+
+            Spacer(Modifier.width(8.dp))
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
+
+            val arrowRotation by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f, animationSpec = tween(200))
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = if (isExpanded) "Ocultar" else "Mostrar",
+                tint = Color.White,
+                modifier = Modifier.size(22.dp).rotate(arrowRotation)
+            )
         }
-        content()
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(animationSpec = tween(250, easing = FastOutSlowInEasing)) + fadeIn(tween(250)),
+            exit = shrinkVertically(animationSpec = tween(200, easing = FastOutLinearInEasing)) + fadeOut(tween(200))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                content()
+            }
+        }
     }
 }
 
 /**
- * Componente abstracto para los botones del panel (Soporta Weight y Width fijo).
+ * Etiqueta Tipo "Pill" para las categorías. Sustituye al botón cuadrado.
  */
 @Composable
-fun EmojiItemButton(
+fun CategoryTag(item: ControlItem, isSelected: Boolean, onClick: () -> Unit) {
+    val bgColor = if(isSelected) item.color.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f)
+    val borderColor = if(isSelected) item.color else Color.White.copy(alpha = 0.15f)
+    val textColor = if(isSelected) Color.White else Color.LightGray
+
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = bgColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.height(36.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp)
+        ) {
+            Text(item.emoji, fontSize = 16.sp) // Emoji real de Room más grande
+            Spacer(Modifier.width(8.dp))
+            Text(item.label.uppercase(), color = textColor, fontSize = 10.sp, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+/**
+ * Componente más compacto para los botones de las grillas del panel.
+ * TAMAÑO FIJO: Asegura que entren 6 botones exactos por fila si se alinean a la derecha.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun CompactItemButton(
     item: ControlItem,
     isSelected: Boolean,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .clickable(onClick = onClick)
+            .width(52.dp) // 🔥 Ancho Fijo para empaquetado de 6
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
-                .size(54.dp)
+                .size(48.dp) // 🔥 Caja un poco más grande
                 .background(
-                    if (isSelected) item.color.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f),
-                    RoundedCornerShape(18.dp)
+                    if (isSelected) item.color.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+                    RoundedCornerShape(14.dp)
                 )
                 .border(
-                    if (isSelected) 2.dp else 1.dp,
-                    if (isSelected) item.color else Color.White.copy(alpha = 0.08f),
-                    RoundedCornerShape(18.dp)
+                    if (isSelected) 1.5.dp else 0.8.dp,
+                    if (isSelected) item.color else Color.White.copy(alpha = 0.15f),
+                    RoundedCornerShape(14.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
-            // EFECTO GLOW PARA SELECCIONADO CON EMOJI
             if (isSelected) {
-                Box(modifier = Modifier.size(30.dp).graphicsLayer { alpha = 0.4f }.blur(15.dp).background(item.color))
-                Text(text = item.emoji, fontSize = 24.sp)
+                // Glow Nativo para el Icono Vectorial Activo
+                item.icon?.let { vectorIcon ->
+                    Icon(
+                        imageVector = vectorIcon,
+                        contentDescription = null,
+                        tint = item.color,
+                        modifier = Modifier
+                            .size(26.dp) // Icono interior más grande
+                            .graphicsLayer {
+                                shadowElevation = 20f
+                                ambientShadowColor = item.color
+                                spotShadowColor = item.color
+                            }
+                    )
+
+                    // Superposición de Mini-Flecha si el emoji es direccional
+                    if (item.emoji == "🔼" || item.emoji == "🔽") {
+                        Text(
+                            text = item.emoji,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 6.dp, y = 6.dp)
+                        )
+                    }
+                } ?: run {
+                    // Fallback a Emoji si no hay Icono Vectorial
+                    Text(
+                        text = item.emoji,
+                        fontSize = 24.sp,
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = item.color,
+                                offset = Offset(0f, 0f),
+                                blurRadius = 25f
+                            )
+                        )
+                    )
+                }
             } else {
-                item.icon?.let { Icon(it, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(24.dp)) }
+                // Estado Inactivo (Claro y visible)
+                item.icon?.let {
+                    Icon(it, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(22.dp))
+                } ?: run {
+                    Text(item.emoji, fontSize = 20.sp, modifier = Modifier.alpha(0.6f))
+                }
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             text = item.label,
-            fontSize = 8.5.sp,
+            fontSize = 9.sp, // 🔥 Texto más grande y legible
             fontWeight = FontWeight.ExtraBold,
-            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
+            color = if (isSelected) Color.White else Color.LightGray,
             textAlign = TextAlign.Center,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 2.dp)
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -588,22 +979,22 @@ fun GeminiTopSearchBar(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = colors.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
-        shadowElevation = 12.dp,
-        border = BorderStroke(2.5.dp, rainbowBrush)
+        shape = RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp, topEnd = 8.dp, bottomEnd = 8.dp),
+        shadowElevation = 8.dp,
+        border = BorderStroke(2.dp, rainbowBrush)
     ) {
-        Row(modifier = Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Search, null, tint = colors.onSurface.copy(0.8f), modifier = Modifier.padding(start = 24.dp).size(20.dp))
+        Row(modifier = Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Search, null, tint = colors.onSurface.copy(0.8f), modifier = Modifier.padding(start = 16.dp).size(18.dp))
             BasicTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
                 singleLine = true,
-                modifier = Modifier.weight(1f).padding(start = 12.dp).focusRequester(focusRequester),
-                textStyle = TextStyle(color = colors.onSurface, fontSize = 17.sp),
+                modifier = Modifier.weight(1f).padding(start = 8.dp).focusRequester(focusRequester),
+                textStyle = TextStyle(color = colors.onSurface, fontSize = 15.sp),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
-                        if (searchQuery.isEmpty()) { Text(placeholderText, color = colors.onSurfaceVariant, fontSize = 16.sp) }
+                        if (searchQuery.isEmpty()) { Text(placeholderText, color = colors.onSurfaceVariant, fontSize = 14.sp) }
                         inner()
                     }
                 }
@@ -625,10 +1016,10 @@ fun GeminiFABWithScrim(
             exit = fadeOut(animationSpec = tween(800)),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            Box(modifier = Modifier.fillMaxWidth().height(220.dp).background(brush = Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 1f)))))
+            Box(modifier = Modifier.fillMaxWidth().height(180.dp).background(brush = Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 1f)))))
         }
         Box(
-            modifier = Modifier.fillMaxSize().padding(bottomPadding).navigationBarsPadding().padding(bottom = 10.dp, end = 10.dp),
+            modifier = Modifier.fillMaxSize().padding(bottomPadding).navigationBarsPadding().padding(bottom = 8.dp, end = 8.dp),
             contentAlignment = Alignment.BottomEnd
         ) {
             content()
@@ -649,10 +1040,10 @@ fun ServiceTag(text: String, color: Color) {
 
 @Composable
 fun RowItemDetail(icon: ImageVector, text: String, isActive: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-        Icon(imageVector = icon, contentDescription = null, tint = if (isActive) Color(0xFF10B981) else Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(text = text, style = MaterialTheme.typography.bodyLarge, color = if (isActive) Color.White else Color.Gray.copy(alpha = 0.5f), textDecoration = if (!isActive) TextDecoration.LineThrough else null)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+        Icon(imageVector = icon, contentDescription = null, tint = if (isActive) Color(0xFF10B981) else Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(text = text, style = MaterialTheme.typography.bodyMedium, color = if (isActive) Color.White else Color.Gray.copy(alpha = 0.5f), textDecoration = if (!isActive) TextDecoration.LineThrough else null)
     }
 }
 
@@ -906,30 +1297,201 @@ private fun AutoResizingText(text: String, color: Color, maxFontSize: TextUnit, 
     Text(text = text, color = if (readyToDraw) color else Color.Transparent, fontWeight = FontWeight.Black, fontSize = fontSize, lineHeight = fontSize * 1.1f, maxLines = 2, letterSpacing = 1.1.sp, overflow = TextOverflow.Clip, onTextLayout = { result -> if (result.hasVisualOverflow && fontSize > minFontSize) { fontSize = (fontSize.value * 0.9f).sp } else { readyToDraw = true } }, modifier = Modifier.fillMaxWidth())
 }
 
-enum class BannerType(val label: String) { GOOGLE_AD("SPONSORED"), PROMO("PROMOCIÓN"), NEW_CATEGORY("NUEVA CATEGORÍA"), NEW_PROVIDER("NUEVOS PRESTADORES"), PRODUCT_SALE("VENTA DE PRODUCTO") }
+enum class BannerType(val label: String) {
+    GOOGLE_AD("SPONSORED"),
+    PROMO("PROMOCIÓN"),
+    NEW_CATEGORY("NUEVA CATEGORÍA"),
+    NEW_PROVIDER("NUEVOS PRESTADORES"),
+    PRODUCT_SALE("VENTA DE PRODUCTO"),
+    SERVICE_SALE("SERVICIO DESTACADO")
+}
 
-data class AccordionBanner(val id: String, val title: String, val subtitle: String, val icon: String, val color: Color, val type: BannerType, val originalCategory: CategoryEntity? = null, val isNew: Boolean = false, val imageUrl: String? = null)
+data class AccordionBanner(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val icon: String,
+    val color: Color,
+    val type: BannerType,
+    val originalCategory: CategoryEntity? = null,
+    val isNew: Boolean = false,
+    val imageUrl: String? = null,
+    val discount: Int? = null
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PremiumLensCarousel(items: List<AccordionBanner>, onSettingsClick: () -> Unit, onItemClick: (AccordionBanner) -> Unit, modifier: Modifier = Modifier, autoplayDelay: Long = 5000L) {
+fun PremiumLensCarousel(
+    items: List<AccordionBanner>,
+    onSettingsClick: () -> Unit,
+    onItemClick: (AccordionBanner) -> Unit,
+    modifier: Modifier = Modifier,
+    autoplayDelay: Long = 5000L
+) {
     if (items.isEmpty()) return
+
+    var expandedMenu by remember { mutableStateOf(false) }
+    var activeFilters by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var tempFilters by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    val filteredItems = remember(items, activeFilters) {
+        if (activeFilters.isEmpty()) items
+        else items.filter {
+            if (it.type == BannerType.GOOGLE_AD) true
+            else {
+                val isNovedad = it.type == BannerType.NEW_CATEGORY || it.type == BannerType.NEW_PROVIDER
+                val isPromo = it.type == BannerType.PROMO || it.discount != null
+                val isProd = it.type == BannerType.PRODUCT_SALE
+                val isServ = it.type == BannerType.SERVICE_SALE
+
+                (activeFilters.contains("NOVEDADES") && isNovedad) ||
+                        (activeFilters.contains("PROMOCIONES") && isPromo) ||
+                        (activeFilters.contains("PRODUCTOS") && isProd) ||
+                        (activeFilters.contains("SERVICIOS") && isServ)
+            }
+        }
+    }
+
+    val displayItems = filteredItems.ifEmpty { items }
+
     val infiniteCount = Int.MAX_VALUE
-    val initialPage = infiniteCount / 2 - (infiniteCount / 2 % items.size)
+    val initialPage = infiniteCount / 2 - (infiniteCount / 2 % displayItems.size.coerceAtLeast(1))
     val pagerState = rememberPagerState(initialPage = initialPage) { infiniteCount }
-    LaunchedEffect(key1 = items) { while (true) { delay(autoplayDelay); if (items.size > 1) { pagerState.animateScrollToPage(pagerState.currentPage + 1) } } }
+
+    LaunchedEffect(key1 = displayItems) {
+        while (true) {
+            delay(autoplayDelay)
+            if (displayItems.size > 1) {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            }
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(text = "DESTACADOS & NOVEDADES", color = Color.White.copy(alpha = 0.35f), fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-            IconButton(onClick = onSettingsClick, modifier = Modifier.size(34.dp).background(Color.White.copy(alpha = 0.05f), CircleShape)) { Icon(Icons.Default.Tune, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp)) }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "DESTACADOS & NOVEDADES",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp
+                )
+            }
+
+            Box {
+                if (activeFilters.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            activeFilters = emptySet()
+                            tempFilters = emptySet()
+                        },
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(Color(0xFFEF4444).copy(alpha = 0.2f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Limpiar Filtros", tint = Color(0xFFEF4444), modifier = Modifier.size(14.dp))
+                    }
+                } else {
+                    IconButton(
+                        onClick = {
+                            tempFilters = activeFilters
+                            expandedMenu = true
+                        },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Filtros", tint = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = expandedMenu,
+                    onDismissRequest = { expandedMenu = false },
+                    modifier = Modifier.background(Color(0xFF161C24)).border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("FILTROS", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        IconButton(
+                            onClick = {
+                                activeFilters = tempFilters
+                                expandedMenu = false
+                            },
+                            modifier = Modifier.size(24.dp).background(Color(0xFF10B981).copy(alpha = 0.2f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Aplicar", tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                    val options = listOf(
+                        "NOVEDADES" to "🚀",
+                        "PROMOCIONES" to "🔥",
+                        "PRODUCTOS" to "🛍️",
+                        "SERVICIOS" to "🛠️"
+                    )
+
+                    options.forEach { (option, emoji) ->
+                        val isSelected = tempFilters.contains(option)
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(emoji, fontSize = 14.sp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = option,
+                                        color = if (isSelected) Color(0xFF2197F5) else Color.White,
+                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            },
+                            trailingIcon = {
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, null, tint = Color(0xFF2197F5), modifier = Modifier.size(16.dp))
+                                }
+                            },
+                            onClick = {
+                                tempFilters = if (isSelected) tempFilters - option else tempFilters + option
+                            }
+                        )
+                    }
+                }
+            }
         }
-        HorizontalPager(state = pagerState, pageSize = PageSize.Fixed(260.dp), pageSpacing = 16.dp, contentPadding = PaddingValues(horizontal = 32.dp), modifier = Modifier.fillMaxWidth().height(140.dp)) { index ->
-            val actualIndex = index % items.size
-            val item = items[actualIndex]
+
+        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        HorizontalPager(
+            state = pagerState,
+            pageSize = PageSize.Fixed(300.dp),
+            pageSpacing = 12.dp,
+            contentPadding = PaddingValues(start = 10.dp, end = 64.dp),
+            modifier = Modifier.fillMaxWidth().height(120.dp)
+        ) { index ->
+            val actualIndex = index % displayItems.size
+            val item = displayItems[actualIndex]
+
             val pageOffset = ((pagerState.currentPage - index) + pagerState.currentPageOffsetFraction).absoluteValue
-            Box(modifier = Modifier.graphicsLayer { val scale = lerp(start = 0.9f, stop = 1f, fraction = 1f - pageOffset.coerceIn(0f, 1f)); scaleX = scale; scaleY = scale; alpha = lerp(start = 0.5f, stop = 1f, fraction = 1f - pageOffset.coerceIn(0f, 1f)) }) {
-                if (item.type == BannerType.GOOGLE_AD) AdBannerItem(item = item) else PremiumBannerItem(item = item, onClick = { onItemClick(item) })
+            Box(modifier = Modifier.graphicsLayer {
+                val scale = lerp(start = 0.9f, stop = 1f, fraction = 1f - pageOffset.coerceIn(0f, 1f))
+                scaleX = scale
+                scaleY = scale
+                alpha = lerp(start = 0.5f, stop = 1f, fraction = 1f - pageOffset.coerceIn(0f, 1f))
+            }) {
+                if (item.type == BannerType.GOOGLE_AD) {
+                    AdBannerItem(item = item)
+                } else {
+                    PremiumBannerItem(item = item, onClick = { onItemClick(item) })
+                }
             }
         }
     }
@@ -940,27 +1502,45 @@ fun AdBannerItem(item: AccordionBanner) {
     Card(modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (item.imageUrl != null) AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = 0.3f)
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.AdsClick, null, tint = Color.Gray); Text(item.title, fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp)); Text(item.subtitle, fontSize = 10.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp)) } }
-            Box(modifier = Modifier.align(Alignment.TopStart).background(Color(0xFFFFC107), RoundedCornerShape(bottomEnd = 8.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) { Text("ANUNCIO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Black) }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.AdsClick, null, tint = Color.Gray); Text(item.title, fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp)); Text(item.subtitle, fontSize = 11.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp)) } }
+            Box(modifier = Modifier.align(Alignment.TopStart).background(Color(0xFFFFC107), RoundedCornerShape(bottomEnd = 12.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) { Text("ANUNCIO", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color.Black) }
         }
     }
 }
 
 @Composable
 fun PremiumBannerItem(item: AccordionBanner, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxSize().clickable { onClick() }, shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = item.color), elevation = CardDefaults.cardElevation(4.dp)) {
+    Card(modifier = Modifier.fillMaxSize().clickable { onClick() }, shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = item.color), elevation = CardDefaults.cardElevation(8.dp)) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (item.imageUrl != null) AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = 0.4f)
             Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f).drawWithCache { val gradient = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent), start = Offset(0f, 0f), end = Offset(size.width, size.height)); onDrawWithContent { drawContent(); drawRect(gradient, blendMode = BlendMode.Overlay) } })
-            Box(modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent), startX = 0f, endX = 500f)))
+            Box(modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Black.copy(alpha = 0.4f), Color.Transparent), startX = 0f, endX = 600f)))
             Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.weight(0.6f).fillMaxHeight().padding(start = 16.dp, top = 16.dp, bottom = 12.dp), contentAlignment = Alignment.CenterStart) {
-                    Column { AutoResizingText(text = item.title.uppercase(), color = Color.White, maxFontSize = 16.sp); Text(text = item.subtitle, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, maxLines = 1); Spacer(modifier = Modifier.height(8.dp)); Box(modifier = Modifier.width(32.dp).height(2.dp).background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(2.dp))) }
+                Box(modifier = Modifier.weight(0.85f).fillMaxHeight().padding(start = 10.dp, top = 20.dp, bottom = 16.dp), contentAlignment = Alignment.CenterStart) {
+                    Column { AutoResizingText(text = item.title.uppercase(), color = Color.White, maxFontSize = 20.sp); Text(text = item.subtitle, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 16.sp); Spacer(modifier = Modifier.height(10.dp)); Box(modifier = Modifier.width(40.dp).height(3.dp).background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(2.dp))) }
                 }
                 Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.7f).background(Brush.verticalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.4f), Color.Transparent))))
-                Box(modifier = Modifier.weight(0.4f).fillMaxHeight(), contentAlignment = Alignment.CenterEnd) { Text(text = item.icon, fontSize = 90.sp, modifier = Modifier.offset(x = 15.dp)) }
+
+                Box(modifier = Modifier.weight(0.35f).fillMaxHeight(), contentAlignment = Alignment.CenterEnd) {
+                    Text(
+                        text = item.icon,
+                        fontSize = 100.sp,
+                        modifier = Modifier.offset(x = 20.dp),
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.6f),
+                                offset = Offset(-10f, 15f),
+                                blurRadius = 20f
+                            )
+                        )
+                    )
+                }
             }
-            if (item.isNew) Surface(color = Color(0xFFFFD600), shape = RoundedCornerShape(bottomEnd = 14.dp), modifier = Modifier.align(Alignment.TopStart)) { Text(text = "NUEVO", color = Color.Black, fontSize = 8.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) }
+            if (item.isNew) {
+                Surface(color = Color(0xFFFFD600), shape = RoundedCornerShape(bottomEnd = 16.dp), modifier = Modifier.align(Alignment.TopStart)) { Text(text = "NUEVO", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+            } else if (item.discount != null) {
+                Surface(color = Color(0xFFE91E63), shape = RoundedCornerShape(bottomEnd = 16.dp), modifier = Modifier.align(Alignment.TopStart)) { Text(text = "${item.discount}% OFF", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+            }
         }
     }
 }
@@ -987,7 +1567,9 @@ fun GeminiCyberWrapper(modifier: Modifier = Modifier, cornerRadius: Dp = 24.dp, 
 @Composable
 fun TacticalFABPreview() {
     var expanded by remember { mutableStateOf(true) }
-    var active by remember { mutableStateOf(setOf("verif.", "precio")) }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var isMultiSelectionActive by remember { mutableStateOf(false) }
+    var activeFilters by remember { mutableStateOf(setOf("filter_verif", "sort_precio_desc")) }
 
     val mockCategories = listOf(
         ControlItem("Informática", null, "💻", Color(0xFFB2EBF2), "cat_info"),
@@ -999,46 +1581,1715 @@ fun TacticalFABPreview() {
         Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0E14))) {
             GeminiSplitFAB(
                 isExpanded = expanded,
-                isSearchActive = false,
-                activeFilters = active,
-                dynamicCategories = mockCategories, // Prueba pasándole categorías o emptyList()
+                isSearchActive = isSearchActive,
+                isMultiSelectionActive = isMultiSelectionActive,
                 onToggleExpand = { expanded = !expanded },
-                onActivateSearch = {},
-                onCloseSearch = {},
+                onActivateSearch = { isSearchActive = true; expanded = false },
+                onCloseSearch = { isSearchActive = false },
+                onCompareClick = { },
+                onDeleteClick = { },
+                onShareClick = { },
+                activeFilters = activeFilters,
+                dynamicCategories = mockCategories,
                 onAction = { id ->
-                    active = if(active.contains(id)) active - id else active + id
+                    when (id) {
+                        "toggle_multiselect" -> {
+                            isMultiSelectionActive = !isMultiSelectionActive
+                        }
+                        "apply_filters" -> {
+                            // Lógica de aplicar
+                        }
+                        else -> {
+                            activeFilters = if(activeFilters.contains(id)) activeFilters - id else activeFilters + id
+                        }
+                    }
                 },
-                onResetAll = { active = emptySet(); expanded = false },
+                onResetAll = { activeFilters = emptySet(); expanded = false },
                 secondaryActions = {
-                    SmallActionFab(icon = Icons.Default.Favorite, label = "Favs", iconColor = Color(0xFFE91E63)) {}
+                    SmallActionFab(icon = Icons.Default.Favorite, label = "Favs", iconColor = Color(0xFFE91E63), onClick = {})
                 }
             )
         }
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF05070A)
+/**
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
+import coil.compose.AsyncImage
+import com.example.myapplication.R
+import com.example.myapplication.data.local.CategoryEntity
+import com.example.myapplication.data.model.Provider
+import com.example.myapplication.data.model.CompanyProvider
+import com.example.myapplication.ui.theme.MyApplicationTheme
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.absoluteValue
+
+// ==========================================================================================
+// --- CONFIGURACIÓN VISUAL: GEMINI CYBERPUNK ---
+// ==========================================================================================
+
+val GeminiColors = listOf(
+    Color(0xFF2197F5), // Azul
+    Color(0xFF9B51E0), // Púrpura
+    Color(0xFFE91E63)  // Rosa
+)
+
 @Composable
-fun SmallActionFabPreview() {
-    MyApplicationTheme {
-        Row(
-            modifier = Modifier.padding(16.dp).background(Color(0xFF05070A)),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+fun geminiGradientBrush(isAnimated: Boolean = true): Brush {
+    val offset = if (isAnimated) {
+        val infiniteTransition = rememberInfiniteTransition(label = "geminiAnim")
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1500f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(3500, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "offset"
+        ).value
+    } else {
+        0f
+    }
+
+    return Brush.linearGradient(
+        colors = GeminiColors,
+        start = Offset(offset, offset),
+        end = Offset(offset + 1000f, offset + 1000f),
+        tileMode = TileMode.Mirror
+    )
+}
+
+@Composable
+fun geminiGradientEffect(): Brush {
+    val infiniteTransition = rememberInfiniteTransition(label = "geminiAnim")
+    val offsetAnim by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1500f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "offset"
+    )
+
+    return Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF2197F5), Color(0xFF9B51E0), Color(0xFFE91E63), Color(0xFF4285F4)
+        ),
+        start = Offset(offsetAnim - 500f, offsetAnim - 500f),
+        end = Offset(offsetAnim, offsetAnim)
+    )
+}
+
+// ==========================================================================================
+// --- MODELOS DE DATOS ---
+// ==========================================================================================
+
+data class ControlItem(
+    val label: String,
+    val icon: ImageVector?,
+    val emoji: String,
+    val color: Color,
+    val id: String = label.lowercase()
+)
+
+// ==========================================================================================
+// --- BOTONES COMPACTOS (ACCIONES LATERALES DEL FAB) ---
+// ==========================================================================================
+
+@Composable
+fun SmallActionFab(
+    icon: ImageVector,
+    label: String,
+    iconColor: Color,
+    isActive: Boolean = false,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val rainbowBrush = geminiGradientEffect()
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(width = 64.dp, height = 56.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isActive) colors.primaryContainer else colors.surface,
+        shadowElevation = 8.dp,
+        border = if (isActive) BorderStroke(1.5.dp, rainbowBrush) else BorderStroke(1.5.dp, Color.White.copy(alpha = 0.4f))
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(vertical = 6.dp, horizontal = 4.dp)
         ) {
-            SmallActionFab(
-                icon = Icons.Default.Favorite,
-                label = "Favs",
-                iconColor = Color(0xFFE91E63),
-                isActive = false,
-                onClick = {}
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isActive) colors.primary else iconColor,
+                modifier = Modifier.align(Alignment.TopCenter).size(24.dp)
             )
-            SmallActionFab(
-                icon = Icons.Default.Favorite,
-                label = "Favs",
-                iconColor = Color(0xFFE91E63),
-                isActive = true,
-                onClick = {}
+            Text(
+                text = label,
+                color = if (isActive) colors.primary else colors.onSurface,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
     }
 }
+
+// ==========================================================================================
+// --- GEMINI SPLIT FAB CON PANEL TÁCTICO ANIMADO V2 (UX PRO) ---
+// ==========================================================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GeminiSplitFAB(
+    isExpanded: Boolean,
+    isSearchActive: Boolean,
+    isSecondaryPanelVisible: Boolean = false,
+
+    isMultiSelectionActive: Boolean = false,
+    onToggleExpand: () -> Unit,
+    onActivateSearch: () -> Unit,
+    onCloseSearch: () -> Unit,
+    onCloseSecondaryPanel: () -> Unit = {},
+
+    showCategories: Boolean = true,
+    showFilters: Boolean = true,
+    showSort: Boolean = true,
+    showTools: Boolean = true,
+
+    onCompareClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+
+    activeFilters: Set<String> = emptySet(),
+    dynamicCategories: List<ControlItem> = emptyList(),
+    onAction: (String) -> Unit = {},
+    onResetAll: () -> Unit = {},
+
+    secondaryActions: @Composable RowScope.() -> Unit = {}
+) {
+    val colors = MaterialTheme.colorScheme
+    val rainbowBrush = geminiGradientEffect()
+
+    val fabIconRotation by animateFloatAsState(
+        targetValue = if (isExpanded || isMultiSelectionActive) 90f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "fabRotation"
+    )
+
+    var showCalendarDialog by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
+
+        // --- CALENDARIO EMERGENTE PARA ORDENAMIENTO (RANGO DE FECHAS) ---
+        if (showCalendarDialog) {
+            val dateRangePickerState = rememberDateRangePickerState()
+            DatePickerDialog(
+                onDismissRequest = { showCalendarDialog = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val start = dateRangePickerState.selectedStartDateMillis
+                        val end = dateRangePickerState.selectedEndDateMillis
+                        if (start != null && end != null) {
+                            onAction("date_range_${start}_${end}")
+                        }
+                        showCalendarDialog = false
+                    }) {
+                        Text("Aplicar Rango", color = Color(0xFF22D3EE), fontWeight = FontWeight.Black)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCalendarDialog = false }) { Text("Cancelar", color = Color.Gray) }
+                },
+                colors = DatePickerDefaults.colors(containerColor = Color(0xFF161C24))
+            ) {
+                DateRangePicker(
+                    state = dateRangePickerState,
+                    title = { Text("Filtrar Rango de Fechas", modifier = Modifier.padding(16.dp), color = Color.White, fontWeight = FontWeight.Black) },
+                    headline = { Text("Selecciona inicio y fin", modifier = Modifier.padding(horizontal = 16.dp), color = Color.Gray) },
+                    showModeToggle = false,
+                    // Coloreado Dark Mode Profesional
+                    colors = DatePickerDefaults.colors(
+                        containerColor = Color(0xFF161C24),
+                        titleContentColor = Color.White,
+                        headlineContentColor = Color.LightGray,
+                        weekdayContentColor = Color.Gray,
+                        subheadContentColor = Color.White,
+                        yearContentColor = Color.White,
+                        currentYearContentColor = Color(0xFF22D3EE),
+                        selectedYearContentColor = Color.White,
+                        selectedYearContainerColor = Color(0xFF22D3EE),
+                        dayContentColor = Color.White,
+                        disabledDayContentColor = Color.DarkGray,
+                        selectedDayContentColor = Color(0xFF05070A),
+                        selectedDayContainerColor = Color(0xFF22D3EE),
+                        todayContentColor = Color(0xFF22D3EE),
+                        todayDateBorderColor = Color(0xFF22D3EE),
+                        dayInSelectionRangeContentColor = Color.White,
+                        dayInSelectionRangeContainerColor = Color(0xFF22D3EE).copy(alpha = 0.3f)
+                    )
+                )
+            }
+        }
+
+        // --- SCRIM OSCURO REQUERIDO (Fondo translúcido al abrir el panel) ---
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = fadeIn(tween(300)),
+            exit = fadeOut(tween(300))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.75f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onToggleExpand // Cierra al tocar fuera
+                    )
+            )
+        }
+
+        // --- CENTRO DE CONTROL TÁCTICO V2 (Directamente en la UI, sin Popups problemáticos) ---
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = fadeIn(animationSpec = tween(250)) +
+                    scaleIn(
+                        initialScale = 0.8f,
+                        transformOrigin = TransformOrigin(1f, 1f),
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    ) +
+                    slideInVertically(
+                        initialOffsetY = { 100 },
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    ),
+            exit = fadeOut(animationSpec = tween(200)) +
+                    scaleOut(
+                        targetScale = 0.8f,
+                        transformOrigin = TransformOrigin(1f, 1f),
+                        animationSpec = tween(200)
+                    ) +
+                    slideOutVertically(targetOffsetY = { 100 }, animationSpec = tween(200)),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 90.dp, end = 16.dp) // Posicionado justo arriba del FAB
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {} // Evita que los toques en el panel pasen al Scrim y lo cierren
+                )
+        ) {
+            TacticalControlPanel(
+                activeFilters = activeFilters,
+                dynamicCategories = dynamicCategories,
+                onAction = onAction,
+                onApply = {
+                    onAction("apply_filters")
+                    onToggleExpand()
+                },
+                isMultiSelectionActive = isMultiSelectionActive,
+                onCompareClick = onCompareClick,
+                onDeleteClick = onDeleteClick,
+                onShareClick = onShareClick,
+                showCategories = showCategories,
+                showFilters = showFilters,
+                showSort = showSort,
+                showTools = showTools,
+                onOpenCalendar = { showCalendarDialog = true }
+            )
+        }
+
+        // --- BOTONES FAB PRINCIPALES Y SECUNDARIOS ---
+        Row(
+            modifier = Modifier.padding(12.dp).navigationBarsPadding(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AnimatedVisibility(
+                visible = !isSearchActive && !isExpanded && !isSecondaryPanelVisible,
+                enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
+                exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+                    AnimatedVisibility(visible = activeFilters.isNotEmpty() && !isMultiSelectionActive) {
+                        Surface(
+                            onClick = {
+                                onResetAll()
+                                if (isExpanded) onToggleExpand()
+                            },
+                            modifier = Modifier.size(height = 56.dp, width = 56.dp),
+                            shape = CircleShape,
+                            color = Color(0xFFEF4444),
+                            shadowElevation = 8.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.DeleteSweep, contentDescription = "Limpiar Filtros", tint = Color.White, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(visible = isMultiSelectionActive) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+                            SmallActionFab(icon = Icons.AutoMirrored.Filled.CompareArrows, label = "Comp.", iconColor = Color(0xFF2197F5), onClick = onCompareClick)
+                            SmallActionFab(icon = Icons.Default.Delete, label = "Elim.", iconColor = Color(0xFFE91E63), onClick = onDeleteClick)
+                        }
+                    }
+
+                    if (!isMultiSelectionActive) {
+                        secondaryActions()
+                    }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp) // Reducido para acoplar estilo moderno
+            ) {
+                AnimatedVisibility(
+                    visible = !isSearchActive && !isMultiSelectionActive,
+                    enter = expandHorizontally() + fadeIn(),
+                    exit = shrinkHorizontally() + fadeOut()
+                ) {
+                    // BOTÓN BÚSQUEDA ASIMÉTRICO MODERNO (Lado derecho recto, lado izquierdo redondo)
+                    Surface(
+                        onClick = onActivateSearch,
+                        modifier = Modifier.height(56.dp).wrapContentWidth().defaultMinSize(minWidth = 56.dp),
+                        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 6.dp, bottomEnd = 6.dp),
+                        color = colors.surface,
+                        border = BorderStroke(2.dp, rainbowBrush),
+                        shadowElevation = 8.dp
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 20.dp, end = 16.dp)
+                        ) {
+                            Icon(Icons.Default.Search, null, tint = colors.onSurface.copy(0.8f), modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Buscar", fontSize = 14.sp, fontWeight = FontWeight.Black, color = colors.onSurface)
+                        }
+                    }
+                }
+
+                Surface(
+                    onClick = {
+                        when {
+                            isSecondaryPanelVisible -> onCloseSecondaryPanel()
+                            isSearchActive -> onCloseSearch()
+                            isMultiSelectionActive -> onAction("toggle_multiselect")
+                            else -> onToggleExpand()
+                        }
+                    },
+                    modifier = Modifier.size(56.dp), // Altura unificada a 56dp
+                    shape = CircleShape,
+                    color = colors.surface,
+                    border = BorderStroke(2.dp, rainbowBrush),
+                    shadowElevation = 8.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isExpanded || isSearchActive || isSecondaryPanelVisible || isMultiSelectionActive) Icons.Default.Close else Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = colors.onSurface,
+                            modifier = Modifier.size(26.dp).rotate(fabIconRotation)
+                        )
+
+                        if (!isExpanded && !isSearchActive && !isMultiSelectionActive && activeFilters.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = (-3).dp, y = 3.dp)
+                                    .size(16.dp)
+                                    .background(Color(0xFFE91E63), CircleShape)
+                                    .border(1.5.dp, colors.surface, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = activeFilters.size.toString(),
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Panel Táctico Horizontal Animado V2 con Soporte Multiselección y Diseño Ultra-Compacto
+ */
+@Composable
+fun TacticalControlPanel(
+    activeFilters: Set<String>,
+    dynamicCategories: List<ControlItem>,
+    onAction: (String) -> Unit,
+    onApply: () -> Unit,
+    isMultiSelectionActive: Boolean = false,
+    showCategories: Boolean = true,
+    showFilters: Boolean = true,
+    showSort: Boolean = true,
+    showTools: Boolean = true,
+    onCompareClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+    onOpenCalendar: () -> Unit = {}
+) {
+    var categoriesExpanded by rememberSaveable { mutableStateOf(true) }
+    var filtersExpanded by rememberSaveable { mutableStateOf(true) }
+    var orderExpanded by rememberSaveable { mutableStateOf(true) }
+    var toolsExpanded by rememberSaveable { mutableStateOf(false) } // 🔥 Por defecto colapsado
+
+    val darkGradientBg = Brush.verticalGradient(listOf(Color(0xFF1A1F26), Color(0xFF05070A)))
+
+    Box(modifier = Modifier.fillMaxWidth(0.96f).wrapContentHeight()) {
+
+        Surface(
+            onClick = onApply,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 8.dp, y = (-8).dp)
+                .size(40.dp)
+                .zIndex(10f),
+            shape = CircleShape,
+            color = Color(0xFF10B981),
+            border = BorderStroke(1.5.dp, Color(0xFF059669)),
+            shadowElevation = 15.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, contentDescription = "Aplicar", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp),
+            color = Color.Transparent,
+            shape = RoundedCornerShape(32.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+            shadowElevation = 25.dp
+        ) {
+            Box(modifier = Modifier.background(darkGradientBg)) {
+                Column(modifier = Modifier.padding(vertical = 12.dp).verticalScroll(rememberScrollState())) {
+
+                    // --- SECCIÓN 1: CATEGORÍAS ---
+                    if (showCategories && dynamicCategories.isNotEmpty()) {
+                        PanelSection(
+                            title = "Categorías",
+                            icon = Icons.Default.Category,
+                            isExpanded = categoriesExpanded,
+                            onToggleExpand = { categoriesExpanded = !categoriesExpanded }
+                        ) {
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp)
+                            ) {
+                                items(dynamicCategories) { item ->
+                                    CategoryTag(
+                                        item = item,
+                                        isSelected = activeFilters.contains(item.id),
+                                        onClick = { onAction(item.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // --- SECCIÓN 2: FILTROS TÉCNICOS ---
+                    if (showFilters) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            PanelSection(
+                                title = "Refinar búsqueda",
+                                icon = Icons.Default.FilterList,
+                                isExpanded = filtersExpanded,
+                                onToggleExpand = { filtersExpanded = !filtersExpanded }
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    // 🔥 Uso de Spacer(weight(1f)) para empujar iconos a la derecha pero cubriendo el ancho total
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Spacer(modifier = Modifier.weight(1f)) // Ocupa la columna fantasma izquierda
+                                        val row1 = listOf(
+                                            ControlItem("Local", Icons.Default.Storefront, "🏪", Color(0xFF2197F5), "filter_local"),
+                                            ControlItem("Casa", Icons.Default.HomeRepairService, "🏠", Color(0xFF9B51E0), "filter_domicilio"),
+                                            ControlItem("24hs", Icons.Default.AccessTimeFilled, "⏳", Color(0xFFFF9800), "filter_24hs"),
+                                            ControlItem("Turnos", Icons.Default.EventAvailable, "📅", Color(0xFF00FFC2), "filter_turnos")
+                                        )
+                                        row1.forEach { item ->
+                                            CompactItemButton(
+                                                item = item,
+                                                isSelected = activeFilters.contains(item.id),
+                                                modifier = Modifier.weight(1f),
+                                                onClick = { onAction(item.id) }
+                                            )
+                                        }
+                                    }
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Spacer(modifier = Modifier.weight(1f)) // Empuja hacia la derecha
+                                        val row2 = listOf(
+                                            ControlItem("Fast", Icons.Default.Bolt, "⚡", Color(0xFFFFEB3B), "filter_fast"),
+                                            ControlItem("Verif.", Icons.Default.Verified, "✅", Color(0xFF9B51E0), "filter_verif"),
+                                            ControlItem("Favs", Icons.Default.Favorite, "❤️", Color(0xFFE91E63), "filter_favs"),
+                                            ControlItem("Cerca", Icons.Default.LocationOn, "📍", Color(0xFF4CAF50), "filter_cerca")
+                                        )
+                                        row2.forEach { item ->
+                                            CompactItemButton(
+                                                item = item,
+                                                isSelected = activeFilters.contains(item.id),
+                                                modifier = Modifier.weight(1f),
+                                                onClick = { onAction(item.id) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // --- SECCIÓN 3: ORDEN TÁCTICO (Inteligente Toggle) ---
+                    if (showSort) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            PanelSection(
+                                title = "Orden táctico",
+                                icon = Icons.AutoMirrored.Filled.Sort,
+                                isExpanded = orderExpanded,
+                                onToggleExpand = { orderExpanded = !orderExpanded }
+                            ) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Spacer(modifier = Modifier.weight(1f)) // Empuja hacia la derecha
+
+                                    // NOMBRE
+                                    val isNombreDesc = activeFilters.contains("sort_nombre_desc")
+                                    val isNombreAsc = activeFilters.contains("sort_nombre_asc")
+                                    val nombreItem = ControlItem(if (isNombreDesc) "Z-A" else "A-Z", Icons.Default.SortByAlpha, if (isNombreDesc) "🔽" else "🔼", Color(0xFF2197F5), "sort_nombre")
+                                    CompactItemButton(item = nombreItem, isSelected = isNombreDesc || isNombreAsc, modifier = Modifier.weight(1f), onClick = {
+                                        if (isNombreDesc) { onAction("sort_nombre_desc"); onAction("sort_nombre_asc") }
+                                        else if (isNombreAsc) { onAction("sort_nombre_asc") }
+                                        else { onAction("sort_nombre_desc") }
+                                    })
+
+                                    // FECHA (Soporta Click Largo para abrir Rango de Fechas)
+                                    val isFechaDesc = activeFilters.contains("sort_fecha_desc")
+                                    val isFechaAsc = activeFilters.contains("sort_fecha_asc")
+                                    val fechaItem = ControlItem("Fecha", Icons.Default.CalendarToday, if (isFechaAsc) "Antiguo" else "Nuevo", Color(0xFFFACC15), "sort_fecha")
+                                    CompactItemButton(item = fechaItem, isSelected = isFechaDesc || isFechaAsc, modifier = Modifier.weight(1f), onClick = {
+                                        if (isFechaDesc) { onAction("sort_fecha_desc"); onAction("sort_fecha_asc") }
+                                        else if (isFechaAsc) { onAction("sort_fecha_asc") }
+                                        else { onAction("sort_fecha_desc") }
+                                    }, onLongClick = onOpenCalendar)
+
+                                    // PRECIO
+                                    val isPrecioDesc = activeFilters.contains("sort_precio_desc")
+                                    val isPrecioAsc = activeFilters.contains("sort_precio_asc")
+                                    val precioItem = ControlItem("Precio", Icons.Default.AttachMoney, if (isPrecioDesc) "Menor $" else "Mayor $", Color(0xFF10B981), "sort_precio")
+                                    CompactItemButton(item = precioItem, isSelected = isPrecioDesc || isPrecioAsc, modifier = Modifier.weight(1f), onClick = {
+                                        if (isPrecioDesc) { onAction("sort_precio_desc"); onAction("sort_precio_asc") }
+                                        else if (isPrecioAsc) { onAction("sort_precio_asc") }
+                                        else { onAction("sort_precio_desc") }
+                                    })
+
+                                    // RANKING
+                                    val isRankDesc = activeFilters.contains("sort_rank_desc")
+                                    val isRankAsc = activeFilters.contains("sort_rank_asc")
+                                    val rankItem = ControlItem("Rank", Icons.Default.Star, if (isRankAsc) "Low ⭐" else "Top ⭐", Color(0xFF9B51E0), "sort_rank")
+                                    CompactItemButton(item = rankItem, isSelected = isRankDesc || isRankAsc, modifier = Modifier.weight(1f), onClick = {
+                                        if (isRankDesc) { onAction("sort_rank_desc"); onAction("sort_rank_asc") }
+                                        else if (isRankAsc) { onAction("sort_rank_asc") }
+                                        else { onAction("sort_rank_desc") }
+                                    })
+                                }
+                            }
+                        }
+                    }
+
+                    // --- SECCIÓN 4: GESTIÓN Y HERRAMIENTAS ---
+                    if (showTools) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            PanelSection(
+                                title = "Herramientas",
+                                icon = Icons.Default.Build,
+                                isExpanded = toolsExpanded,
+                                onToggleExpand = { toolsExpanded = !toolsExpanded }
+                            ) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val multiItem = ControlItem("Multi", Icons.Default.Layers, "📑", Color(0xFFE91E63), "toggle_multiselect")
+
+                                    if (isMultiSelectionActive) {
+                                        Spacer(modifier = Modifier.weight(1f)) // Empuja a la derecha si hay 4
+                                        CompactItemButton(item = multiItem, isSelected = true, modifier = Modifier.weight(1f), onClick = { onAction("toggle_multiselect") })
+
+                                        val compareItem = ControlItem("Comparar", Icons.AutoMirrored.Filled.CompareArrows, "⚖️", Color(0xFF2197F5), "compare")
+                                        CompactItemButton(item = compareItem, isSelected = false, modifier = Modifier.weight(1f), onClick = { onCompareClick() })
+
+                                        val deleteItem = ControlItem("Eliminar", Icons.Default.Delete, "🗑️", Color(0xFFEF4444), "delete")
+                                        CompactItemButton(item = deleteItem, isSelected = false, modifier = Modifier.weight(1f), onClick = { onDeleteClick() })
+
+                                        val shareItem = ControlItem("Share", Icons.Default.Share, "📤", Color(0xFFFACC15), "share")
+                                        CompactItemButton(item = shareItem, isSelected = false, modifier = Modifier.weight(1f), onClick = { onShareClick() })
+                                    } else {
+                                        // Si hay 5 elementos (Multi + 4), no se necesita Spacer
+                                        CompactItemButton(item = multiItem, isSelected = false, modifier = Modifier.weight(1f), onClick = { onAction("toggle_multiselect") })
+
+                                        val vistaItem = ControlItem("Vista", Icons.Default.GridView, "🖼️", Color(0xFF00FFC2), "vista")
+                                        CompactItemButton(item = vistaItem, isSelected = activeFilters.contains(vistaItem.id), modifier = Modifier.weight(1f), onClick = { onAction(vistaItem.id) })
+
+                                        val simChatItem = ControlItem("Sim Chat", Icons.Default.PrecisionManufacturing, "🤖", Color(0xFF9B51E0), "sim_chat")
+                                        CompactItemButton(item = simChatItem, isSelected = activeFilters.contains(simChatItem.id), modifier = Modifier.weight(1f), onClick = { onAction(simChatItem.id) })
+
+                                        val simLicItem = ControlItem("Sim Lic", Icons.Default.Gavel, "📝", Color(0xFF2197F5), "sim_lic")
+                                        CompactItemButton(item = simLicItem, isSelected = activeFilters.contains(simLicItem.id), modifier = Modifier.weight(1f), onClick = { onAction(simLicItem.id) })
+
+                                        val refreshItem = ControlItem("Refresh", Icons.Default.Refresh, "🔄", Color(0xFF10B981), "refresh")
+                                        CompactItemButton(item = refreshItem, isSelected = activeFilters.contains(refreshItem.id), modifier = Modifier.weight(1f), onClick = { onAction(refreshItem.id) })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Divisor Blanco de alto contraste (se eliminó su uso externo para mayor limpieza)
+ */
+@Composable
+fun DividerWhite(modifier: Modifier = Modifier) {
+    HorizontalDivider(
+        modifier = modifier,
+        color = Color.White.copy(alpha = 0.3f), // Más visible
+        thickness = 1.dp
+    )
+}
+
+/**
+ * Encabezado colapsable para las secciones del panel táctico. Textos e iconos en BLANCO.
+ * Se cambió Spring por Tween para lograr animaciones más fluidas sin lag.
+ */
+@Composable
+fun PanelSection(title: String, icon: ImageVector, isExpanded: Boolean, onToggleExpand: () -> Unit, content: @Composable () -> Unit) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleExpand() }
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Icon(icon, null, tint = Color.White, modifier = Modifier.size(16.dp)) // Blanco puro
+            Spacer(Modifier.width(8.dp))
+            Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 1.sp) // Blanco puro
+
+            Spacer(Modifier.width(8.dp))
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
+
+            val arrowRotation by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f, animationSpec = tween(200))
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = if (isExpanded) "Ocultar" else "Mostrar",
+                tint = Color.White, // Blanco puro
+                modifier = Modifier.size(22.dp).rotate(arrowRotation)
+            )
+        }
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(animationSpec = tween(250, easing = FastOutSlowInEasing)) + fadeIn(tween(250)),
+            exit = shrinkVertically(animationSpec = tween(200, easing = FastOutLinearInEasing)) + fadeOut(tween(200))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * Etiqueta Tipo "Pill" para las categorías. Sustituye al botón cuadrado.
+ */
+@Composable
+fun CategoryTag(item: ControlItem, isSelected: Boolean, onClick: () -> Unit) {
+    val bgColor = if(isSelected) item.color.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f)
+    val borderColor = if(isSelected) item.color else Color.White.copy(alpha = 0.15f)
+    val textColor = if(isSelected) Color.White else Color.LightGray
+
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = bgColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.height(32.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        ) {
+            Text(item.emoji, fontSize = 14.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(item.label.uppercase(), color = textColor, fontSize = 9.sp, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+/**
+ * Componente más compacto para los botones de las grillas del panel.
+ * Toma su Modifier del padre para permitir una distribución equitativa (weight).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun CompactItemButton(
+    item: ControlItem,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(
+                    if (isSelected) item.color.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+                    RoundedCornerShape(12.dp)
+                )
+                .border(
+                    if (isSelected) 1.5.dp else 0.8.dp,
+                    if (isSelected) item.color else Color.White.copy(alpha = 0.15f),
+                    RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            // EFECTO GLOW (Solucionado con Shadow nativo sin lag)
+            if (isSelected) {
+                Text(
+                    text = item.emoji,
+                    fontSize = 18.sp,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = item.color,
+                            offset = Offset(0f, 0f),
+                            blurRadius = 25f
+                        )
+                    )
+                )
+            } else {
+                item.icon?.let { Icon(it, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(18.dp)) }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = item.label,
+            fontSize = 7.5.sp, // Letra compacta
+            fontWeight = FontWeight.ExtraBold,
+            color = if (isSelected) Color.White else Color.LightGray,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// =================================================================================
+// --- COMPONENTES DE BÚSQUEDA Y NAVEGACIÓN ---
+// =================================================================================
+
+@Composable
+fun GeminiTopSearchBar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    placeholderText: String = "Buscar...",
+    focusRequester: FocusRequester = remember { FocusRequester() }
+) {
+    val colors = MaterialTheme.colorScheme
+    val rainbowBrush = geminiGradientEffect()
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = colors.surface,
+        shape = RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp, topEnd = 8.dp, bottomEnd = 8.dp),
+        shadowElevation = 8.dp,
+        border = BorderStroke(2.dp, rainbowBrush)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Search, null, tint = colors.onSurface.copy(0.8f), modifier = Modifier.padding(start = 16.dp).size(18.dp))
+            BasicTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                singleLine = true,
+                modifier = Modifier.weight(1f).padding(start = 8.dp).focusRequester(focusRequester),
+                textStyle = TextStyle(color = colors.onSurface, fontSize = 15.sp),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (searchQuery.isEmpty()) { Text(placeholderText, color = colors.onSurfaceVariant, fontSize = 14.sp) }
+                        inner()
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun GeminiFABWithScrim(
+    bottomPadding: PaddingValues,
+    showScrim: Boolean,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = showScrim,
+            enter = fadeIn(animationSpec = tween(800)),
+            exit = fadeOut(animationSpec = tween(800)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Box(modifier = Modifier.fillMaxWidth().height(180.dp).background(brush = Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 1f)))))
+        }
+        Box(
+            modifier = Modifier.fillMaxSize().padding(bottomPadding).navigationBarsPadding().padding(bottom = 8.dp, end = 8.dp),
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            content()
+        }
+    }
+}
+
+// =================================================================================
+// --- COMPONENTES UI ADICIONALES Y TARJETAS ---
+// =================================================================================
+
+@Composable
+fun ServiceTag(text: String, color: Color) {
+    Surface(color = color, shape = RoundedCornerShape(6.dp), border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))) {
+        Text(text = text, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = if (color.luminance() > 0.4f) Color.Black else Color.White, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+    }
+}
+
+@Composable
+fun RowItemDetail(icon: ImageVector, text: String, isActive: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+        Icon(imageVector = icon, contentDescription = null, tint = if (isActive) Color(0xFF10B981) else Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(text = text, style = MaterialTheme.typography.bodyMedium, color = if (isActive) Color.White else Color.Gray.copy(alpha = 0.5f), textDecoration = if (!isActive) TextDecoration.LineThrough else null)
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun PrestadorCard(
+    provider: Provider,
+    onClick: () -> Unit,
+    onChat: (() -> Unit)? = null,
+    onDeleteRequest: (() -> Unit)? = null,
+    actionContent: @Composable (() -> Unit)? = null,
+    onToggleFavorite: ((String, Boolean) -> Unit)? = null,
+    viewMode: String = "Detallada",
+    showAvatars: Boolean = true,
+    showPreviews: Boolean = true,
+    showBadges: Boolean = true,
+    allCategories: List<CategoryEntity> = emptyList()
+) {
+    var showDetailSheet by remember { mutableStateOf(false) }
+    var showContextMenu by remember { mutableStateOf(false) }
+    var showFavoriteDialog by remember { mutableStateOf(false) }
+
+    val staticBrush = geminiGradientBrush(isAnimated = false)
+    val animateBrush = geminiGradientBrush(isAnimated = true)
+
+    val activeColor = Color(0xFF22D3EE)
+    val inactiveColor = Color.White.copy(alpha = 0.15f)
+    val cyberBackground = Color(0xFF0A0E14)
+    val cardGradient = Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFF1A1F26),
+            Color(0xFF0A0E14)
+        ))
+
+    val mainCompany = provider.companies.firstOrNull()
+    val companyName = mainCompany?.name ?: ""
+    val services = mainCompany?.services ?: emptyList()
+
+    val works24h = mainCompany?.works24h ?: false
+    val doesHomeVisits = mainCompany?.doesHomeVisits ?: false
+    val hasPhysicalLocation = mainCompany?.hasPhysicalLocation ?: false
+    val acceptsAppointments = mainCompany?.acceptsAppointments ?: false
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .background(staticBrush, RoundedCornerShape(26.dp))
+            .padding(1.5.dp)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.5.dp))
+                .combinedClickable(
+                    onClick = { showDetailSheet = true },
+                    onLongClick = { showContextMenu = true }
+                ),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            shape = RoundedCornerShape(24.5.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier
+                    .background(cardGradient)
+                    .matchParentSize().background(Color.White.copy(alpha = 0.05f)))
+
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (showAvatars) {
+                        Box(contentAlignment = Alignment.TopStart) {
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color.White.copy(alpha = 0.05f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = provider.photoUrl,
+                                    contentDescription = "Foto de perfil",
+                                    fallback = painterResource(id = R.drawable.iconapp),
+                                    modifier = Modifier.fillMaxSize().clickable { onClick() },
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            if (provider.isOnline && showBadges) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .offset(x = (-4).dp, y = (-4).dp)
+                                        .background(Color(0xFF00E676), CircleShape)
+                                        .border(2.dp, cyberBackground, CircleShape)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = provider.displayName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (provider.isVerified && showBadges) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(Icons.Filled.Verified, null, tint = Color(0xFF9B51E0), modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        if (companyName.isNotEmpty()) {
+                            Text(
+                                text = companyName.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF22D3EE).copy(alpha = 0.7f),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth().padding(end = 8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                                Text(text = " ${provider.rating}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+
+                            if (showBadges) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp), tint = if (works24h) activeColor else inactiveColor)
+                                    Icon(Icons.Default.Home, null, modifier = Modifier.size(16.dp), tint = if (doesHomeVisits) activeColor else inactiveColor)
+                                    Icon(Icons.Default.Storefront, null, modifier = Modifier.size(16.dp), tint = if (hasPhysicalLocation) activeColor else inactiveColor)
+                                    Icon(Icons.Default.Event, null, modifier = Modifier.size(16.dp), tint = if (acceptsAppointments) activeColor else inactiveColor)
+                                }
+                            }
+
+                            IconButton(onClick = { showFavoriteDialog = true }, modifier = Modifier.size(24.dp)) {
+                                Icon(imageVector = if (provider.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, contentDescription = null, tint = if (provider.isFavorite) Color.Red else Color.Gray)
+                            }
+                        }
+                    }
+
+                    if (actionContent != null) {
+                        actionContent()
+                    } else {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { onChat?.invoke() },
+                            modifier = Modifier.size(44.dp).background(animateBrush, RoundedCornerShape(14.dp))
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }, offset = DpOffset(x = 16.dp, y = 0.dp)) {
+            DropdownMenuItem(text = { Text("Ver Perfil Completo") }, leadingIcon = { Icon(Icons.Default.Person, null) }, onClick = { showContextMenu = false; onClick() })
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text(if (provider.isFavorite) "Quitar de Favoritos" else "Añadir a Favoritos") }, leadingIcon = { Icon(imageVector = if (provider.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, null, tint = if (provider.isFavorite) Color.Red else Color.Unspecified) }, onClick = { showContextMenu = false; showFavoriteDialog = true })
+        }
+    }
+
+    if (showDetailSheet) {
+        ModalBottomSheet(onDismissRequest = { showDetailSheet = false }, containerColor = cyberBackground, tonalElevation = 8.dp, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(model = provider.photoUrl, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                    Spacer(modifier = Modifier.width(16.dp)); Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Text(text = provider.displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White); if (provider.isVerified) { Spacer(modifier = Modifier.width(6.dp)); Icon(Icons.Filled.Verified, null, tint = Color(0xFF2197F5), modifier = Modifier.size(24.dp)) } }
+                    if (companyName.isNotEmpty()) { Text(text = companyName, style = MaterialTheme.typography.titleSmall, color = Color(0xFF22D3EE)) }
+                    Text(text = provider.email, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                }
+                }
+                Spacer(modifier = Modifier.height(24.dp)); Text("Servicios Ofrecidos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Cyan)
+                Spacer(modifier = Modifier.height(12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    services.forEach { service ->
+                        val catColorLong = allCategories.find { it.name.equals(service, ignoreCase = true) }?.color
+                        val tagColor = if (catColorLong != null) Color(catColorLong) else Color.White.copy(alpha = 0.15f)
+                        ServiceTag(text = service, color = tagColor)
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp)); HorizontalDivider(color = Color.White.copy(0.5f)); Spacer(modifier = Modifier.height(24.dp))
+                RowItemDetail(icon = Icons.Default.Schedule, text = "Disponible 24hs", isActive = works24h)
+                RowItemDetail(icon = Icons.Default.Home, text = "Visitas a Domicilio", isActive = doesHomeVisits)
+                RowItemDetail(icon = Icons.Default.Storefront, text = "Local Físico", isActive = hasPhysicalLocation)
+                RowItemDetail(icon = Icons.Default.Event, text = "Turnos / Citas", isActive = acceptsAppointments)
+                Spacer(modifier = Modifier.height(32.dp))
+                Button(onClick = { showDetailSheet = false; onClick() }, modifier = Modifier.fillMaxWidth().height(36.dp).background(animateBrush, RoundedCornerShape(12.dp)), colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent), shape = RoundedCornerShape(28.dp)) {
+                    Text("Ver Perfil Completo", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                }
+            }
+        }
+    }
+
+    if (showFavoriteDialog) {
+        AlertDialog(onDismissRequest = { showFavoriteDialog = false }, icon = { Icon(Icons.Default.Favorite, null, tint = Color.Red) }, title = { Text(if (provider.isFavorite) "Quitar de Favoritos" else "Añadir a Favoritos") }, text = { Text(if (provider.isFavorite) "¿Estás seguro de que quieres eliminar a este prestador de tus favoritos?" else "¿Quieres añadir a este prestador a tu lista de favoritos?") }, confirmButton = { TextButton(onClick = { onToggleFavorite?.invoke(provider.id, provider.isFavorite); showFavoriteDialog = false }) { Text("Confirmar") } }, dismissButton = { TextButton(onClick = { showFavoriteDialog = false }) { Text("Cancelar") } })
+    }
+}
+
+// ==========================================================================================
+// --- CARRUSELES Y CARDS ---
+// ==========================================================================================
+
+@Composable
+fun CompactCategoryCard(item: CategoryEntity, onClick: () -> Unit) {
+    val baseColor = Color(item.color)
+    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = baseColor), modifier = Modifier.fillMaxWidth().height(90.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(18.dp)), elevation = CardDefaults.cardElevation(0.dp)) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f).drawWithCache {
+                val gradient = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.12f), Color.Transparent), start = Offset(0f, 0f), end = Offset(size.width, size.height))
+                onDrawWithContent { drawContent(); drawRect(gradient, blendMode = BlendMode.Overlay) }
+            })
+            Box(modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(colors = listOf(Color.Black.copy(alpha = 0.9f), Color.Transparent), startX = 0f, endX = 450f)))
+            Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(0.6f).fillMaxHeight().padding(start = 8.dp, end = 2.dp, top = if (item.isNew) 18.dp else 0.dp), contentAlignment = Alignment.CenterStart) {
+                    Column {
+                        AutoResizingText(text = item.name.uppercase(), color = Color.White, maxFontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Box(modifier = Modifier.width(24.dp).height(1.5.dp).background(Color.White.copy(alpha = 0.4f), RoundedCornerShape(2.dp)))
+                    }
+                }
+                Box(modifier = Modifier.width(1.5.dp).height(85.dp).background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.5f), Color.Transparent))))
+                Box(modifier = Modifier.weight(0.4f).fillMaxHeight(), contentAlignment = Alignment.CenterEnd) { Text(text = item.icon, fontSize = 90.sp, modifier = Modifier.offset(x = 10.dp).graphicsLayer(alpha = 1f)) }
+            }
+            if (item.isNew) { Surface(color = Color(0xFFFFD600), shape = RoundedCornerShape(bottomEnd = 12.dp), modifier = Modifier.align(Alignment.TopStart)) { Text(text = "NUEVO", color = Color.Black, fontSize = 7.5.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), letterSpacing = 0.5.sp) } }
+        }
+    }
+}
+
+@Composable
+private fun AutoResizingText(text: String, color: Color, maxFontSize: TextUnit, minFontSize: TextUnit = 8.sp) {
+    var fontSize by remember { mutableStateOf(maxFontSize) }
+    var readyToDraw by remember { mutableStateOf(false) }
+    Text(text = text, color = if (readyToDraw) color else Color.Transparent, fontWeight = FontWeight.Black, fontSize = fontSize, lineHeight = fontSize * 1.1f, maxLines = 2, letterSpacing = 1.1.sp, overflow = TextOverflow.Clip, onTextLayout = { result -> if (result.hasVisualOverflow && fontSize > minFontSize) { fontSize = (fontSize.value * 0.9f).sp } else { readyToDraw = true } }, modifier = Modifier.fillMaxWidth())
+}
+
+enum class BannerType(val label: String) {
+    GOOGLE_AD("SPONSORED"),
+    PROMO("PROMOCIÓN"),
+    NEW_CATEGORY("NUEVA CATEGORÍA"),
+    NEW_PROVIDER("NUEVOS PRESTADORES"),
+    PRODUCT_SALE("VENTA DE PRODUCTO"),
+    SERVICE_SALE("SERVICIO DESTACADO")
+}
+
+data class AccordionBanner(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val icon: String,
+    val color: Color,
+    val type: BannerType,
+    val originalCategory: CategoryEntity? = null,
+    val isNew: Boolean = false,
+    val imageUrl: String? = null,
+    val discount: Int? = null
+)
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun PremiumLensCarousel(
+    items: List<AccordionBanner>,
+    onSettingsClick: () -> Unit,
+    onItemClick: (AccordionBanner) -> Unit,
+    modifier: Modifier = Modifier,
+    autoplayDelay: Long = 5000L
+) {
+    if (items.isEmpty()) return
+
+    var expandedMenu by remember { mutableStateOf(false) }
+    var activeFilters by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var tempFilters by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    val filteredItems = remember(items, activeFilters) {
+        if (activeFilters.isEmpty()) items
+        else items.filter {
+            if (it.type == BannerType.GOOGLE_AD) true
+            else {
+                val isNovedad = it.type == BannerType.NEW_CATEGORY || it.type == BannerType.NEW_PROVIDER
+                val isPromo = it.type == BannerType.PROMO || it.discount != null
+                val isProd = it.type == BannerType.PRODUCT_SALE
+                val isServ = it.type == BannerType.SERVICE_SALE
+
+                (activeFilters.contains("NOVEDADES") && isNovedad) ||
+                        (activeFilters.contains("PROMOCIONES") && isPromo) ||
+                        (activeFilters.contains("PRODUCTOS") && isProd) ||
+                        (activeFilters.contains("SERVICIOS") && isServ)
+            }
+        }
+    }
+
+    val displayItems = filteredItems.ifEmpty { items }
+
+    val infiniteCount = Int.MAX_VALUE
+    val initialPage = infiniteCount / 2 - (infiniteCount / 2 % displayItems.size.coerceAtLeast(1))
+    val pagerState = rememberPagerState(initialPage = initialPage) { infiniteCount }
+
+    LaunchedEffect(key1 = displayItems) {
+        while (true) {
+            delay(autoplayDelay)
+            if (displayItems.size > 1) {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            }
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "DESTACADOS & NOVEDADES",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp
+                )
+            }
+
+            Box {
+                if (activeFilters.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            activeFilters = emptySet()
+                            tempFilters = emptySet()
+                        },
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(Color(0xFFEF4444).copy(alpha = 0.2f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Limpiar Filtros", tint = Color(0xFFEF4444), modifier = Modifier.size(14.dp))
+                    }
+                } else {
+                    IconButton(
+                        onClick = {
+                            tempFilters = activeFilters
+                            expandedMenu = true
+                        },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Filtros", tint = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = expandedMenu,
+                    onDismissRequest = { expandedMenu = false },
+                    modifier = Modifier.background(Color(0xFF161C24)).border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("FILTROS", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        IconButton(
+                            onClick = {
+                                activeFilters = tempFilters
+                                expandedMenu = false
+                            },
+                            modifier = Modifier.size(24.dp).background(Color(0xFF10B981).copy(alpha = 0.2f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Aplicar", tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                    val options = listOf(
+                        "NOVEDADES" to "🚀",
+                        "PROMOCIONES" to "🔥",
+                        "PRODUCTOS" to "🛍️",
+                        "SERVICIOS" to "🛠️"
+                    )
+
+                    options.forEach { (option, emoji) ->
+                        val isSelected = tempFilters.contains(option)
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(emoji, fontSize = 14.sp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = option,
+                                        color = if (isSelected) Color(0xFF2197F5) else Color.White,
+                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            },
+                            trailingIcon = {
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, null, tint = Color(0xFF2197F5), modifier = Modifier.size(16.dp))
+                                }
+                            },
+                            onClick = {
+                                tempFilters = if (isSelected) tempFilters - option else tempFilters + option
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        HorizontalPager(
+            state = pagerState,
+            pageSize = PageSize.Fixed(300.dp),
+            pageSpacing = 12.dp,
+            contentPadding = PaddingValues(start = 10.dp, end = 64.dp),
+            modifier = Modifier.fillMaxWidth().height(120.dp)
+        ) { index ->
+            val actualIndex = index % displayItems.size
+            val item = displayItems[actualIndex]
+
+            val pageOffset = ((pagerState.currentPage - index) + pagerState.currentPageOffsetFraction).absoluteValue
+            Box(modifier = Modifier.graphicsLayer {
+                val scale = lerp(start = 0.9f, stop = 1f, fraction = 1f - pageOffset.coerceIn(0f, 1f))
+                scaleX = scale
+                scaleY = scale
+                alpha = lerp(start = 0.5f, stop = 1f, fraction = 1f - pageOffset.coerceIn(0f, 1f))
+            }) {
+                if (item.type == BannerType.GOOGLE_AD) {
+                    AdBannerItem(item = item)
+                } else {
+                    PremiumBannerItem(item = item, onClick = { onItemClick(item) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdBannerItem(item: AccordionBanner) {
+    Card(modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (item.imageUrl != null) AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = 0.3f)
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.AdsClick, null, tint = Color.Gray); Text(item.title, fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp)); Text(item.subtitle, fontSize = 11.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp)) } }
+            Box(modifier = Modifier.align(Alignment.TopStart).background(Color(0xFFFFC107), RoundedCornerShape(bottomEnd = 12.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) { Text("ANUNCIO", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color.Black) }
+        }
+    }
+}
+
+@Composable
+fun PremiumBannerItem(item: AccordionBanner, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxSize().clickable { onClick() }, shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = item.color), elevation = CardDefaults.cardElevation(8.dp)) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (item.imageUrl != null) AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = 0.4f)
+            Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f).drawWithCache { val gradient = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent), start = Offset(0f, 0f), end = Offset(size.width, size.height)); onDrawWithContent { drawContent(); drawRect(gradient, blendMode = BlendMode.Overlay) } })
+            Box(modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Black.copy(alpha = 0.4f), Color.Transparent), startX = 0f, endX = 600f)))
+            Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(0.85f).fillMaxHeight().padding(start = 10.dp, top = 20.dp, bottom = 16.dp), contentAlignment = Alignment.CenterStart) {
+                    Column { AutoResizingText(text = item.title.uppercase(), color = Color.White, maxFontSize = 20.sp); Text(text = item.subtitle, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 16.sp); Spacer(modifier = Modifier.height(10.dp)); Box(modifier = Modifier.width(40.dp).height(3.dp).background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(2.dp))) }
+                }
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.7f).background(Brush.verticalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.4f), Color.Transparent))))
+
+                Box(modifier = Modifier.weight(0.35f).fillMaxHeight(), contentAlignment = Alignment.CenterEnd) {
+                    Text(
+                        text = item.icon,
+                        fontSize = 100.sp,
+                        modifier = Modifier.offset(x = 20.dp),
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.6f),
+                                offset = Offset(-10f, 15f),
+                                blurRadius = 20f
+                            )
+                        )
+                    )
+                }
+            }
+            if (item.isNew) {
+                Surface(color = Color(0xFFFFD600), shape = RoundedCornerShape(bottomEnd = 16.dp), modifier = Modifier.align(Alignment.TopStart)) { Text(text = "NUEVO", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+            } else if (item.discount != null) {
+                Surface(color = Color(0xFFE91E63), shape = RoundedCornerShape(bottomEnd = 16.dp), modifier = Modifier.align(Alignment.TopStart)) { Text(text = "${item.discount}% OFF", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+fun GeminiCyberWrapper(modifier: Modifier = Modifier, cornerRadius: Dp = 24.dp, borderThickness: Dp = 1.5.dp, isAnimated: Boolean = false, showGlow: Boolean = true, content: @Composable () -> Unit) {
+    val geminiBrush = geminiGradientBrush(isAnimated = isAnimated)
+    val cyberBackground = Color(0xFF0A0E14)
+    Box(modifier = modifier) {
+        if (showGlow) Box(modifier = Modifier.matchParentSize().padding(borderThickness).blur(15.dp).background(geminiBrush, RoundedCornerShape(cornerRadius)).graphicsLayer { alpha = 0.3f })
+        Box(modifier = Modifier.fillMaxWidth().background(geminiBrush, RoundedCornerShape(cornerRadius)).padding(borderThickness)) {
+            Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(cornerRadius - borderThickness)), color = cyberBackground) {
+                Box(modifier = Modifier.fillMaxWidth()) { Box(modifier = Modifier.matchParentSize().background(Color.White.copy(alpha = 0.05f))); content() }
+            }
+        }
+    }
+}
+
+// ==========================================================================================
+// --- PREVIEWS ---
+// ==========================================================================================
+
+@Preview(showBackground = true, backgroundColor = 0xFF05070A)
+@Composable
+fun TacticalFABPreview() {
+    var expanded by remember { mutableStateOf(true) }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var isMultiSelectionActive by remember { mutableStateOf(false) }
+    var activeFilters by remember { mutableStateOf(setOf("filter_verif", "sort_precio_desc")) }
+
+    val mockCategories = listOf(
+        ControlItem("Informática", null, "💻", Color(0xFFB2EBF2), "cat_info"),
+        ControlItem("Mecánica", null, "🔧", Color(0xFFFFDAC1), "cat_mec"),
+        ControlItem("Limpieza", null, "🧹", Color(0xFFFAD2E1), "cat_limp")
+    )
+
+    MyApplicationTheme {
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0E14))) {
+            GeminiSplitFAB(
+                isExpanded = expanded,
+                isSearchActive = isSearchActive,
+                isMultiSelectionActive = isMultiSelectionActive,
+                onToggleExpand = { expanded = !expanded },
+                onActivateSearch = { isSearchActive = true; expanded = false },
+                onCloseSearch = { isSearchActive = false },
+                onCompareClick = { },
+                onDeleteClick = { },
+                onShareClick = { },
+                activeFilters = activeFilters,
+                dynamicCategories = mockCategories,
+                onAction = { id ->
+                    when (id) {
+                        "toggle_multiselect" -> {
+                            isMultiSelectionActive = !isMultiSelectionActive
+                        }
+                        "apply_filters" -> {
+                            // Lógica de aplicar
+                        }
+                        else -> {
+                            activeFilters = if(activeFilters.contains(id)) activeFilters - id else activeFilters + id
+                        }
+                    }
+                },
+                onResetAll = { activeFilters = emptySet(); expanded = false },
+                secondaryActions = {
+                    SmallActionFab(icon = Icons.Default.Favorite, label = "Favs", iconColor = Color(0xFFE91E63), onClick = {})
+                }
+            )
+        }
+    }
+}
+**/
+
+/**
+
+// ==========================================================================================
+// --- PREVIEWS ---
+// ==========================================================================================
+
+@Preview(showBackground = true, backgroundColor = 0xFF05070A)
+@Composable
+fun TacticalFABPreview() {
+    var expanded by remember { mutableStateOf(true) }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var isMultiSelectionActive by remember { mutableStateOf(false) }
+    var activeFilters by remember { mutableStateOf(setOf("filter_verif", "sort_precio_desc")) }
+
+    val mockCategories = listOf(
+        ControlItem("Informática", null, "💻", Color(0xFFB2EBF2), "cat_info"),
+        ControlItem("Mecánica", null, "🔧", Color(0xFFFFDAC1), "cat_mec"),
+        ControlItem("Limpieza", null, "🧹", Color(0xFFFAD2E1), "cat_limp")
+    )
+
+    MyApplicationTheme {
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0E14))) {
+            GeminiSplitFAB(
+                isExpanded = expanded,
+                isSearchActive = isSearchActive,
+                isMultiSelectionActive = isMultiSelectionActive,
+                onToggleExpand = { expanded = !expanded },
+                onActivateSearch = { isSearchActive = true; expanded = false },
+                onCloseSearch = { isSearchActive = false },
+                onCompareClick = { },
+                onDeleteClick = { },
+                onShareClick = { },
+                activeFilters = activeFilters,
+                dynamicCategories = mockCategories,
+                onAction = { id ->
+                    when (id) {
+                        "toggle_multiselect" -> {
+                            isMultiSelectionActive = !isMultiSelectionActive
+                        }
+                        "apply_filters" -> {
+                            // Lógica de aplicar
+                        }
+                        else -> {
+                            activeFilters = if(activeFilters.contains(id)) activeFilters - id else activeFilters + id
+                        }
+                    }
+                },
+                onResetAll = { activeFilters = emptySet(); expanded = false },
+                secondaryActions = {
+                    SmallActionFab(icon = Icons.Default.Favorite, label = "Favs", iconColor = Color(0xFFE91E63), onClick = {})
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Preview(showBackground = true, backgroundColor = 0xFF0A0E14)
+@Composable
+fun PremiumLensCarouselPreview() {
+    MyApplicationTheme {
+        val mockCategory = CategoryEntity(
+            name = "Fontanería",
+            icon = "🪠",
+            color = 0xFF42A5F5L, // Use Long for color
+            superCategory = "Hogar",
+            superCategoryIcon = "📂", // Added missing parameter to match CategoryEntity constructor
+            providerIds = emptyList(),
+            imageUrl = null,
+            isNew = true,
+            isNewPrestador = false, // Explicitly set
+            isAd = false // Explicitly set
+        )
+
+        val mockItems = listOf(
+            AccordionBanner(
+                id = "promo_1",
+                title = "Oferta Especial",
+                subtitle = "¡Descuentos en todos los servicios!",
+                icon = "🔥",
+                color = Color(0xFFE91E63),
+                type = BannerType.PROMO,
+                isNew = true,
+                discount = 25
+            ),
+            AccordionBanner(
+                id = "new_cat_1",
+                title = mockCategory.name,
+                subtitle = "¡Nueva categoría disponible!",
+                icon = mockCategory.icon,
+                color = Color(mockCategory.color),
+                type = BannerType.NEW_CATEGORY,
+                originalCategory = mockCategory,
+                isNew = true
+            ),
+            AccordionBanner(
+                id = "ad_google_1",
+                title = "Google Ads",
+                subtitle = "Anúnciate aquí",
+                icon = "📢",
+                color = Color(0xFF1967D2),
+                type = BannerType.GOOGLE_AD,
+                imageUrl = "https://example.com/ad_image.jpg" // Placeholder URL
+            ),
+            AccordionBanner(
+                id = "product_sale_1",
+                title = "Kit Herramientas",
+                subtitle = "Marca X - 20% OFF",
+                icon = "🛠️",
+                color = Color(0xFF43A047),
+                type = BannerType.PRODUCT_SALE,
+                isNew = true,
+                discount = 20
+            ),
+            AccordionBanner(
+                id = "service_sale_1",
+                title = "Servicio de Limpieza",
+                subtitle = "Profesionales a tu disposición",
+                icon = "🧼",
+                color = Color(0xFF00B0FF),
+                type = BannerType.SERVICE_SALE,
+                isNew = false,
+                discount = 15
+            )
+        )
+
+        PremiumLensCarousel(
+            items = mockItems,
+            onSettingsClick = { /* Handle settings click */ },
+            onItemClick = { banner -> /* Handle item click */ }
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0A0E14, widthDp = 200)
+@Composable
+fun CompactCategoryCardPreview() {
+    MyApplicationTheme {
+        val mockCategory = CategoryEntity(
+            name = "Fontanería",
+            icon = "🪠",
+            color = 0xFF42A5F5, // Azul
+            superCategory = "Hogar",
+            superCategoryIcon = "📂", // Added missing parameter to match CategoryEntity constructor
+            providerIds = emptyList(),
+            imageUrl = null,
+            isNew = true,
+            isNewPrestador = false,
+            isAd = false
+        )
+        // Agregamos un Box con padding para que la tarjeta no ocupe todo el ancho
+        Box(modifier = Modifier.padding(16.dp)) {
+            CompactCategoryCard(item = mockCategory, onClick = {})
+        }
+    }
+}
+**/

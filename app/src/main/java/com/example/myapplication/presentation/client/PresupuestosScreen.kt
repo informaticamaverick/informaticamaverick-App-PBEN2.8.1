@@ -7,7 +7,6 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,10 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,6 +55,7 @@ private val StatusActive = Color(0xFF38BDF8)
 private val StatusFinished = Color(0xFF34D399)
 private val StatusWarning = Color(0xFFF87171)
 private val NeonCyber = Color(0xFF00FFC2)
+private val ErrorRed = Color(0xFFF43F5E)
 
 // =================================================================================
 // --- PANTALLA PRINCIPAL ---
@@ -81,9 +79,6 @@ fun PresupuestosScreen(
         onBack = onBack,
         onAcceptBudget = { budget -> viewModel.acceptBudget(budget) },
         onRejectBudget = { budget -> viewModel.rejectBudget(budget) },
-
-        //onAcceptBudget = { budget -> viewModel.acceptBudget(budget.budgetId) },
-        //onRejectBudget = { budget -> viewModel.rejectBudget(budget.budgetId) },
         bottomPadding = bottomPadding
     )
 }
@@ -100,73 +95,89 @@ fun PresupuestosScreenContent(
     onRejectBudget: (BudgetEntity) -> Unit,
     bottomPadding: PaddingValues
 ) {
-    // --- ESTADOS NAVEGACIÓN ---
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("LICITACIONES", "DIRECTOS")
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var isFabExpanded by remember { mutableStateOf(false) }
 
-    // --- ESTADOS PANEL TÁCTICO (NUEVO) ---
+    // Panel Táctico & Multiselección
     var activeFilters by remember { mutableStateOf(setOf<String>()) }
     var multiSelectEnabled by remember { mutableStateOf(false) }
     val selectedTenderIds = remember { mutableStateListOf<String>() }
     val selectedBudgetIds = remember { mutableStateListOf<String>() }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
+    // Estados de navegación interna
     var selectedTenderForSheet by remember { mutableStateOf<TenderEntity?>(null) }
     var budgetForA4Preview by remember { mutableStateOf<BudgetEntity?>(null) }
+    var selectedAnalyticsData by remember { mutableStateOf<Pair<TenderEntity, List<BudgetEntity>>?>(null) }
+    var providerProfileToShow by remember { mutableStateOf<BudgetEntity?>(null) }
 
-    // 🔥 LÓGICA DE CATEGORÍAS CONTEXTUALES (Lee los datos en pantalla para generar los chips)
+    // Registro local de presupuestos vistos
+    val readBudgetIds = remember { mutableStateListOf<String>() }
+
+    // Obtenemos los presupuestos de la licitación seleccionada EN VIVO para el Análisis y la Vista
+    val tenderBudgetsFlow = remember(selectedTenderForSheet) {
+        selectedTenderForSheet?.let { getBudgetsForTender(it.tenderId) } ?: MutableStateFlow(emptyList())
+    }
+    val rawTenderBudgets by tenderBudgetsFlow.collectAsStateWithLifecycle(emptyList())
+
+    // 🔥 LÓGICA DE CATEGORÍAS CONTEXTUALES PARA EL PANEL TÁCTICO
     val dynamicCategoriesForPanel = remember(tenders, directBudgets, selectedTabIndex) {
         val extractedNames = mutableSetOf<String>()
+        if (selectedTabIndex == 0) extractedNames.addAll(tenders.map { it.category })
+        else if (directBudgets.isNotEmpty()) extractedNames.addAll(listOf("Informática", "Electricidad", "Plomería"))
 
-        if (selectedTabIndex == 0) {
-            // Contexto Licitaciones: Extraemos los rubros de las licitaciones activas
-            extractedNames.addAll(tenders.map { it.category })
-        } else {
-            // Contexto Directos: Simulamos extracción (En la vida real vendría del Provider)
-            if (directBudgets.isNotEmpty()) {
-                extractedNames.addAll(listOf("Informática", "Electricidad", "Plomería"))
-            }
-        }
-
-        // Mapeamos a ControlItem para el Panel Táctico
         extractedNames.map { catName ->
-            ControlItem(
-                label = catName,
-                icon = null,
-                emoji = getCategoryEmoji(catName),
-                color = getCategoryColor(catName),
-                id = "cat_${catName.lowercase()}"
-            )
+            ControlItem(label = catName, icon = null, emoji = getCategoryEmoji(catName), color = getCategoryColor(catName), id = "cat_${catName.lowercase()}")
         }
     }
 
-    // --- LÓGICA DE FILTRADO UNIFICADA ---
+    // --- LÓGICA DE FILTRADO Y ORDENAMIENTO (APLICANDO LOS BOTONES DEL PANEL TÁCTICO) ---
     val filteredTenders = remember(tenders, activeFilters, searchQuery) {
         val selectedCats = activeFilters.filter { it.startsWith("cat_") }.map { it.removePrefix("cat_") }
-        tenders.filter { tender ->
+        var result = tenders.filter { tender ->
             val matchesCategory = selectedCats.isEmpty() || selectedCats.contains(tender.category.lowercase())
-            val matchesSearch = searchQuery.isEmpty() || tender.title.contains(searchQuery, ignoreCase = true)
+            val matchesSearch = searchQuery.isEmpty() || tender.title.contains(searchQuery, ignoreCase = true) || tender.tenderId.contains(searchQuery)
             matchesCategory && matchesSearch
-        }.sortedWith(
-            if (activeFilters.contains("fecha")) compareByDescending { it.dateTimestamp } else compareByDescending { it.dateTimestamp }
-        )
+        }
+
+        // Filtros especiales
+        if (activeFilters.contains("filter_verif")) result = result.filter { it.status == "ABIERTA" }
+
+        // Ordenamiento
+        result = when {
+            activeFilters.contains("sort_fecha_asc") -> result.sortedBy { it.dateTimestamp }
+            activeFilters.contains("sort_nombre_asc") -> result.sortedBy { it.title }
+            activeFilters.contains("sort_nombre_desc") -> result.sortedByDescending { it.title }
+            else -> result.sortedByDescending { it.dateTimestamp } // Por defecto los más recientes
+        }
+        result
     }
 
+    // Filtro inteligente para presupuestos (Directos y de Licitación)
     val budgetFilterLambda: (List<BudgetEntity>) -> List<BudgetEntity> = remember(activeFilters, searchQuery) {
         { list ->
-            val sortByPrice = activeFilters.contains("precio")
-            list.filter { budget ->
-                val matchesSearch = searchQuery.isEmpty() || budget.providerName.contains(searchQuery, ignoreCase = true)
-                matchesSearch
-            }.sortedWith(
-                if (sortByPrice) compareBy { it.grandTotal } else compareByDescending { it.dateTimestamp }
-            )
+            var result = list.filter { budget ->
+                searchQuery.isEmpty() || budget.providerName.contains(searchQuery, ignoreCase = true)
+            }
+
+            // Ordenamientos combinados
+            result = when {
+                activeFilters.contains("sort_precio_asc") -> result.sortedBy { it.grandTotal }
+                activeFilters.contains("sort_precio_desc") -> result.sortedByDescending { it.grandTotal }
+                activeFilters.contains("sort_fecha_asc") -> result.sortedBy { it.dateTimestamp }
+                activeFilters.contains("sort_nombre_asc") -> result.sortedBy { it.providerName }
+                activeFilters.contains("sort_nombre_desc") -> result.sortedByDescending { it.providerName }
+                else -> result.sortedByDescending { it.dateTimestamp }
+            }
+            result
         }
     }
 
     val displayedDirectBudgets = remember(directBudgets, budgetFilterLambda) { budgetFilterLambda(directBudgets) }
+    val filteredTenderBudgets = remember(rawTenderBudgets, budgetFilterLambda) { budgetFilterLambda(rawTenderBudgets) }
 
     val cancelSelection = {
         selectedTenderIds.clear()
@@ -219,7 +230,7 @@ fun PresupuestosScreenContent(
                         tabs.forEachIndexed { index, title ->
                             Tab(
                                 selected = selectedTabIndex == index,
-                                onClick = { selectedTabIndex = index; cancelSelection() },
+                                onClick = { selectedTabIndex = index; cancelSelection(); selectedTenderForSheet = null },
                                 text = { Text(title, fontSize = 11.sp, fontWeight = FontWeight.Black) }
                             )
                         }
@@ -231,11 +242,12 @@ fun PresupuestosScreenContent(
                                 tenders = filteredTenders,
                                 getBudgetsForTender = getBudgetsForTender,
                                 selectedIds = selectedTenderIds,
+                                readBudgetIds = readBudgetIds,
                                 onTenderClick = { tender ->
                                     if (multiSelectEnabled) {
                                         if (selectedTenderIds.contains(tender.tenderId)) selectedTenderIds.remove(tender.tenderId)
                                         else selectedTenderIds.add(tender.tenderId)
-                                        if (selectedTenderIds.isEmpty()) multiSelectEnabled = false
+                                        if (selectedTenderIds.isEmpty()) cancelSelection()
                                     } else {
                                         selectedTenderForSheet = tender
                                     }
@@ -243,33 +255,34 @@ fun PresupuestosScreenContent(
                                 onTenderLongClick = { tender ->
                                     multiSelectEnabled = true
                                     if (!selectedTenderIds.contains(tender.tenderId)) selectedTenderIds.add(tender.tenderId)
-                                    isFabExpanded = true
                                 }
                             )
                             1 -> DirectBudgetsTabContent(
                                 budgets = displayedDirectBudgets,
                                 selectedIds = selectedBudgetIds,
+                                readBudgetIds = readBudgetIds,
                                 onBudgetClick = { budget ->
                                     if (multiSelectEnabled) {
                                         if (selectedBudgetIds.contains(budget.budgetId)) selectedBudgetIds.remove(budget.budgetId)
                                         else selectedBudgetIds.add(budget.budgetId)
-                                        if (selectedBudgetIds.isEmpty()) multiSelectEnabled = false
+                                        if (selectedBudgetIds.isEmpty()) cancelSelection()
                                     } else {
+                                        readBudgetIds.add(budget.budgetId) // Marcar como leído
                                         budgetForA4Preview = budget
                                     }
                                 },
                                 onChatClick = onChatClick,
+                                onAvatarClick = { budget -> providerProfileToShow = budget },
                                 onBudgetLongClick = { budget ->
                                     multiSelectEnabled = true
                                     if (!selectedBudgetIds.contains(budget.budgetId)) selectedBudgetIds.add(budget.budgetId)
-                                    isFabExpanded = true
                                 }
                             )
                         }
                     }
                 }
 
-                // --- BÚSQUEDA ---
+                // --- BÚSQUEDA OVERLAY ---
                 if (isSearchActive) {
                     Box(modifier = Modifier.fillMaxSize().zIndex(10f).background(Color.Black.copy(alpha = 0.6f)).clickable { isSearchActive = false })
                     Column(modifier = Modifier.fillMaxSize().zIndex(11f)) {
@@ -287,21 +300,12 @@ fun PresupuestosScreenContent(
                                 }
                             }
                         }
-                        if (searchQuery.isNotEmpty()) {
-                            PresupuestoSearchResultsPanel(
-                                searchQuery = searchQuery,
-                                tenders = if(selectedTabIndex == 0) tenders else emptyList(),
-                                budgets = if(selectedTabIndex == 1) directBudgets else emptyList(),
-                                onTenderClick = { selectedTenderForSheet = it; isSearchActive = false },
-                                onBudgetClick = { budgetForA4Preview = it; isSearchActive = false }
-                            )
-                        }
                     }
                 }
             }
         }
 
-        // --- OVERLAY: COMPARATIVA (Ofertas de la Licitación) ---
+        // --- OVERLAY: COMPARATIVA EDGE-TO-EDGE (Ofertas de Licitación) ---
         AnimatedVisibility(
             visible = selectedTenderForSheet != null,
             enter = slideInVertically(initialOffsetY = { it }),
@@ -309,30 +313,25 @@ fun PresupuestosScreenContent(
             modifier = Modifier.zIndex(40f)
         ) {
             Surface(modifier = Modifier.fillMaxSize(), color = DarkBackground) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp).statusBarsPadding(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { selectedTenderForSheet = null }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
-                        }
-                        Text("Ofertas Recibidas", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    }
-
-                    if (selectedTenderForSheet != null) {
-                        val budgetsFlow = remember(selectedTenderForSheet) { getBudgetsForTender(selectedTenderForSheet!!.tenderId) }
-                        val rawBudgets by budgetsFlow.collectAsStateWithLifecycle()
-                        // Aplicamos los filtros activos (precio, etc) a las ofertas
-                        val filteredBudgets = remember(rawBudgets, budgetFilterLambda) { budgetFilterLambda(rawBudgets) }
-
-                        ComparisonSheet(
-                            tender = selectedTenderForSheet!!,
-                            budgets = filteredBudgets,
-                            onBudgetClick = { budget -> budgetForA4Preview = budget },
-                            onChatClick = onChatClick
-                        )
-                    }
+                if (selectedTenderForSheet != null) {
+                    ComparisonSheetEdgeToEdge(
+                        tender = selectedTenderForSheet!!,
+                        budgets = filteredTenderBudgets, // Aplicamos los filtros de ordenamiento
+                        readBudgetIds = readBudgetIds,
+                        onBack = { selectedTenderForSheet = null },
+                        onBudgetClick = { budget ->
+                            readBudgetIds.add(budget.budgetId)
+                            budgetForA4Preview = budget
+                        },
+                        onChatClick = onChatClick,
+                        onAvatarClick = { budget -> providerProfileToShow = budget },
+                        onBudgetLongClick = { budget ->
+                            multiSelectEnabled = true
+                            if (!selectedBudgetIds.contains(budget.budgetId)) selectedBudgetIds.add(budget.budgetId)
+                        },
+                        selectedBudgetIds = selectedBudgetIds,
+                        isMultiSelectMode = multiSelectEnabled
+                    )
                 }
             }
         }
@@ -343,28 +342,137 @@ fun PresupuestosScreenContent(
                 GeminiSplitFAB(
                     isExpanded = isFabExpanded,
                     isSearchActive = isSearchActive,
+                    isMultiSelectionActive = multiSelectEnabled,
                     onToggleExpand = { isFabExpanded = !isFabExpanded },
                     onActivateSearch = { isSearchActive = true; isFabExpanded = false },
                     onCloseSearch = { isSearchActive = false; searchQuery = "" },
                     activeFilters = activeFilters,
-                    dynamicCategories = dynamicCategoriesForPanel, // ¡Inyectamos las categorías contextuales!
-                    onAction = { actionId ->
-                        when (actionId) {
-                            "sim_chat", "sim_lic", "refresh", "vista", "config" -> {
-                                isFabExpanded = false
-                            }
-                            else -> {
-                                // Toggle filtro
-                                activeFilters = if (activeFilters.contains(actionId)) activeFilters - actionId else activeFilters + actionId
-                            }
+                    dynamicCategories = dynamicCategoriesForPanel,
+                    onCompareClick = {
+                        // Multi-selección manual
+                        if (selectedTabIndex == 1 && selectedBudgetIds.size > 1) {
+                            val budgetsToCompare = directBudgets.filter { it.budgetId in selectedBudgetIds }
+                            val fakeTender = TenderEntity("comp_directa", "Comparativa Directa", "", "Varios")
+                            selectedAnalyticsData = Pair(fakeTender, budgetsToCompare)
+                            cancelSelection()
                         }
                     },
-                    onResetAll = { activeFilters = emptySet() }
+                    onDeleteClick = {
+                        showDeleteDialog = true
+                        isFabExpanded = false
+                    },
+                    onAction = { actionId ->
+                        when (actionId) {
+                            "toggle_multiselect" -> if (multiSelectEnabled) cancelSelection() else multiSelectEnabled = true
+                            "apply_filters" -> isFabExpanded = false
+                            else -> activeFilters = if (activeFilters.contains(actionId)) activeFilters - actionId else activeFilters + actionId
+                        }
+                    },
+                    onResetAll = { activeFilters = emptySet() },
+                    secondaryActions = {
+                        // 🔥 BOTÓN ANALIZAR: Aparece si estamos dentro de una Licitación
+                        if (selectedTenderForSheet != null && filteredTenderBudgets.isNotEmpty() && !multiSelectEnabled) {
+                            SmallActionFab(
+                                icon = Icons.Default.Analytics,
+                                label = "Analizar",
+                                iconColor = NeonCyber,
+                                onClick = {
+                                    // Pasa la licitación actual y sus presupuestos
+                                    selectedAnalyticsData = Pair(selectedTenderForSheet!!, filteredTenderBudgets)
+                                }
+                            )
+                        }
+                    }
                 )
+            }
+        }
+
+        // --- OVERLAY: ANALÍTICAS (Z-INDEX SUPERIOR) ---
+        if (selectedAnalyticsData != null) {
+            Box(modifier = Modifier.fillMaxSize().zIndex(200f)) {
+                BudgetComparisonAnalytics(
+                    tender = selectedAnalyticsData!!.first,
+                    budgets = selectedAnalyticsData!!.second,
+                    onBack = { selectedAnalyticsData = null }
+                )
+            }
+        }
+
+        // --- DIÁLOGO DE CONFIRMACIÓN DE BORRADO ---
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                containerColor = CardSurface,
+                titleContentColor = Color.White,
+                textContentColor = Color.LightGray,
+                icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = ErrorRed) },
+                title = { Text("Confirmar Eliminación") },
+                text = {
+                    val count = if (selectedTabIndex == 0) selectedTenderIds.size else selectedBudgetIds.size
+                    Text("Estás a punto de eliminar $count elemento(s) seleccionado(s). Esta acción no se puede deshacer.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        // Aquí conectarías con tu ViewModel
+                        cancelSelection()
+                        showDeleteDialog = false
+                    }) {
+                        Text("Eliminar Definitivamente", color = ErrorRed, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) {
+                        Text("Cancelar", color = Color.White)
+                    }
+                }
+            )
+        }
+    }
+
+    // --- MODAL BOTTOM SHEET: PERFIL DEL PRESTADOR ---
+    if (providerProfileToShow != null) {
+        val provider = providerProfileToShow!!
+        ModalBottomSheet(
+            onDismissRequest = { providerProfileToShow = null },
+            containerColor = CardSurface,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                AsyncImage(
+                    model = provider.providerPhotoUrl,
+                    contentDescription = "Avatar",
+                    modifier = Modifier.size(100.dp).clip(CircleShape).border(3.dp, MaverickBlue, CircleShape),
+                    contentScale = ContentScale.Crop,
+                    fallback = rememberVectorPainter(Icons.Default.Person)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(provider.providerName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(Icons.Filled.Verified, null, tint = MaverickPurple, modifier = Modifier.size(20.dp))
+                }
+
+                Text(provider.providerCompanyName ?: "Profesional Independiente", color = MaverickBlue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = { /* TODO: Navegar a pantalla Perfil Prestador real */ },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaverickBlue)
+                ) {
+                    Text("VER PERFIL COMPLETO", color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp, letterSpacing = 1.sp)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
 
+    // --- VISTA DETALLE A4 ---
     if (budgetForA4Preview != null) {
         Dialog(onDismissRequest = { budgetForA4Preview = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             BudgetMultiPageScreen(
@@ -406,6 +514,7 @@ fun LicitacionesTabContent(
     tenders: List<TenderEntity>,
     getBudgetsForTender: (String) -> StateFlow<List<BudgetEntity>>,
     selectedIds: List<String>,
+    readBudgetIds: List<String>,
     onTenderClick: (TenderEntity) -> Unit,
     onTenderLongClick: (TenderEntity) -> Unit
 ) {
@@ -413,11 +522,13 @@ fun LicitacionesTabContent(
         items(tenders, key = { it.tenderId }) { tender ->
             val budgetsFlow = remember(tender.tenderId) { getBudgetsForTender(tender.tenderId) }
             val budgets by budgetsFlow.collectAsStateWithLifecycle()
-            val isNew = budgets.any { it.status == BudgetStatus.PENDIENTE }
+
+            val unreadCount = budgets.count { it.status == BudgetStatus.PENDIENTE && !readBudgetIds.contains(it.budgetId) }
+
             LicitacionFolderCard(
                 tender = tender,
                 budgetCount = budgets.size,
-                isNew = isNew,
+                unreadCount = unreadCount,
                 isSelected = selectedIds.contains(tender.tenderId),
                 onClick = { onTenderClick(tender) },
                 onLongClick = { onTenderLongClick(tender) }
@@ -431,25 +542,30 @@ fun LicitacionesTabContent(
 fun DirectBudgetsTabContent(
     budgets: List<BudgetEntity>,
     selectedIds: List<String>,
+    readBudgetIds: List<String>,
     onBudgetClick: (BudgetEntity) -> Unit,
     onChatClick: (String) -> Unit,
+    onAvatarClick: (BudgetEntity) -> Unit,
     onBudgetLongClick: (BudgetEntity) -> Unit
 ) {
     if (budgets.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No hay presupuestos que coincidan.", color = Color.Gray) }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No hay presupuestos.", color = Color.Gray) }
     } else {
         LazyColumn(contentPadding = PaddingValues(bottom = 100.dp)) {
             items(budgets, key = { it.budgetId }) { budget ->
-                val isNew = budget.status == BudgetStatus.PENDIENTE
-                BudgetComparisonItem(
+                val isNew = budget.status == BudgetStatus.PENDIENTE && !readBudgetIds.contains(budget.budgetId)
+
+                BudgetComparisonItemEdge(
                     budget = budget,
                     isBestPrice = false,
                     isNew = isNew,
                     isSelected = selectedIds.contains(budget.budgetId),
                     onView = { onBudgetClick(budget) },
                     onChat = { onChatClick(budget.providerId) },
+                    onAvatarClick = { onAvatarClick(budget) },
                     onLongClick = { onBudgetLongClick(budget) }
                 )
+                HorizontalDivider(color = Color.White.copy(0.05f))
             }
         }
     }
@@ -460,51 +576,119 @@ fun DirectBudgetsTabContent(
 fun LicitacionFolderCard(
     tender: TenderEntity,
     budgetCount: Int,
-    isNew: Boolean,
+    unreadCount: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     val endDate = if (tender.endDate > 0) tender.endDate else tender.dateTimestamp + (86400000L * 7)
     val remainingDays = TimeUnit.MILLISECONDS.toDays(endDate - System.currentTimeMillis()).coerceAtLeast(0)
-    val borderColor = if (isSelected) MaverickBlue else if (isNew) NeonCyber else Color.White.copy(0.1f)
+
+    val df = SimpleDateFormat("dd MMM", Locale.getDefault())
+    val startDateStr = df.format(Date(tender.dateTimestamp))
+    val endDateStr = df.format(Date(endDate))
+
+    val borderColor = if (isSelected) MaverickBlue else if (unreadCount > 0) NeonCyber else Color.White.copy(0.1f)
 
     Box(modifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 8.dp)
-        .padding(top = 20.dp)
+        .padding(top = 40.dp) // 🔥 Separación mayor solicitada
         .combinedClickable(
             onClick = onClick,
             onLongClick = onLongClick
         )
     ) {
-        Surface(modifier = Modifier.offset(x = 0.dp, y = (-24).dp).width(110.dp).height(30.dp), color = Color.White.copy(0.06f), shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp), border = BorderStroke(1.dp, borderColor.copy(alpha = 0.5f))) {
-            Box(contentAlignment = Alignment.Center) { Text("#${tender.tenderId.takeLast(6).uppercase()}", fontSize = 10.sp, fontWeight = FontWeight.Black, color = if(isSelected) MaverickBlue else if(isNew) NeonCyber else MaverickBlue) }
+        // Pestaña de la carpeta
+        Surface(
+            modifier = Modifier.offset(x = 0.dp, y = (-26).dp).width(130.dp).height(32.dp),
+            color = Color.White.copy(0.06f),
+            shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
+            border = BorderStroke(1.dp, borderColor.copy(alpha = 0.5f))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("#${tender.tenderId.takeLast(6).uppercase()}", fontSize = 11.sp, fontWeight = FontWeight.Black, color = if(isSelected) MaverickBlue else if(unreadCount > 0) NeonCyber else MaverickBlue)
+            }
         }
-        Surface(modifier = Modifier.fillMaxWidth(), color = CardSurface, shape = RoundedCornerShape(topStart = 0.dp, topEnd = 24.dp, bottomEnd = 24.dp, bottomStart = 24.dp), border = BorderStroke(if(isSelected) 2.dp else 1.dp, borderColor), shadowElevation = if (isNew || isSelected) 15.dp else 4.dp) {
-            Column(Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(tender.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                    if (isSelected) Icon(Icons.Default.CheckCircle, null, tint = MaverickBlue)
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CalendarToday, null, tint = Color.Gray, modifier = Modifier.size(12.dp))
-                        Text(" ${formatDateShort(tender.dateTimestamp)} - ${formatDateShort(endDate)}", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+
+        // Cuerpo de la tarjeta
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = CardSurface,
+            shape = RoundedCornerShape(topStart = 0.dp, topEnd = 28.dp, bottomEnd = 28.dp, bottomStart = 28.dp),
+            border = BorderStroke(if(isSelected) 2.dp else 1.dp, borderColor),
+            shadowElevation = if (unreadCount > 0 || isSelected) 20.dp else 6.dp
+        ) {
+            Column(Modifier.padding(24.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(tender.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp, modifier = Modifier.weight(1f), lineHeight = 24.sp)
+                    if (isSelected) {
+                        Icon(Icons.Default.CheckCircle, null, tint = MaverickBlue, modifier = Modifier.padding(start = 8.dp))
                     }
-                    if (tender.status.uppercase() == "ACTIVO" || tender.status.uppercase() == "ABIERTA") {
-                        Text("• $remainingDays días", fontSize = 10.sp, color = if(remainingDays < 3) StatusWarning else MaverickBlue, fontWeight = FontWeight.Black)
-                    }
                 }
+
                 Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Surface(color = MaverickBlue.copy(0.1f), shape = RoundedCornerShape(6.dp)) { Text("$budgetCount propuestas", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaverickBlue) }
-                    StatusPill(tender.status)
+                HorizontalDivider(color = Color.White.copy(0.05f))
+                Spacer(Modifier.height(16.dp))
+
+                // Fechas e Info
+                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        Text("INICIO", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Text(startDateStr, fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("ESTADO", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        StatusPill(tender.status)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("CIERRE", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Text(endDateStr, fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Surface(color = MaverickBlue.copy(0.1f), shape = RoundedCornerShape(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Icon(Icons.Default.Description, null, tint = MaverickBlue, modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("$budgetCount RECIBIDOS", fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaverickBlue)
+                        }
+                    }
+
+                    if (tender.status.uppercase() == "ACTIVO" || tender.status.uppercase() == "ABIERTA") {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Schedule, null, tint = if(remainingDays < 3) StatusWarning else Color.Gray, modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Faltan $remainingDays días", fontSize = 11.sp, color = if(remainingDays < 3) StatusWarning else Color.Gray, fontWeight = FontWeight.Black)
+                        }
+                    }
                 }
             }
         }
-        if (isNew && !isSelected) Box(modifier = Modifier.align(Alignment.TopEnd).offset(x = 5.dp, y = (-5).dp).size(12.dp).background(NeonCyber, CircleShape).border(2.dp, DarkBackground, CircleShape))
+
+        // 🔥 Badge de Nuevas Ofertas Mejorado
+        if (unreadCount > 0 && !isSelected) {
+            Surface(
+                color = NeonCyber,
+                shape = RoundedCornerShape(percent = 50),
+                shadowElevation = 8.dp,
+                border = BorderStroke(2.dp, DarkBackground),
+                modifier = Modifier.align(Alignment.TopEnd).offset(x = 12.dp, y = (-12).dp).zIndex(5f)
+            ) {
+                Text(
+                    text = "$unreadCount NUEVOS",
+                    color = DarkBackground,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    letterSpacing = 1.sp
+                )
+            }
+        }
     }
 }
 
@@ -517,123 +701,186 @@ fun StatusPill(status: String) {
         else -> Color.Gray
     }
     Surface(color = color.copy(0.12f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, color.copy(0.3f))) {
-        Text(status.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 8.sp, fontWeight = FontWeight.Black, color = color)
+        Text(status.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 9.sp, fontWeight = FontWeight.Black, color = color)
     }
 }
 
+// =================================================================================
+// --- COMPARISON SHEET EDGE-TO-EDGE ---
+// =================================================================================
+
 @Composable
-fun ComparisonSheet(tender: TenderEntity, budgets: List<BudgetEntity>, onBudgetClick: (BudgetEntity) -> Unit, onChatClick: (String) -> Unit) {
+fun ComparisonSheetEdgeToEdge(
+    tender: TenderEntity,
+    budgets: List<BudgetEntity>,
+    readBudgetIds: List<String>,
+    onBack: () -> Unit,
+    onBudgetClick: (BudgetEntity) -> Unit,
+    onChatClick: (String) -> Unit,
+    onAvatarClick: (BudgetEntity) -> Unit,
+    onBudgetLongClick: (BudgetEntity) -> Unit,
+    selectedBudgetIds: List<String>,
+    isMultiSelectMode: Boolean
+) {
     val minPrice = if (budgets.isNotEmpty()) budgets.minByOrNull { it.grandTotal }?.grandTotal ?: 0.0 else 0.0
-    Column(Modifier.fillMaxWidth().padding(24.dp)) {
-        Text(tender.title.uppercase(), fontWeight = FontWeight.Black, fontSize = 20.sp, color = Color.White)
-        Text("Comparativa técnica de cotizaciones", color = Color.Gray, fontSize = 12.sp)
-        Spacer(Modifier.height(24.dp))
-        if (budgets.isEmpty()) {
-            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { Text("No hay propuestas aún.", color = Color.DarkGray) }
+    val unreadCount = budgets.count { it.status == BudgetStatus.PENDIENTE && !readBudgetIds.contains(it.budgetId) }
+
+    // Lógica para ordenar por no leídos
+    var sortByUnread by remember { mutableStateOf(false) }
+    val displayBudgets = remember(budgets, sortByUnread, readBudgetIds) {
+        if (sortByUnread) {
+            budgets.sortedByDescending { it.status == BudgetStatus.PENDIENTE && !readBudgetIds.contains(it.budgetId) }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(budgets, key = { it.budgetId }) { budget ->
-                    BudgetComparisonItem(
+            budgets
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // Cabecera Fija
+        Surface(color = DarkBackground, modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack, modifier = Modifier.offset(x = (-12).dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
+                    }
+                    Text("Ofertas Recibidas", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp, modifier = Modifier.weight(1f))
+
+                    // 🔥 CONTADOR INTERACTIVO DE NO LEÍDOS
+                    if (unreadCount > 0) {
+                        Surface(
+                            color = if(sortByUnread) ErrorRed else ErrorRed.copy(0.15f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, ErrorRed),
+                            onClick = { sortByUnread = !sortByUnread }
+                        ) {
+                            Text(
+                                "$unreadCount No Leídos",
+                                color = if(sortByUnread) Color.White else ErrorRed,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+                Text(tender.title.uppercase(), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(start = 36.dp, top = 4.dp))
+            }
+        }
+
+        HorizontalDivider(color = Color.White.copy(0.1f))
+
+        // Lista a Ancho Completo
+        if (displayBudgets.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No hay propuestas aún.", color = Color.DarkGray) }
+        } else {
+            LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) { // Espacio para el FAB
+                items(displayBudgets, key = { it.budgetId }) { budget ->
+                    val isNew = budget.status == BudgetStatus.PENDIENTE && !readBudgetIds.contains(budget.budgetId)
+
+                    BudgetComparisonItemEdge(
                         budget = budget,
                         isBestPrice = budget.grandTotal == minPrice && budgets.size > 1,
-                        isNew = budget.status == BudgetStatus.PENDIENTE,
+                        isNew = isNew,
+                        isSelected = selectedBudgetIds.contains(budget.budgetId),
                         onView = { onBudgetClick(budget) },
-                        onChat = { onChatClick(budget.providerId) }
+                        onChat = { onChatClick(budget.providerId) },
+                        onAvatarClick = { onAvatarClick(budget) },
+                        onLongClick = { onBudgetLongClick(budget) }
                     )
+                    HorizontalDivider(color = Color.White.copy(0.05f))
                 }
             }
         }
     }
 }
 
+/**
+ * TARJETA DE PRESUPUESTO A ANCHO COMPLETO (EDGE-TO-EDGE)
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BudgetComparisonItem(
+fun BudgetComparisonItemEdge(
     budget: BudgetEntity,
     isBestPrice: Boolean,
     isNew: Boolean,
     isSelected: Boolean = false,
     onView: () -> Unit,
     onChat: () -> Unit,
-    onLongClick: () -> Unit = {}
+    onAvatarClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
-    val rainbowBrush = geminiGradientEffect()
-    val borderColor = if (isSelected) MaverickBlue else if (isNew) NeonCyber else if (isBestPrice) StatusFinished.copy(0.4f) else Color.White.copy(0.06f)
+    val backgroundColor = if (isSelected) MaverickBlue.copy(0.15f) else Color.Transparent
 
     Box(modifier = Modifier
-        .padding(horizontal = 16.dp)
+        .fillMaxWidth()
+        .background(backgroundColor)
         .combinedClickable(
-            onClick = onView,
+            onClick = onView, // Toda la tarjeta abre el presupuesto
             onLongClick = onLongClick
         )
     ) {
-        Surface(modifier = Modifier.fillMaxWidth(), color = Color.White.copy(0.03f), shape = RoundedCornerShape(24.dp), border = BorderStroke(if(isSelected) 2.dp else 1.dp, borderColor)) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = budget.providerPhotoUrl, contentDescription = null, modifier = Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(budget.providerName, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
-                    Text(text = "Total: $ ${String.format(Locale.getDefault(), "%,.0f", budget.grandTotal)}", color = if (isBestPrice) StatusFinished else MaverickBlue, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    if (isNew) Text("NUEVA PROPUESTA", color = NeonCyber, fontSize = 8.sp, fontWeight = FontWeight.Black)
-                }
-                if (isSelected) {
-                    Icon(Icons.Default.CheckCircle, null, tint = MaverickBlue, modifier = Modifier.size(24.dp))
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(onClick = onChat, modifier = Modifier.size(44.dp)) { Icon(Icons.AutoMirrored.Filled.Chat, null, tint = MaverickBlue) }
-                        IconButton(onClick = onView, modifier = Modifier.background(rainbowBrush, RoundedCornerShape(14.dp)).size(44.dp)) { Icon(Icons.Default.Description, null, tint = Color.White, modifier = Modifier.size(22.dp)) }
-                    }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+
+            // Avatar clickeable
+            Box(contentAlignment = Alignment.TopEnd) {
+                AsyncImage(
+                    model = budget.providerPhotoUrl,
+                    contentDescription = null,
+                    fallback = rememberVectorPainter(Icons.Default.Person),
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .border(1.dp, Color.White.copy(0.1f), CircleShape)
+                        .clickable { onAvatarClick() },
+                    contentScale = ContentScale.Crop
+                )
+                if (isNew) {
+                    Box(modifier = Modifier.size(14.dp).background(NeonCyber, CircleShape).border(2.dp, DarkBackground, CircleShape))
                 }
             }
-        }
-        if (isBestPrice && !isSelected) Surface(modifier = Modifier.offset(x = 20.dp, y = (-10).dp), color = StatusFinished, shape = RoundedCornerShape(6.dp)) { Text("MEJOR PRECIO", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 7.sp, fontWeight = FontWeight.Black, color = Color.White) }
-    }
-}
 
-@Composable
-fun PresupuestoSearchResultsPanel(
-    searchQuery: String,
-    tenders: List<TenderEntity>,
-    budgets: List<BudgetEntity>,
-    onTenderClick: (TenderEntity) -> Unit,
-    onBudgetClick: (BudgetEntity) -> Unit
-) {
-    val matchedTenders = tenders.filter { it.title.contains(searchQuery, ignoreCase = true) || it.tenderId.contains(searchQuery, ignoreCase = true) }
-    val matchedBudgets = budgets.filter { it.providerName.contains(searchQuery, ignoreCase = true) || it.budgetId.contains(searchQuery, ignoreCase = true) }
+            Spacer(Modifier.width(16.dp))
 
-    Surface(modifier = Modifier.fillMaxSize(), color = DarkBackground.copy(alpha = 0.95f)) {
-        LazyColumn(contentPadding = PaddingValues(16.dp)) {
-            if (matchedTenders.isNotEmpty()) {
-                item { Text("LICITACIONES", color = MaverickBlue, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
-                items(matchedTenders) { tender ->
-                    Row(Modifier.fillMaxWidth().clickable { onTenderClick(tender) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Gavel, null, tint = MaverickBlue, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(tender.title, color = Color.White, fontSize = 14.sp)
-                    }
-                }
-            }
-            if (matchedBudgets.isNotEmpty()) {
-                item { Text("PRESUPUESTOS", color = MaverickPurple, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
-                items(matchedBudgets) { budget ->
-                    Row(Modifier.fillMaxWidth().clickable { onBudgetClick(budget) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Receipt, null, tint = MaverickPurple, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(budget.providerName, color = Color.White, fontSize = 14.sp)
-                            Text("Total: $ ${budget.grandTotal}", color = Color.Gray, fontSize = 11.sp)
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(budget.providerName, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (isBestPrice && !isSelected) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(color = StatusFinished.copy(0.2f), shape = RoundedCornerShape(4.dp), border = BorderStroke(1.dp, StatusFinished.copy(0.5f))) {
+                            Text("MEJOR PRECIO", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 7.sp, fontWeight = FontWeight.Black, color = StatusFinished)
                         }
                     }
                 }
+
+                Text(
+                    text = "$ ${String.format(Locale.getDefault(), "%,.0f", budget.grandTotal)}",
+                    color = if (isBestPrice) StatusFinished else MaverickBlue,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp
+                )
+
+                if (budget.providerCompanyName != null) {
+                    Text(budget.providerCompanyName, color = Color.Gray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
-            if (matchedTenders.isEmpty() && matchedBudgets.isEmpty()) {
-                item { Text("No se encontraron resultados para '$searchQuery'", color = Color.Gray, modifier = Modifier.fillMaxWidth().padding(32.dp), textAlign = TextAlign.Center) }
+
+            if (isSelected) {
+                Icon(Icons.Default.CheckCircle, null, tint = MaverickBlue, modifier = Modifier.size(28.dp))
+            } else {
+                // SOLO EL ICONO DE MENSAJE (El de documento se quitó por requerimiento)
+                IconButton(
+                    onClick = onChat,
+                    modifier = Modifier.size(48.dp).background(Color.White.copy(0.05f), CircleShape)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Chat, null, tint = MaverickBlue, modifier = Modifier.size(24.dp))
+                }
             }
         }
     }
 }
 
-// --- FUNCIONES DE APOYO PARA EMOJIS/COLORES ---
+// --- FUNCIONES DE APOYO ---
+
 private fun getCategoryEmoji(title: String): String {
     return when {
         title.contains("Hogar", ignoreCase = true) -> "🏠"
@@ -664,8 +911,6 @@ private fun getCategoryColor(title: String): Color {
     }
 }
 
-private fun formatDateShort(timestamp: Long): String = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(timestamp))
-
 // =================================================================================
 // --- PREVIEW ---
 // =================================================================================
@@ -692,687 +937,6 @@ fun PresupuestosScreenPreview() {
         )
     }
 }
-/**
-package com.example.myapplication.presentation.client
-
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.automirrored.filled.TrendingDown
-import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.zIndex
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import com.example.myapplication.data.local.*
-import com.example.myapplication.presentation.components.*
-import com.example.myapplication.ui.theme.MyApplicationTheme
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.concurrent.TimeUnit
-
-// =================================================================================
-// --- SECCIÓN 1: CONSTANTES Y ESTILOS VISUALES ---
-// =================================================================================
-
-private val DarkBackground = Color(0xFF05070A)
-private val CardSurface = Color(0xFF161C24)
-private val MaverickBlue = Color(0xFF2197F5)
-private val MaverickPurple = Color(0xFF9B51E0)
-private val StatusActive = Color(0xFF38BDF8)
-private val StatusFinished = Color(0xFF34D399)
-private val StatusWarning = Color(0xFFF87171)
-private val NeonCyber = Color(0xFF00FFC2)
-
-// =================================================================================
-// --- SECCIÓN 2: PANTALLA PRINCIPAL (CONTENEDOR) ---
-// =================================================================================
-
-/**
- * Pantalla principal de Presupuestos.
- * Maneja la integración con el ViewModel y delega la UI al contenido stateless.
- */
-@Composable
-fun PresupuestosScreen(
-    viewModel: BudgetViewModel = hiltViewModel(),
-    onChatClick: (String) -> Unit = {},
-    onBack: () -> Unit,
-    bottomPadding: PaddingValues = PaddingValues(0.dp) // Recibimos el padding del Scaffold externo
-) {
-    // Suscripción a flujos de datos de Firebase/Room
-    val tenders by viewModel.tenders.collectAsStateWithLifecycle()
-    val directBudgets by viewModel.directBudgets.collectAsStateWithLifecycle()
-
-    PresupuestosScreenContent(
-        tenders = tenders,
-        directBudgets = directBudgets,
-        getBudgetsForTender = { tenderId -> viewModel.getBudgetsForTender(tenderId) },
-        onChatClick = onChatClick,
-        onBack = onBack,
-        onAcceptBudget = { budget -> viewModel.acceptBudget(budget) },
-        onRejectBudget = { budget -> viewModel.rejectBudget(budget) },
-        bottomPadding = bottomPadding
-    )
-}
-
-/**
- * Contenido stateless de la pantalla de Presupuestos.
- * Se ha mejorado la jerarquía de capas para que el FAB sea siempre el elemento superior.
- */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-fun PresupuestosScreenContent(
-    tenders: List<TenderEntity>,
-    directBudgets: List<BudgetEntity>,
-    getBudgetsForTender: (String) -> StateFlow<List<BudgetEntity>>,
-    onChatClick: (String) -> Unit,
-    onBack: () -> Unit,
-    onAcceptBudget: (BudgetEntity) -> Unit,
-    onRejectBudget: (BudgetEntity) -> Unit,
-    bottomPadding: PaddingValues
-) {
-    // --- ESTADOS DE UI Y NAVEGACIÓN ---
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("LICITACIONES", "DIRECTOS")
-    var isSearchActive by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-
-    // --- ESTADOS DEL FAB GEMINI ---
-    var isFabExpanded by remember { mutableStateOf(false) }
-
-    // --- ESTADOS DE FILTROS Y ORDENAMIENTO (Barra Horizontal) ---
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
-    var filterFavorites by remember { mutableStateOf(false) }
-    var filterVerified by remember { mutableStateOf(true) }
-    var sortMethod by remember { mutableStateOf("Fecha") }
-
-    // --- ESTADOS DE HERRAMIENTAS (Barra Vertical) ---
-    var viewMode by remember { mutableStateOf("Lista") }
-    var multiSelectEnabled by remember { mutableStateOf(false) }
-    val selectedTenderIds = remember { mutableStateListOf<String>() }
-    val selectedBudgetIds = remember { mutableStateListOf<String>() }
-
-    // Modales y Visores
-    var selectedTenderForSheet by remember { mutableStateOf<TenderEntity?>(null) }
-    var budgetForA4Preview by remember { mutableStateOf<BudgetEntity?>(null) }
-    
-    // --- ESTADO PARA ANALÍTICAS ---
-    var selectedAnalyticsData by remember { mutableStateOf<Pair<TenderEntity, List<BudgetEntity>>?>(null) }
-
-    // Lógica de filtrado común para presupuestos (REMEMORED para evitar bucles de recomposición)
-    val budgetFilterLambda: (List<BudgetEntity>) -> List<BudgetEntity> = remember(selectedCategory, sortMethod, searchQuery, filterVerified, filterFavorites) {
-        { list ->
-            list.filter { budget ->
-                val matchesCategory = selectedCategory == null || budget.items.any { it.description.contains(selectedCategory!!, ignoreCase = true) }
-                val matchesSearch = searchQuery.isEmpty() || 
-                                    budget.providerName.contains(searchQuery, ignoreCase = true) || 
-                                    budget.budgetId.contains(searchQuery, ignoreCase = true)
-                matchesCategory && matchesSearch
-            }.let { filteredList ->
-                when(sortMethod) {
-                    "Precio" -> filteredList.sortedBy { it.grandTotal }
-                    "Alpha" -> filteredList.sortedBy { it.providerName }
-                    "Fecha" -> filteredList.sortedByDescending { it.dateTimestamp }
-                    else -> filteredList
-                }
-            }
-        }
-    }
-
-    // Lista procesada para el Tab de Directos
-    val displayedDirectBudgets = remember(directBudgets, budgetFilterLambda) {
-        budgetFilterLambda(directBudgets)
-    }
-
-    // Lógica para cancelar la multiselección
-    val cancelSelection = {
-        selectedTenderIds.clear()
-        selectedBudgetIds.clear()
-        multiSelectEnabled = false
-        isFabExpanded = false
-    }
-
-    // Root Box para asegurar que el FAB esté siempre arriba de todo
-    Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            containerColor = DarkBackground,
-            topBar = {
-                if (!isSearchActive) {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text("Gestión Comercial", fontWeight = FontWeight.Black, color = Color.White, fontSize = 20.sp)
-                                Text("ADMINISTRADOR DE COTIZACIONES", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 1.sp)
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
-                    )
-                }
-            }
-        ) { padding ->
-            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                
-                // --- ESTRUCTURA BASE DE CONTENIDO ---
-                Column(modifier = Modifier.fillMaxSize()) {
-                    CommercialStatsDashboard(
-                        activeCount = if (selectedTabIndex == 0) tenders.size else directBudgets.size,
-                        offerCount = if (selectedTabIndex == 0) tenders.sumOf { it.budgetCount } else directBudgets.size,
-                        savings = 15,
-                        contextLabel = if (selectedTabIndex == 0) "LICITACIONES" else "PRESUPUESTOS"
-                    )
-
-                    TabRow(
-                        selectedTabIndex = selectedTabIndex,
-                        containerColor = Color.Transparent,
-                        contentColor = MaverickBlue,
-                        indicator = { positions ->
-                            if (selectedTabIndex < positions.size) {
-                                TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(positions[selectedTabIndex]), color = MaverickBlue)
-                            }
-                        }
-                    ) {
-                        tabs.forEachIndexed { index, title ->
-                            Tab(
-                                selected = selectedTabIndex == index,
-                                onClick = { 
-                                    selectedTabIndex = index
-                                    cancelSelection()
-                                },
-                                text = { Text(title, fontSize = 11.sp, fontWeight = FontWeight.Black) }
-                            )
-                        }
-                    }
-
-                    Box(modifier = Modifier.weight(1f)) {
-                        when (selectedTabIndex) {
-                            0 -> LicitacionesTabContent(
-                                tenders = tenders,
-                                getBudgetsForTender = getBudgetsForTender,
-                                selectedIds = selectedTenderIds,
-                                onTenderClick = { tender -> 
-                                    if (multiSelectEnabled) {
-                                        if (selectedTenderIds.contains(tender.tenderId)) selectedTenderIds.remove(tender.tenderId)
-                                        else selectedTenderIds.add(tender.tenderId)
-                                        if (selectedTenderIds.isEmpty()) multiSelectEnabled = false
-                                    } else {
-                                        selectedTenderForSheet = tender 
-                                    }
-                                },
-                                onTenderLongClick = { tender ->
-                                    multiSelectEnabled = true
-                                    if (!selectedTenderIds.contains(tender.tenderId)) selectedTenderIds.add(tender.tenderId)
-                                    isFabExpanded = true // Abrir menú de herramientas
-                                }
-                            )
-                            1 -> DirectBudgetsTabContent(
-                                budgets = displayedDirectBudgets,
-                                categoryFilter = selectedCategory,
-                                selectedIds = selectedBudgetIds,
-                                onBudgetClick = { budget -> 
-                                    if (multiSelectEnabled) {
-                                        if (selectedBudgetIds.contains(budget.budgetId)) selectedBudgetIds.remove(budget.budgetId)
-                                        else selectedBudgetIds.add(budget.budgetId)
-                                        if (selectedBudgetIds.isEmpty()) multiSelectEnabled = false
-                                    } else {
-                                        budgetForA4Preview = budget 
-                                    }
-                                },
-                                onChatClick = onChatClick,
-                                onBudgetLongClick = { budget ->
-                                    multiSelectEnabled = true
-                                    if (!selectedBudgetIds.contains(budget.budgetId)) selectedBudgetIds.add(budget.budgetId)
-                                    isFabExpanded = true
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // --- OVERLAY DE BÚSQUEDA UNIFICADA ---
-                if (isSearchActive) {
-                    Box(modifier = Modifier.fillMaxSize().zIndex(10f).background(Color.Black.copy(alpha = 0.6f)).clickable { isSearchActive = false })
-                    Column(modifier = Modifier.fillMaxSize().zIndex(11f)) {
-                        AnimatedVisibility(visible = isSearchActive, enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut()) {
-                            Row(modifier = Modifier.fillMaxWidth().background(DarkBackground).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    GeminiTopSearchBar(
-                                        searchQuery = searchQuery, 
-                                        onSearchQueryChange = { searchQuery = it }, 
-                                        placeholderText = if(selectedTabIndex == 0) "Buscar licitaciones..." else "Buscar presupuestos..."
-                                    )
-                                }
-                                Surface(onClick = { isSearchActive = false; searchQuery = "" }, modifier = Modifier.size(56.dp), shape = CircleShape, color = CardSurface, border = BorderStroke(1.dp, MaverickBlue.copy(alpha = 0.5f))) {
-                                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, null, tint = Color.White) }
-                                }
-                            }
-                        }
-                        if (searchQuery.isNotEmpty()) {
-                            PresupuestoSearchResultsPanel(
-                                searchQuery = searchQuery,
-                                tenders = if(selectedTabIndex == 0) tenders else emptyList(),
-                                budgets = if(selectedTabIndex == 1) directBudgets else emptyList(),
-                                onTenderClick = { selectedTenderForSheet = it; isSearchActive = false },
-                                onBudgetClick = { budgetForA4Preview = it; isSearchActive = false }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- OVERLAY: COMPARATIVA (Overlay total para mantener FAB arriba) ---
-        AnimatedVisibility(
-            visible = selectedTenderForSheet != null,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it }),
-            modifier = Modifier.zIndex(40f)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = DarkBackground) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { selectedTenderForSheet = null }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
-                        }
-                        Text("Ofertas Recibidas", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    }
-                    
-                    if (selectedTenderForSheet != null) {
-                        val budgetsFlow = remember(selectedTenderForSheet) { getBudgetsForTender(selectedTenderForSheet!!.tenderId) }
-                        val rawBudgets by budgetsFlow.collectAsStateWithLifecycle()
-                        val filteredBudgets = remember(rawBudgets, budgetFilterLambda) { budgetFilterLambda(rawBudgets) }
-
-                        ComparisonSheet(
-                            tender = selectedTenderForSheet!!,
-                            budgets = filteredBudgets,
-                            onBudgetClick = { budget -> budgetForA4Preview = budget },
-                            onChatClick = onChatClick
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- FAB GEMINI SUPERPUESTO (MÁXIMO Z-INDEX 100) ---
-        // Aplicamos el bottomPadding recibido para posicionarlo correctamente sobre la NavigationBar
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .zIndex(100f)
-            .padding(bottom = bottomPadding.calculateBottomPadding())
-        ) {
-            GeminiFABWithScrim(
-                bottomPadding = PaddingValues(0.dp),
-                showScrim = isFabExpanded
-            ) {
-                GeminiSplitFAB(
-                    isExpanded = isFabExpanded,
-                    isSearchActive = isSearchActive,
-                    onToggleExpand = { isFabExpanded = !isFabExpanded },
-                    onActivateSearch = { isSearchActive = true; isFabExpanded = false },
-                    onCloseSearch = { isSearchActive = false; searchQuery = "" },
 
 
-                )
-            }
-        }
-        
-        // --- OVERLAY: ANALÍTICAS (Z-INDEX SUPERIOR) ---
-        if (selectedAnalyticsData != null) {
-            Box(modifier = Modifier.fillMaxSize().zIndex(200f)) {
-                BudgetComparisonAnalytics(
-                    tender = selectedAnalyticsData!!.first,
-                    budgets = selectedAnalyticsData!!.second,
-                    onBack = { selectedAnalyticsData = null }
-                )
-            }
-        }
-    }
 
-    if (budgetForA4Preview != null) {
-        Dialog(onDismissRequest = { budgetForA4Preview = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            BudgetMultiPageScreen(
-                budget = budgetForA4Preview!!, 
-                onBack = { budgetForA4Preview = null }, 
-                onAccept = { _ -> onAcceptBudget(budgetForA4Preview!!); budgetForA4Preview = null }, 
-                onReject = { _ -> onRejectBudget(budgetForA4Preview!!); budgetForA4Preview = null }
-            )
-        }
-    }
-}
-
-// =================================================================================
-// --- COMPONENTES DE UI ---
-// =================================================================================
-
-@Composable
-fun CommercialStatsDashboard(activeCount: Int, offerCount: Int, savings: Int, contextLabel: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        StatCard(Modifier.weight(1f), "$contextLabel ACTIVAS", activeCount.toString(), Color.White)
-        StatCard(Modifier.weight(1f), "RECIBIDOS", offerCount.toString(), MaverickPurple)
-        StatCard(Modifier.weight(1f), "AHORRO EST.", "$savings%", StatusFinished)
-    }
-}
-
-@Composable
-fun StatCard(modifier: Modifier, label: String, value: String, color: Color) {
-    Surface(modifier = modifier, color = Color.White.copy(0.03f), shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, Color.White.copy(0.06f))) {
-        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Black, color = Color.Gray, letterSpacing = 1.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(value, fontSize = 20.sp, fontWeight = FontWeight.Black, color = color)
-        }
-    }
-}
-
-// =================================================================================
-// --- SECCIÓN 4: LISTADOS ---
-// =================================================================================
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun LicitacionesTabContent(
-    tenders: List<TenderEntity>, 
-    getBudgetsForTender: (String) -> StateFlow<List<BudgetEntity>>, 
-    selectedIds: List<String>,
-    onTenderClick: (TenderEntity) -> Unit,
-    onTenderLongClick: (TenderEntity) -> Unit
-) {
-    LazyColumn(contentPadding = PaddingValues(bottom = 100.dp)) {
-        items(tenders, key = { it.tenderId }) { tender ->
-            val budgetsFlow = remember(tender.tenderId) { getBudgetsForTender(tender.tenderId) }
-            val budgets by budgetsFlow.collectAsStateWithLifecycle()
-            val isNew = budgets.any { it.status == BudgetStatus.PENDIENTE }
-            LicitacionFolderCard(
-                tender = tender, 
-                budgetCount = budgets.size, 
-                isNew = isNew, 
-                isSelected = selectedIds.contains(tender.tenderId),
-                onClick = { onTenderClick(tender) },
-                onLongClick = { onTenderLongClick(tender) }
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun DirectBudgetsTabContent(
-    budgets: List<BudgetEntity>, 
-    categoryFilter: String?, 
-    selectedIds: List<String>,
-    onBudgetClick: (BudgetEntity) -> Unit, 
-    onChatClick: (String) -> Unit,
-    onBudgetLongClick: (BudgetEntity) -> Unit
-) {
-    if (budgets.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No hay presupuestos que coincidan.", color = Color.Gray) }
-    } else {
-        LazyColumn(contentPadding = PaddingValues(bottom = 100.dp)) {
-            items(budgets, key = { it.budgetId }) { budget ->
-                val isNew = budget.status == BudgetStatus.PENDIENTE
-                BudgetComparisonItem(
-                    budget = budget, 
-                    isBestPrice = false, 
-                    isNew = isNew, 
-                    isSelected = selectedIds.contains(budget.budgetId),
-                    onView = { onBudgetClick(budget) }, 
-                    onChat = { onChatClick(budget.providerId) },
-                    onLongClick = { onBudgetLongClick(budget) }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun LicitacionFolderCard(
-    tender: TenderEntity, 
-    budgetCount: Int, 
-    isNew: Boolean, 
-    isSelected: Boolean,
-    onClick: () -> Unit, 
-    onLongClick: () -> Unit
-) {
-    val endDate = if (tender.endDate > 0) tender.endDate else tender.dateTimestamp + (86400000L * 7)
-    val remainingDays = TimeUnit.MILLISECONDS.toDays(endDate - System.currentTimeMillis()).coerceAtLeast(0)
-    val borderColor = if (isSelected) MaverickBlue else if (isNew) NeonCyber else Color.White.copy(0.1f)
-
-    Box(modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 8.dp)
-        .padding(top = 20.dp)
-        .combinedClickable(
-            onClick = onClick,
-            onLongClick = onLongClick
-        )
-    ) {
-        Surface(modifier = Modifier.offset(x = 0.dp, y = (-24).dp).width(110.dp).height(30.dp), color = Color.White.copy(0.06f), shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp), border = BorderStroke(1.dp, borderColor.copy(alpha = 0.5f))) {
-            Box(contentAlignment = Alignment.Center) { Text("#${tender.tenderId.takeLast(6).uppercase()}", fontSize = 10.sp, fontWeight = FontWeight.Black, color = if(isSelected) MaverickBlue else if(isNew) NeonCyber else MaverickBlue) }
-        }
-        Surface(modifier = Modifier.fillMaxWidth(), color = CardSurface, shape = RoundedCornerShape(topStart = 0.dp, topEnd = 24.dp, bottomEnd = 24.dp, bottomStart = 24.dp), border = BorderStroke(if(isSelected) 2.dp else 1.dp, borderColor), shadowElevation = if (isNew || isSelected) 15.dp else 4.dp) {
-            Column(Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(tender.title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                    if (isSelected) Icon(Icons.Default.CheckCircle, null, tint = MaverickBlue)
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CalendarToday, null, tint = Color.Gray, modifier = Modifier.size(12.dp))
-                        Text(" ${formatDateShort(tender.dateTimestamp)} - ${formatDateShort(endDate)}", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                    }
-                    if (tender.status.uppercase() == "ACTIVO" || tender.status.uppercase() == "ABIERTA") {
-                        Text("• $remainingDays días", fontSize = 10.sp, color = if(remainingDays < 3) StatusWarning else MaverickBlue, fontWeight = FontWeight.Black)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Surface(color = MaverickBlue.copy(0.1f), shape = RoundedCornerShape(6.dp)) { Text("$budgetCount propuestas", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Black, color = MaverickBlue) }
-                    StatusPill(tender.status)
-                }
-            }
-        }
-        if (isNew && !isSelected) Box(modifier = Modifier.align(Alignment.TopEnd).offset(x = 5.dp, y = (-5).dp).size(12.dp).background(NeonCyber, CircleShape).border(2.dp, DarkBackground, CircleShape))
-    }
-}
-
-@Composable
-fun StatusPill(status: String) {
-    val color = when(status.uppercase()) {
-        "ACTIVO", "ABIERTA" -> StatusActive
-        "ADJUDICADO" -> MaverickPurple
-        "TERMINADO" -> StatusFinished
-        else -> Color.Gray
-    }
-    Surface(color = color.copy(0.12f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, color.copy(0.3f))) {
-        Text(status.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 8.sp, fontWeight = FontWeight.Black, color = color)
-    }
-}
-
-@Composable
-fun ComparisonSheet(tender: TenderEntity, budgets: List<BudgetEntity>, onBudgetClick: (BudgetEntity) -> Unit, onChatClick: (String) -> Unit) {
-    val minPrice = if (budgets.isNotEmpty()) budgets.minByOrNull { it.grandTotal }?.grandTotal ?: 0.0 else 0.0
-    Column(Modifier.fillMaxWidth().padding(24.dp)) {
-        Text(tender.title.uppercase(), fontWeight = FontWeight.Black, fontSize = 20.sp, color = Color.White)
-        Text("Comparativa técnica de cotizaciones", color = Color.Gray, fontSize = 12.sp)
-        Spacer(Modifier.height(24.dp))
-        if (budgets.isEmpty()) {
-            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { Text("No hay propuestas aún.", color = Color.DarkGray) }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(budgets, key = { it.budgetId }) { budget ->
-                    BudgetComparisonItem(
-                        budget = budget, 
-                        isBestPrice = budget.grandTotal == minPrice && budgets.size > 1, 
-                        isNew = budget.status == BudgetStatus.PENDIENTE, 
-                        onView = { onBudgetClick(budget) }, 
-                        onChat = { onChatClick(budget.providerId) } 
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun BudgetComparisonItem(
-    budget: BudgetEntity, 
-    isBestPrice: Boolean, 
-    isNew: Boolean, 
-    isSelected: Boolean = false,
-    onView: () -> Unit, 
-    onChat: () -> Unit,
-    onLongClick: () -> Unit = {}
-) {
-    val rainbowBrush = geminiGradientEffect()
-    val borderColor = if (isSelected) MaverickBlue else if (isNew) NeonCyber else if (isBestPrice) StatusFinished.copy(0.4f) else Color.White.copy(0.06f)
-
-    Box(modifier = Modifier
-        .padding(horizontal = 16.dp)
-        .combinedClickable(
-            onClick = onView, 
-            onLongClick = onLongClick
-        )
-    ) {
-        Surface(modifier = Modifier.fillMaxWidth(), color = Color.White.copy(0.03f), shape = RoundedCornerShape(24.dp), border = BorderStroke(if(isSelected) 2.dp else 1.dp, borderColor)) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = budget.providerPhotoUrl, contentDescription = null, modifier = Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(budget.providerName, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
-                    Text(text = "Total: $ ${String.format(Locale.getDefault(), "%,.0f", budget.grandTotal)}", color = if (isBestPrice) StatusFinished else MaverickBlue, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    if (isNew) Text("NUEVA PROPUESTA", color = NeonCyber, fontSize = 8.sp, fontWeight = FontWeight.Black)
-                }
-                if (isSelected) {
-                    Icon(Icons.Default.CheckCircle, null, tint = MaverickBlue, modifier = Modifier.size(24.dp))
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(onClick = onChat, modifier = Modifier.size(44.dp)) { Icon(Icons.AutoMirrored.Filled.Chat, null, tint = MaverickBlue) }
-                        IconButton(onClick = onView, modifier = Modifier.background(rainbowBrush, RoundedCornerShape(14.dp)).size(44.dp)) { Icon(Icons.Default.Description, null, tint = Color.White, modifier = Modifier.size(22.dp)) }
-                    }
-                }
-            }
-        }
-        if (isBestPrice && !isSelected) Surface(modifier = Modifier.offset(x = 20.dp, y = (-10).dp), color = StatusFinished, shape = RoundedCornerShape(6.dp)) { Text("MEJOR PRECIO", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 7.sp, fontWeight = FontWeight.Black, color = Color.White) }
-    }
-}
-
-fun formatDateShort(timestamp: Long): String = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(timestamp))
-
-// =================================================================================
-// --- SECCIÓN 6: PANEL DE RESULTADOS DE BÚSQUEDA ---
-// =================================================================================
-
-@Composable
-fun PresupuestoSearchResultsPanel(
-    searchQuery: String,
-    tenders: List<TenderEntity>,
-    budgets: List<BudgetEntity>,
-    onTenderClick: (TenderEntity) -> Unit,
-    onBudgetClick: (BudgetEntity) -> Unit
-) {
-    val matchedTenders = tenders.filter { it.title.contains(searchQuery, ignoreCase = true) || it.tenderId.contains(searchQuery, ignoreCase = true) }
-    val matchedBudgets = budgets.filter { it.providerName.contains(searchQuery, ignoreCase = true) || it.budgetId.contains(searchQuery, ignoreCase = true) }
-
-    Surface(modifier = Modifier.fillMaxSize(), color = DarkBackground.copy(alpha = 0.95f)) {
-        LazyColumn(contentPadding = PaddingValues(16.dp)) {
-            if (matchedTenders.isNotEmpty()) {
-                item { Text("LICITACIONES", color = MaverickBlue, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
-                items(matchedTenders) { tender ->
-                    Row(Modifier.fillMaxWidth().clickable { onTenderClick(tender) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Gavel, null, tint = MaverickBlue, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(tender.title, color = Color.White, fontSize = 14.sp)
-                    }
-                }
-            }
-            if (matchedBudgets.isNotEmpty()) {
-                item { Text("PRESUPUESTOS", color = MaverickPurple, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
-                items(matchedBudgets) { budget ->
-                    Row(Modifier.fillMaxWidth().clickable { onBudgetClick(budget) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Receipt, null, tint = MaverickPurple, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(budget.providerName, color = Color.White, fontSize = 14.sp)
-                            Text("Total: $ ${budget.grandTotal}", color = Color.Gray, fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-            if (matchedTenders.isEmpty() && matchedBudgets.isEmpty()) {
-                item { Text("No se encontraron resultados for '$searchQuery'", color = Color.Gray, modifier = Modifier.fillMaxWidth().padding(32.dp), textAlign = TextAlign.Center) }
-            }
-        }
-    }
-}
-
-// =================================================================================
-// --- PREVIEW ---
-// =================================================================================
-
-@Preview(showBackground = true, backgroundColor = 0xFF05070A)
-@Composable
-fun PresupuestosScreenPreview() {
-    val currentTime = System.currentTimeMillis()
-    val sampleTenders = listOf(
-        TenderEntity("T1", "Instalación Cámaras IP", "Sistema de 4 cámaras", "Informatica", "ACTIVO", currentTime, currentTime + 86400000L * 5, 4)
-    )
-    val sampleBudgets = listOf(
-        BudgetEntity("B1", "u1", "p1", null, "Maverick Tech", null, null, emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), 45000.0, 0.0, 0.0, 45000.0, 7, null, null, null, null, BudgetStatus.PENDIENTE, currentTime)
-    )
-
-    MyApplicationTheme {
-        PresupuestosScreenContent(
-            tenders = sampleTenders,
-            directBudgets = sampleBudgets,
-            getBudgetsForTender = { _ -> MutableStateFlow(sampleBudgets) },
-            onChatClick = {},
-            onBack = {},
-            onAcceptBudget = {},
-            onRejectBudget = {},
-            bottomPadding = PaddingValues(0.dp)
-        )
-    }
-}
-**/

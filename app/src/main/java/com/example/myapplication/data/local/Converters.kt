@@ -8,6 +8,9 @@ import com.example.myapplication.data.model.CompanyProvider
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.example.myapplication.data.model.MessageType
+
+
+
 /**
  * --- CONVERTERS UNIVERSALES ---
  * Este archivo maneja TODAS las conversiones de datos complejos para:
@@ -192,5 +195,22 @@ fun fromMessageType(value: MessageType): String {
             MessageType.TEXT // Si falla, asumimos que es texto por seguridad
         }
     }
+
+    // ==========================================
+    // 6. MODELOS DE CALENDARIO (Enums) - ¡AÑADIDO!
+    // ==========================================
+
+    @TypeConverter
+    fun fromEventType(value: EventType): String = value.name
+
+    @TypeConverter
+    fun toEventType(value: String): EventType = enumValueOf<EventType>(value)
+
+    @TypeConverter
+    fun fromVisitStatus(value: VisitStatus): String = value.name
+
+    @TypeConverter
+    fun toVisitStatus(value: String): VisitStatus = enumValueOf<VisitStatus>(value)
+
 
 }

@@ -3,6 +3,7 @@ package com.example.myapplication.presentation.client
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,28 +17,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.myapplication.presentation.components.GeminiSplitFAB
 import com.example.myapplication.presentation.components.PrestadorCard
-//import com.example.myapplication.presentation.components.SmallFabTool
 import com.example.myapplication.presentation.components.geminiGradientEffect
 import androidx.compose.foundation.interaction.MutableInteractionSource
-
-// --- [COMENTADO] IMPORTACIONES DE DATOS FALSOS ---
-// import com.example.myapplication.data.model.fake.CategorySampleDataFalso
-// import com.example.myapplication.data.model.fake.SampleDataFalso
-// import com.example.myapplication.data.model.fake.UserFalso
 
 // --- [SECCIÓN: MODELOS DE DATOS REALES] ---
 import com.example.myapplication.data.local.CategoryEntity
@@ -111,6 +114,11 @@ fun ResultBusquedaCategoriaContent(
 
     var isFabMenuExpanded by remember { mutableStateOf(false) }
 
+    // Obtenemos la categoría seleccionada para el encabezado dinámico
+    val selectedCategory = remember(allCategories, categoryName) {
+        allCategories.find { it.name.equals(categoryName, ignoreCase = true) }
+    }
+
     // [CORREGIDO] Lambda con tipo explícito para evitar error Function0<Unit?>
     val closeSearch: () -> Unit = {
         isSearchActive = false
@@ -134,7 +142,6 @@ fun ResultBusquedaCategoriaContent(
                             p.companies.any { it.services.any { s -> s.contains(searchQuery, ignoreCase = true) } }
                 } else true
             }
-            // [CORREGIDO] Se usa 'p' para evitar conflictos con clases internas.
             .filter { p -> if (subscribedOnly) p.isSubscribed else true }
             .filter { p -> if (verifiedOnly) p.isVerified else true }
             .filter { p -> if (works24hOnly) isProvider24h(p) else true }
@@ -153,6 +160,7 @@ fun ResultBusquedaCategoriaContent(
             Box {
                 if (!isSearchActive) {
                     ResultHeaderSection(
+                        category = selectedCategory,
                         categoryName = categoryName,
                         onBack = onBack
                     )
@@ -161,7 +169,7 @@ fun ResultBusquedaCategoriaContent(
                 AnimatedVisibility(
                     visible = isSearchActive,
                     enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
-                    exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
+                    exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it }),
                     modifier = Modifier.zIndex(20f)
                 ) {
                     TopSearchBarResult(
@@ -192,13 +200,14 @@ fun ResultBusquedaCategoriaContent(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
+
                         Spacer(modifier = Modifier.width(8.dp))
                         Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
                             Text("${filteredList.size}", modifier = Modifier.padding(horizontal = 4.dp))
                         }
                     }
                 }
-
+                HorizontalDivider(  )
                 // 🔥 Lista Real
                 ProviderListContent(
                     professionals = filteredList,
@@ -221,23 +230,7 @@ fun ResultBusquedaCategoriaContent(
                     isSearchActive = isSearchActive,
                     onToggleExpand = { isFabMenuExpanded = !isFabMenuExpanded },
                     onActivateSearch = { isSearchActive = true },
-                    onCloseSearch = closeSearch,
-                   /** expandedTools = {
-                        SmallFabTool(
-                            label = if (subscribedOnly) "Top" else "Todos",
-                            icon = if (subscribedOnly) Icons.Default.WorkspacePremium else Icons.Default.Group,
-                            isSelected = subscribedOnly,
-                            onClick = { subscribedOnly = !subscribedOnly }
-                        )
-                        SmallFabTool(
-                            label = if (sortOrder == "Rating") "Rating" else "Nombre",
-                            icon = if (sortOrder == "Rating") Icons.Default.Star else Icons.AutoMirrored.Filled.Sort,
-                            isSelected = true,
-                            onClick = {
-                                sortOrder = if (sortOrder == "Rating") "Name" else "Rating"
-                            }
-                        )
-                    }  **/
+                    onCloseSearch = closeSearch
                 )
             }
         }
@@ -321,7 +314,7 @@ fun ProviderListContent(
         EmptyStateMessage()
     } else {
         LazyColumn(
-            contentPadding = PaddingValues(top = 8.dp, start = 12.dp, end = 12.dp, bottom = 100.dp),
+            contentPadding = PaddingValues(top = 1.dp, start = 1.dp, end = 0.dp, bottom = 80.dp),
         ) {
             items(professionals, key = { it.id }) { professional ->
                 Column {
@@ -332,14 +325,6 @@ fun ProviderListContent(
                         onToggleFavorite = onToggleFavorite,
                         allCategories = allCategories
                     )
-
-                    /**
-                    HorizontalDivider(
-                        modifier = Modifier.padding(top = 1.dp, bottom = 16.dp),
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                    )
-                    **/
                 }
             }
         }
@@ -348,6 +333,7 @@ fun ProviderListContent(
 
 @Composable
 fun ResultHeaderSection(
+    category: CategoryEntity?,
     categoryName: String,
     onBack: () -> Unit
 ) {
@@ -374,23 +360,112 @@ fun ResultHeaderSection(
         )
     }
 
-   Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
-        modifier = Modifier.fillMaxWidth().zIndex(10f)
+    val baseColor = category?.let { Color(it.color) } ?: MaterialTheme.colorScheme.surface
+
+    Surface(
+        color = baseColor,
+        shadowElevation = 8.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .zIndex(10f)
     ) {
-        Row(
-            modifier = Modifier.statusBarsPadding().height(64.dp).padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(80.dp) // Un poco más alto para replicar el estilo de la tarjeta
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+            // 1. Gradiente de superposición (Replicado de CompactCategoryCard)
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(alpha = 0.99f)
+                .drawWithCache {
+                    val gradient = Brush.linearGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, size.height)
+                    )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(gradient, blendMode = BlendMode.Overlay)
+                    }
+                }
+            )
+
+            // 2. Gradiente horizontal oscuro para legibilidad
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent),
+                        startX = 0f,
+                        endX = 600f
+                    )
+                )
+            )
+
+            // 3. Icono de categoría en el fondo (Derecha)
+            category?.icon?.let { iconEmoji ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 10.dp),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Text(
+                        text = iconEmoji,
+                        fontSize = 100.sp,
+                        modifier = Modifier
+                            .offset(x = 20.dp)
+                            .graphicsLayer(alpha = 1f)
+                    )
+                }
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(categoryName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = { showInfoDialog = true }) {
-                Icon(Icons.Default.Info, "Información")
+
+            // 4. Contenido Principal
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onBack,
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                Column {
+                    Text(
+                        text = categoryName.uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.2.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(30.dp)
+                            .height(2.dp)
+                            .background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(2.dp))
+                    )
+                }
+                
+                Spacer(modifier = Modifier.weight(1f))
+                
+                IconButton(
+                    onClick = { showInfoDialog = true },
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)
+                ) {
+                    Icon(Icons.Default.Info, "Información")
+                }
             }
         }
     }
@@ -481,7 +556,19 @@ fun ResultBusquedaCategoriaScreenPreview() {
     MyApplicationTheme {
         ResultBusquedaCategoriaContent(
             allProviders = sampleProviders,
-            allCategories = emptyList(),
+            allCategories = listOf(
+                CategoryEntity(
+                    name = "Informatica",
+                    icon = "💻",
+                    color = 0xFF2197F5,
+                    superCategory = "Tecnología",
+                    providerIds = listOf("1", "2"),
+                    imageUrl = null,
+                    isNew = true,
+                    isNewPrestador = false,
+                    isAd = false
+                )
+            ),
             categoryName = "Informatica",
             onBack = {},
             onNavigateToProviderProfile = {},
