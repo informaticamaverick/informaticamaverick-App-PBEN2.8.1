@@ -122,7 +122,7 @@ fun PresupuestosScreenContent(
         selectedTenderForSheet?.let { getBudgetsForTender(it.tenderId) } ?: MutableStateFlow(emptyList())
     }
     val rawTenderBudgets by tenderBudgetsFlow.collectAsStateWithLifecycle(emptyList())
-
+/**
     // 🔥 LÓGICA DE CATEGORÍAS CONTEXTUALES PARA EL PANEL TÁCTICO
     val dynamicCategoriesForPanel = remember(tenders, directBudgets, selectedTabIndex) {
         val extractedNames = mutableSetOf<String>()
@@ -133,7 +133,7 @@ fun PresupuestosScreenContent(
             ControlItem(label = catName, icon = null, emoji = getCategoryEmoji(catName), color = getCategoryColor(catName), id = "cat_${catName.lowercase()}")
         }
     }
-
+**/
     // --- LÓGICA DE FILTRADO Y ORDENAMIENTO (APLICANDO LOS BOTONES DEL PANEL TÁCTICO) ---
     val filteredTenders = remember(tenders, activeFilters, searchQuery) {
         val selectedCats = activeFilters.filter { it.startsWith("cat_") }.map { it.removePrefix("cat_") }
@@ -281,27 +281,6 @@ fun PresupuestosScreenContent(
                         }
                     }
                 }
-
-                // --- BÚSQUEDA OVERLAY ---
-                if (isSearchActive) {
-                    Box(modifier = Modifier.fillMaxSize().zIndex(10f).background(Color.Black.copy(alpha = 0.6f)).clickable { isSearchActive = false })
-                    Column(modifier = Modifier.fillMaxSize().zIndex(11f)) {
-                        AnimatedVisibility(visible = isSearchActive, enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut()) {
-                            Row(modifier = Modifier.fillMaxWidth().background(DarkBackground).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    GeminiTopSearchBar(
-                                        searchQuery = searchQuery,
-                                        onSearchQueryChange = { searchQuery = it },
-                                        placeholderText = if(selectedTabIndex == 0) "Buscar licitaciones..." else "Buscar presupuestos..."
-                                    )
-                                }
-                                Surface(onClick = { isSearchActive = false; searchQuery = "" }, modifier = Modifier.size(56.dp), shape = CircleShape, color = CardSurface, border = BorderStroke(1.dp, MaverickBlue.copy(alpha = 0.5f))) {
-                                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, null, tint = Color.White) }
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -333,57 +312,6 @@ fun PresupuestosScreenContent(
                         isMultiSelectMode = multiSelectEnabled
                     )
                 }
-            }
-        }
-
-        // --- FAB GEMINI TÁCTICO V2 (Z-INDEX 100) ---
-        Box(modifier = Modifier.fillMaxSize().zIndex(100f).padding(bottom = bottomPadding.calculateBottomPadding())) {
-            GeminiFABWithScrim(bottomPadding = PaddingValues(0.dp), showScrim = isFabExpanded) {
-                GeminiSplitFAB(
-                    isExpanded = isFabExpanded,
-                    isSearchActive = isSearchActive,
-                    isMultiSelectionActive = multiSelectEnabled,
-                    onToggleExpand = { isFabExpanded = !isFabExpanded },
-                    onActivateSearch = { isSearchActive = true; isFabExpanded = false },
-                    onCloseSearch = { isSearchActive = false; searchQuery = "" },
-                    activeFilters = activeFilters,
-                    dynamicCategories = dynamicCategoriesForPanel,
-                    onCompareClick = {
-                        // Multi-selección manual
-                        if (selectedTabIndex == 1 && selectedBudgetIds.size > 1) {
-                            val budgetsToCompare = directBudgets.filter { it.budgetId in selectedBudgetIds }
-                            val fakeTender = TenderEntity("comp_directa", "Comparativa Directa", "", "Varios")
-                            selectedAnalyticsData = Pair(fakeTender, budgetsToCompare)
-                            cancelSelection()
-                        }
-                    },
-                    onDeleteClick = {
-                        showDeleteDialog = true
-                        isFabExpanded = false
-                    },
-                    onAction = { actionId ->
-                        when (actionId) {
-                            "toggle_multiselect" -> if (multiSelectEnabled) cancelSelection() else multiSelectEnabled = true
-                            "apply_filters" -> isFabExpanded = false
-                            else -> activeFilters = if (activeFilters.contains(actionId)) activeFilters - actionId else activeFilters + actionId
-                        }
-                    },
-                    onResetAll = { activeFilters = emptySet() },
-                    secondaryActions = {
-                        // 🔥 BOTÓN ANALIZAR: Aparece si estamos dentro de una Licitación
-                        if (selectedTenderForSheet != null && filteredTenderBudgets.isNotEmpty() && !multiSelectEnabled) {
-                            SmallActionFab(
-                                icon = Icons.Default.Analytics,
-                                label = "Analizar",
-                                iconColor = NeonCyber,
-                                onClick = {
-                                    // Pasa la licitación actual y sus presupuestos
-                                    selectedAnalyticsData = Pair(selectedTenderForSheet!!, filteredTenderBudgets)
-                                }
-                            )
-                        }
-                    }
-                )
             }
         }
 

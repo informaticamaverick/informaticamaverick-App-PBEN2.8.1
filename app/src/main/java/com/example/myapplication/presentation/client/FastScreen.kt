@@ -37,6 +37,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -45,11 +46,13 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.example.myapplication.data.local.CategoryEntity
 import com.example.myapplication.data.local.UserEntity
 import com.example.myapplication.data.model.Provider
 import com.example.myapplication.presentation.components.*
+import com.example.myapplication.ui.theme.MyApplicationTheme
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.cos
@@ -822,11 +825,13 @@ fun ManualCategorySearchSheet(
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             Text("Selecciona una Categoría", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 16.dp))
 
+            /**
             GeminiTopSearchBar(
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
                 placeholderText = "Escribe el oficio o servicio..."
             )
+            **/
 
             Spacer(Modifier.height(16.dp))
 
@@ -853,5 +858,91 @@ fun ManualCategorySearchSheet(
                 }
             }
         }
+    }
+}
+
+// ==========================================================================================
+// --- PREVIEWS ---
+// ==========================================================================================
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview(showBackground = true, backgroundColor = 0xFF05070A)
+@Composable
+fun FastScreenPreview() {
+    val sampleUser = UserEntity(
+        id = "user123",
+        email = "test@example.com",
+        displayName = "Juan Pérez",
+        name = "Juan",
+        lastName = "Pérez",
+        phoneNumber = "123456789",
+        matricula = null,
+        titulo = null,
+        photoUrl = null,
+        bannerImageUrl = null,
+        hasCompanyProfile = false,
+        isSubscribed = false,
+        isVerified = true,
+        isOnline = true,
+        isFavorite = false,
+        rating = 4.5f,
+        createdAt = System.currentTimeMillis()
+    )
+
+    val sampleCategories = listOf(
+        CategoryEntity(name = "Electricidad", icon = "⚡", color = 0xFFFFF59D, superCategory = "Hogar", imageUrl = null, isNew = false, isNewPrestador = false, isAd = false),
+        CategoryEntity(name = "Plomería", icon = "🪠", color = 0xFFBCAAA4, superCategory = "Hogar", imageUrl = null, isNew = false, isNewPrestador = false, isAd = false),
+        CategoryEntity(name = "Fletes", icon = "🚛", color = 0xFFB0BEC5, superCategory = "Transporte", imageUrl = null, isNew = false, isNewPrestador = false, isAd = false),
+        CategoryEntity(name = "Cerrajería", icon = "🔑", color = 0xFFE0E0E0, superCategory = "Hogar", imageUrl = null, isNew = false, isNewPrestador = false, isAd = false)
+    )
+
+    val sampleProvider = Provider(
+        uid = "1001",
+        email = "MAVERICKINFORMATICA@maverick.com",
+        displayName = "Maverick Informática",
+        name = "Maximiliano",
+        lastName = "Nanterne",
+        phoneNumber = "381-1234567",
+        matricula = "MP-9922",
+        titulo = "Ingeniero de Software",
+        cuilCuit = "20-30405060-7",
+        address = null,
+        isSubscribed = true,
+        isVerified = true,
+        isOnline = true,
+        isFavorite = true,
+        rating = 5.0f,
+        createdAt = System.currentTimeMillis(),
+        hasCompanyProfile = false,
+        photoUrl = "https://picsum.photos/seed/maverick/200/200",
+        bannerImageUrl = null
+    )
+
+    val sampleSearchResults = listOf(
+        ProviderWithDistance(
+            provider = sampleProvider,
+            distanceKm = 1.2,
+            estimatedMinutes = 5
+        ),
+        ProviderWithDistance(
+            provider = sampleProvider.copy(uid = "1002", displayName = "Sosa Plomería"),
+            distanceKm = 2.5,
+            estimatedMinutes = 10
+        )
+    )
+
+    MyApplicationTheme {
+        FastScreenContent(
+            navController = rememberNavController(),
+            userState = sampleUser,
+            allProviders = emptyList(),
+            allCategories = sampleCategories,
+            weatherDescription = "Lluvia ligera",
+            isSearching = false,
+            searchFinished = true,
+            searchResults = sampleSearchResults,
+            onStartSearch = { _, _, _ -> },
+            onResetSearch = { }
+        )
     }
 }

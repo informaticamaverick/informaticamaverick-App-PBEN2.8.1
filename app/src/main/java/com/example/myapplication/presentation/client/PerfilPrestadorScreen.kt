@@ -50,7 +50,7 @@ import com.example.myapplication.data.model.BranchProvider
 import com.example.myapplication.data.model.EmployeeProvider
 import com.example.myapplication.data.model.AddressProvider
 import com.example.myapplication.data.local.CategoryEntity
-import com.example.myapplication.presentation.components.GeminiSplitFAB
+//import com.example.myapplication.presentation.components.GeminiSplitFAB
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 // =================================================================================
@@ -181,6 +181,7 @@ fun PerfilPrestadorContent(
                 }
             }
 
+            /**
             // --- FAB ---
             Box(
                 modifier = Modifier.fillMaxSize().padding(16.dp).zIndex(10f),
@@ -194,6 +195,7 @@ fun PerfilPrestadorContent(
                     onCloseSearch = { },
                 )
             }
+            **/
             
             // --- FULLSCREEN IMAGE OVERLAY ---
             if (fullscreenImageUrl != null) {

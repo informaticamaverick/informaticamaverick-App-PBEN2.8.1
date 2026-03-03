@@ -184,7 +184,10 @@ fun PromoScreenContent(
 
             val promoList = mutableListOf<Promotion>()
             val mockImages = if (index % 2 == 0) {
-                listOf("https://picsum.photos/seed/${provider.uid}1/800/800", "https://picsum.photos/seed/${provider.uid}2/800/800")
+                listOf(
+                    "https://picsum.photos/seed/${provider.uid}1/800/800",
+                    "https://picsum.photos/seed/${provider.uid}2/800/800"
+                )
             } else {
                 listOf("https://picsum.photos/seed/${provider.uid}3/800/600")
             }
@@ -200,7 +203,8 @@ fun PromoScreenContent(
                     imageUrls = mockImages,
                     providerImageUrl = provider.photoUrl,
                     providerName = provider.displayName,
-                    description = mainCompany?.description ?: "¡Descubre nuestros servicios profesionales con la mejor garantía del mercado!",
+                    description = mainCompany?.description
+                        ?: "¡Descubre nuestros servicios profesionales con la mejor garantía del mercado!",
                     providerId = provider.uid,
                     rating = provider.rating,
                     likes = (50..500).random(),
@@ -216,9 +220,27 @@ fun PromoScreenContent(
         // Generar lista final intercalando Anuncios con MAYOR frecuencia (cada 2 publicaciones)
         val finalItems = mutableListOf<PromoListItem>()
         val adTemplates = listOf(
-            PromoListItem.AdItem("ad1", "Seguros para Profesionales", "Asegura tu equipo de trabajo contra robos o daños. Cobertura en toda la provincia.", "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?q=80&w=800&auto=format&fit=crop", "Cotizar Gratis"),
-            PromoListItem.AdItem("ad2", "Herramientas Bosch 30% OFF", "Renueva tu caja de herramientas con la mejor calidad del mercado. Hasta 6 cuotas sin interés.", "https://images.unsplash.com/photo-1504148455328-c376907d081c?q=80&w=800&auto=format&fit=crop", "Ver Catálogo"),
-            PromoListItem.AdItem("ad3", "Google Cloud for Business", "Potencia tu negocio con las herramientas de la nube más seguras y escalables.", "https://images.unsplash.com/photo-1573164713988-8665fc963095?q=80&w=800&auto=format&fit=crop", "Más Información")
+            PromoListItem.AdItem(
+                "ad1",
+                "Seguros para Profesionales",
+                "Asegura tu equipo de trabajo contra robos o daños. Cobertura en toda la provincia.",
+                "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?q=80&w=800&auto=format&fit=crop",
+                "Cotizar Gratis"
+            ),
+            PromoListItem.AdItem(
+                "ad2",
+                "Herramientas Bosch 30% OFF",
+                "Renueva tu caja de herramientas con la mejor calidad del mercado. Hasta 6 cuotas sin interés.",
+                "https://images.unsplash.com/photo-1504148455328-c376907d081c?q=80&w=800&auto=format&fit=crop",
+                "Ver Catálogo"
+            ),
+            PromoListItem.AdItem(
+                "ad3",
+                "Google Cloud for Business",
+                "Potencia tu negocio con las herramientas de la nube más seguras y escalables.",
+                "https://images.unsplash.com/photo-1573164713988-8665fc963095?q=80&w=800&auto=format&fit=crop",
+                "Más Información"
+            )
         )
 
         var adCounter = 0
@@ -318,7 +340,30 @@ fun PromoScreenContent(
                             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
                         },
                         actions = {
-                            IconButton(onClick = { isSearchActive = true }) { Icon(Icons.Default.Search, null, tint = Color.White) }
+                            // 🔥 MODIFICACIÓN: Se integran MenuFiltros y MenuOrdenamiento en la cabecera, quitando la lupa
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                MenuFiltros(
+                                    activeFilters = activeFilters,
+                                    dynamicCategories = dynamicCategories,
+                                    onAction = { filterId ->
+                                        val current = activeFilters.toMutableSet()
+                                        if (!current.add(filterId)) current.remove(filterId)
+                                        activeFilters = current
+                                    },
+                                    onApply = { /* Cierre automático */ },
+                                    onClearFilters = { activeFilters = emptySet() }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                MenuOrdenamiento(
+                                    activeFilters = activeFilters,
+                                    onAction = { sortId ->
+                                        activeFilters = activeFilters.filter { !it.startsWith("sort_") }.toSet() + if (sortId.isEmpty()) emptySet() else setOf(sortId)
+                                    },
+                                    onApply = { /* Cierre automático */ },
+                                    onClearFilters = { activeFilters = activeFilters.filter { !it.startsWith("sort_") }.toSet() },
+                                    showRank = true
+                                )
+                            }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF05070A).copy(alpha = 0.85f))
                     )
@@ -389,22 +434,6 @@ fun PromoScreenContent(
                 }
             }
 
-            // --- BÚSQUEDA OVERLAY ---
-            if (isSearchActive) {
-                Box(modifier = Modifier.fillMaxSize().zIndex(10f).background(Color.Black.copy(alpha = 0.8f)).clickable { isSearchActive = false })
-                Column(modifier = Modifier.fillMaxSize().zIndex(11f)) {
-                    AnimatedVisibility(visible = isSearchActive, enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut()) {
-                        Row(modifier = Modifier.fillMaxWidth().background(DarkBg).padding(16.dp).statusBarsPadding(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                GeminiTopSearchBar(searchQuery = searchQuery, onSearchQueryChange = { searchQuery = it }, placeholderText = "Buscar ofertas...")
-                            }
-                            Surface(onClick = { isSearchActive = false; searchQuery = "" }, modifier = Modifier.size(56.dp), shape = CircleShape, color = CardSurface, border = BorderStroke(1.dp, MaverickBlue.copy(alpha = 0.5f))) {
-                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, null, tint = Color.White) }
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         // --- FULLSCREEN IMAGE OVERLAY ---
@@ -475,41 +504,6 @@ fun PromoScreenContent(
             }
         }
 
-        // --- FAB GEMINI TÁCTICO V2 (Con Filtros de Producto y Servicio) ---
-        Box(modifier = Modifier.fillMaxSize().zIndex(100f).padding(bottomPadding)) {
-            GeminiFABWithScrim(bottomPadding = PaddingValues(0.dp), showScrim = isFabExpanded) {
-
-                // Definimos los filtros que aparecerán en el FAB
-                val productServiceFilters = listOf(
-                    ControlItem("Productos", Icons.Default.Inventory2, "🛍️", Color(0xFFF59E0B), "filter_products"),
-                    ControlItem("Servicios", Icons.Default.DesignServices, "🛠️", Color(0xFF3B82F6), "filter_services")
-                )
-
-                GeminiSplitFAB(
-                    isExpanded = isFabExpanded,
-                    isSearchActive = isSearchActive,
-                    isMultiSelectionActive = false,
-                    onToggleExpand = { isFabExpanded = !isFabExpanded },
-                    onActivateSearch = { isSearchActive = true; isFabExpanded = false },
-                    onCloseSearch = { isSearchActive = false; searchQuery = "" },
-                    activeFilters = activeFilters,
-                    dynamicCategories = productServiceFilters + dynamicCategories, // Inyectamos Filtros de Enum
-                    onAction = { actionId ->
-                        if (actionId == "refresh") {
-                            coroutineScope.launch {
-                                isFabExpanded = false
-                                isRefreshing = true
-                                delay(1500)
-                                isRefreshing = false
-                            }
-                        } else {
-                            activeFilters = if (activeFilters.contains(actionId)) activeFilters - actionId else activeFilters + actionId
-                        }
-                    },
-                    onResetAll = { activeFilters = emptySet() }
-                )
-            }
-        }
     }
 }
 

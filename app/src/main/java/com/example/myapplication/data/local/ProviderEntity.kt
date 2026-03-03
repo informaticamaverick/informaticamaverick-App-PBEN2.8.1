@@ -23,23 +23,27 @@ data class ProviderEntity(
     val phoneNumber: String,
     val additionalPhones: List<String> = emptyList(),
 
-    val works24h: Boolean = false,
-    val hasPhysicalLocation: Boolean = false,
-    val doesHomeVisits: Boolean = false,
-    val doesShipping: Boolean = false,
-    val acceptsAppointments: Boolean = false,
-    val isSubscribed: Boolean = false,
-    val isVerified: Boolean = false,
-    val isFavorite: Boolean = false,
-    val isOnline: Boolean = false,
+   // val doesService: Boolean = false, // Servicio??
+   // val doesProduct: Boolean = false, // Producto??
+    val works24h: Boolean = false, // Trabaja 24hs??
+    val hasPhysicalLocation: Boolean = false, // Tiene Local??
+    val doesHomeVisits: Boolean = false, // Hace Visitas Tecnicas??
+    val doesShipping: Boolean = false, // Hace Envios??
+    val acceptsAppointments: Boolean = false, // Acepta Turnos??
+
+    val isSubscribed: Boolean = false, // Suscrito
+    val isVerified: Boolean = false,  // Verificado
+
+    val isFavorite: Boolean = false, // Favorito
+    val isOnline: Boolean = false,  // Esta En linea o conectado
 
     val rating: Float = 0f,
     val workingHours: String = "", // 🔥 NUEVO: Horario de atención del prestador
     val categories: List<String> = emptyList(),
     val description: String = "",
 
-    val companies: List<CompanyProvider> = emptyList(),
-    val hasCompanyProfile: Boolean = false,
+    val companies: List<CompanyProvider> = emptyList(), // Lista de empresas asociadas
+    val hasCompanyProfile: Boolean = false, // ¿Tiene perfil de empresa?
 
     val photoUrl: String? = null,
     val bannerImageUrl: String? = null,

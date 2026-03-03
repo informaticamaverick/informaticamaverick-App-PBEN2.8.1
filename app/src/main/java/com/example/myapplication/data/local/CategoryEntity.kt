@@ -23,30 +23,10 @@ data class CategoryEntity(
     val isNew: Boolean,
     val isNewPrestador: Boolean,
     val isAd: Boolean
+    //val isNewProduct: Boolean
+   // val isNewService: Boolean
+
+
 )
 
 
-/**
-package com.example.myapplication.data.local
-
-
-// Ubicación: com.example.myapplication.data.local.CategoryEntity.kt
-import androidx.compose.ui.graphics.Color
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
-@Entity(tableName = "categories_table")
-data class CategoryEntity(
-    // El nombre es la clave principal. Si Firebase envía un nombre que ya existe,
-    // se actualizará esa categoría en lugar de crear una duplicada.
-    @PrimaryKey
-    val name: String,
-    val icon: String,
-    val color: Long, // Se usará el Converter para esto
-    val superCategory: String,
-    val providerIds: MutableList<String>, // Se usará el Converter para esto
-    val imageUrl: String?,
-    val isNew: Boolean,
-    val isNewPrestador: Boolean,
-    val isAd: Boolean
-)**/

@@ -127,14 +127,14 @@ fun CalendarScreenContent(
 
     val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     val selectedDateStr = dateFormat.format(selectedDate.time)
-
+/**
     // --- DEFINICIÓN DE CATEGORÍAS TÁCTICAS ---
     val dynamicCategoriesForPanel = listOf(
         ControlItem("Visitas", Icons.Default.Build, "🛠️", Color(0xFF2197F5), "cat_visita"),
         ControlItem("Turnos", Icons.Default.Event, "📅", Color(0xFF9B51E0), "cat_turno"),
         ControlItem("Envíos", Icons.Default.LocalShipping, "🚛", Color(0xFF10B981), "cat_envio")
     )
-
+**/
     // --- LÓGICA DE FILTRADO Y ORDENAMIENTO (APLICADO A DATOS DE ROOM) ---
     val filteredEvents = remember(events, activeFilters, searchQuery, selectedDateStr) {
         var result = events.filter { it.date == selectedDateStr }
@@ -259,22 +259,6 @@ fun CalendarScreenContent(
                 Spacer(modifier = Modifier.height(120.dp)) // Espacio para el FAB
             }
 
-            // --- BÚSQUEDA OVERLAY ---
-            if (isSearchActive) {
-                Box(modifier = Modifier.fillMaxSize().zIndex(10f).background(Color.Black.copy(alpha = 0.8f)).clickable { isSearchActive = false })
-                Column(modifier = Modifier.fillMaxSize().zIndex(11f)) {
-                    AnimatedVisibility(visible = isSearchActive, enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut()) {
-                        Row(modifier = Modifier.fillMaxWidth().background(DarkBg).padding(16.dp).statusBarsPadding(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                GeminiTopSearchBar(searchQuery = searchQuery, onSearchQueryChange = { searchQuery = it }, placeholderText = "Buscar servicio, proveedor o dirección...")
-                            }
-                            Surface(onClick = { isSearchActive = false; searchQuery = ""; keyboardController?.hide() }, modifier = Modifier.size(56.dp), shape = CircleShape, color = CardSurface, border = BorderStroke(1.dp, MaverickBlue.copy(alpha = 0.5f))) {
-                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, null, tint = Color.White) }
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         // =========================================================================
@@ -317,34 +301,6 @@ fun CalendarScreenContent(
             )
         }
 
-        // --- FAB GEMINI TÁCTICO V2 (Z-INDEX 100) ---
-        Box(modifier = Modifier.fillMaxSize().zIndex(100f).padding(bottom = 24.dp)) {
-            GeminiFABWithScrim(bottomPadding = PaddingValues(0.dp), showScrim = isFabExpanded) {
-                GeminiSplitFAB(
-                    isExpanded = isFabExpanded,
-                    isSearchActive = isSearchActive,
-                    isMultiSelectionActive = false,
-                    onToggleExpand = { isFabExpanded = !isFabExpanded },
-                    onActivateSearch = { isSearchActive = true; isFabExpanded = false },
-                    onCloseSearch = { isSearchActive = false; searchQuery = "" },
-                    activeFilters = activeFilters,
-                    dynamicCategories = dynamicCategoriesForPanel,
-                    onAction = { actionId ->
-                        when (actionId) {
-                            "refresh" -> { // Volver al día de hoy
-                                currentDate = Calendar.getInstance()
-                                selectedDate = Calendar.getInstance()
-                                isFabExpanded = false
-                            }
-                            else -> {
-                                activeFilters = if (activeFilters.contains(actionId)) activeFilters - actionId else activeFilters + actionId
-                            }
-                        }
-                    },
-                    onResetAll = { activeFilters = emptySet(); isFabExpanded = false }
-                )
-            }
-        }
     }
 }
 
@@ -383,7 +339,7 @@ fun CalendarHeaderPro(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "${monthNames[currentDate.get(Calendar.MONTH)]} ${currentDate.get(Calendar.YEAR)}".uppercase(),
+                text = "HOY ${currentDate.get(Calendar.DAY_OF_MONTH)} de ${monthNames[currentDate.get(Calendar.MONTH)]} / ${currentDate.get(Calendar.YEAR)}".uppercase(),
                 fontWeight = FontWeight.Black,
                 fontSize = 14.sp,
                 color = Color.White,

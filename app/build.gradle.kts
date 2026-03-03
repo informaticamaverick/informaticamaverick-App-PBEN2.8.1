@@ -59,6 +59,11 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.benchmark.traceprocessor)
+    implementation(libs.androidx.compose.ui.geometry)
+    implementation(libs.ui)
+    implementation(libs.androidx.datastore.core)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.material3)
 
 
     testImplementation(libs.junit)
