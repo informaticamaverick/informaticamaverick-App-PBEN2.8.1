@@ -6,40 +6,45 @@ import com.example.myapplication.data.model.AddressProvider
 import com.example.myapplication.data.model.CompanyProvider
 import com.example.myapplication.data.model.Provider
 
-/**
- * ENTIDAD DE PROVEEDOR (ProviderEntity)
- * Representa la tabla 'provider_profile' en la base de datos Room.
- */
 @Entity(tableName = "provider_profile")
 data class ProviderEntity(
     @PrimaryKey val id: String,
+
     val email: String,
-    val displayName: String,
+    val alternateEmail: String? = null,
+    val displayName: String, // Restaurado
+
     val name: String,
     val lastName: String,
+    val matricula: String? = null,
+    val titulo: String? = null,
+    val cuilCuit: String? = null,
+    val address: AddressProvider? = null,
     val phoneNumber: String,
-    val category: String = "General", // Campo añadido para la BD
-
-    val additionalEmails: List<String> = emptyList(),
     val additionalPhones: List<String> = emptyList(),
 
-    val matricula: String?,
-    val titulo: String?,
+    val works24h: Boolean = false,
+    val hasPhysicalLocation: Boolean = false,
+    val doesHomeVisits: Boolean = false,
+    val doesShipping: Boolean = false,
+    val acceptsAppointments: Boolean = false,
+    val isSubscribed: Boolean = false,
+    val isVerified: Boolean = false,
+    val isFavorite: Boolean = false,
+    val isOnline: Boolean = false,
 
-    val photoUrl: String?,
-    val bannerImageUrl: String?,
-    val galleryImages: List<String> = emptyList(),
+    val rating: Float = 0f,
+    val workingHours: String = "", // 🔥 NUEVO: Horario de atención del prestador
+    val categories: List<String> = emptyList(),
+    val description: String = "",
 
-    val personalAddresses: List<AddressProvider> = emptyList(),
     val companies: List<CompanyProvider> = emptyList(),
-    val hasCompanyProfile: Boolean,
-    val isSubscribed: Boolean,
-    val isVerified: Boolean,
-    val isOnline: Boolean,
-    val isFavorite: Boolean,
-    val rating: Float,
-    val favoriteProviderIds: List<String> = emptyList(),
+    val hasCompanyProfile: Boolean = false,
 
+    val photoUrl: String? = null,
+    val bannerImageUrl: String? = null,
+    val galleryImages: List<String> = emptyList(),
+    val favoriteProviderIds: List<String> = emptyList(),
     val createdAt: Long
 ) {
     /**
@@ -49,27 +54,40 @@ data class ProviderEntity(
         return Provider(
             uid = id,
             email = email,
+            alternateEmail = alternateEmail,
             displayName = displayName,
             name = name,
             lastName = lastName,
             phoneNumber = phoneNumber,
-            category = category, // Pasamos la categoría al dominio
-            additionalEmails = additionalEmails,
             additionalPhones = additionalPhones,
             matricula = matricula,
             titulo = titulo,
-            photoUrl = photoUrl,
-            bannerImageUrl = bannerImageUrl,
-            galleryImages = galleryImages,
-            personalAddresses = personalAddresses,
-            companies = companies,
-            hasCompanyProfile = hasCompanyProfile,
+            cuilCuit = cuilCuit,
+            address = address,
+
+            works24h = works24h,
+            hasPhysicalLocation = hasPhysicalLocation,
+            doesHomeVisits = doesHomeVisits,
+            doesShipping = doesShipping,
+            acceptsAppointments = acceptsAppointments,
             isSubscribed = isSubscribed,
             isVerified = isVerified,
             isOnline = isOnline,
             isFavorite = isFavorite,
+
             rating = rating,
+            workingHours = workingHours, // 🔥 NUEVO: Mapeo del horario al modelo de dominio
+            categories = categories,
+            description = description,
+
+            companies = companies,
+            hasCompanyProfile = hasCompanyProfile,
+            photoUrl = photoUrl,
+            bannerImageUrl = bannerImageUrl,
+            galleryImages = galleryImages,
+            favoriteProviderIds = favoriteProviderIds,
             createdAt = createdAt
         )
     }
 }
+

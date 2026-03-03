@@ -393,7 +393,13 @@ fun PresupuestosScreenContent(
                 BudgetComparisonAnalytics(
                     tender = selectedAnalyticsData!!.first,
                     budgets = selectedAnalyticsData!!.second,
-                    onBack = { selectedAnalyticsData = null }
+                    onBack = { selectedAnalyticsData = null },
+                    onViewBudgetDetail = { budgetId ->
+                        val budget = selectedAnalyticsData?.second?.find { it.budgetId == budgetId }
+                        if (budget != null) {
+                            budgetForA4Preview = budget
+                        }
+                    }
                 )
             }
         }
@@ -676,7 +682,7 @@ fun LicitacionFolderCard(
                 color = NeonCyber,
                 shape = RoundedCornerShape(percent = 50),
                 shadowElevation = 8.dp,
-                border = BorderStroke(2.dp, DarkBackground),
+                border = BorderStroke(2.2.dp, DarkBackground),
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 12.dp, y = (-12).dp).zIndex(5f)
             ) {
                 Text(
@@ -937,6 +943,3 @@ fun PresupuestosScreenPreview() {
         )
     }
 }
-
-
-

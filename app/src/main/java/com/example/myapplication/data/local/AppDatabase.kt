@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
         MessageEntity::class,    // Tabla de Mensajes (Historial de Chat)
         CalendarEventEntity::class // Tabla de Eventos del Calendario (NUEVO)
     ],
-    version = 12, // 🔥 [CORREGIDO] Incrementado a 12 por actualizacion de Iconos de Supercategoria.
+    version = 13, // 🔥 [CORREGIDO] Incrementado a 12 por actualizacion de Iconos de Supercategoria.
     exportSchema = false
 )
 @TypeConverters(Converters::class)

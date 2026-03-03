@@ -91,13 +91,13 @@ class ProviderViewModel @Inject constructor(
     }
 
     // --- [SECCIÓN: HELPERS DE FILTRADO] ---
+    // [ACTUALIZADO] Estos booleanos ahora son propiedades directas del objeto Provider
+    // en nuestra nueva estructura de dominio.
 
-    fun isProvider24h(provider: Provider): Boolean = 
-        provider.companies.any { it.works24h }
+    fun isProvider24h(provider: Provider): Boolean = provider.works24h
 
-    fun doesProviderHomeVisits(provider: Provider): Boolean = 
-        provider.companies.any { it.doesHomeVisits }
+    fun doesProviderHomeVisits(provider: Provider): Boolean = provider.doesHomeVisits
 
-    fun hasProviderPhysicalLocation(provider: Provider): Boolean = 
-        provider.companies.any { it.hasPhysicalLocation }
+    fun hasProviderPhysicalLocation(provider: Provider): Boolean = provider.hasPhysicalLocation
 }
+

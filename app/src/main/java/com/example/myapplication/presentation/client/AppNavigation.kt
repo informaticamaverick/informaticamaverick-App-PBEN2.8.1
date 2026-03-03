@@ -193,7 +193,7 @@ fun AppNavigation() {
                 PerfilPrestadorCliente(providerId = providerId, onBack = { navController.popBackStack() })
             }
 
-            composable(Screen.Fast.route) { FastScreen() }
+            composable(Screen.Fast.route) { FastScreen(navController = navController) }
 
             composable(Screen.Login.route) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
