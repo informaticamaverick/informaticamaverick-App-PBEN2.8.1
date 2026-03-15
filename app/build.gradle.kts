@@ -64,6 +64,8 @@ dependencies {
     implementation(libs.androidx.datastore.core)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.foundation)
+    implementation(libs.androidx.compose.animation.core)
 
 
     testImplementation(libs.junit)

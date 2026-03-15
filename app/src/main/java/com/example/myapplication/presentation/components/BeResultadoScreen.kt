@@ -1,34 +1,42 @@
 package com.example.myapplication.presentation.components
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.myapplication.data.local.CategoryEntity
+import com.example.myapplication.data.model.Provider
 import com.example.myapplication.presentation.client.BeBrainViewModel
+import com.example.myapplication.presentation.client.SuperCategory
+import com.example.myapplication.presentation.client.prepareForSearch
+import com.example.myapplication.presentation.client.wordStartsWith
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 /**
@@ -39,7 +47,8 @@ fun AutoSizeText(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
-    style: TextStyle = MaterialTheme.typography.titleLarge
+    style: TextStyle = MaterialTheme.typography.titleLarge,
+    textAlign: TextAlign = TextAlign.Start
 ) {
     var multiplier by remember { mutableFloatStateOf(1f) }
 
@@ -47,6 +56,7 @@ fun AutoSizeText(
         text = text,
         modifier = modifier,
         color = color,
+        textAlign = textAlign,
         style = style.copy(fontSize = style.fontSize * multiplier),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -60,49 +70,110 @@ fun AutoSizeText(
 
 /**
  * Pantalla de resultados inteligente de Be.
- * Replica el diseño de SuperCategoryDetailsPanel para consistencia visual.
+ * Integra búsqueda de Categorías, Supercategorías y Favoritos del HomeScreen.
  */
 @Composable
 fun BeResultadoScreen(
     viewModel: BeBrainViewModel,
     onClose: () -> Unit,
-    onProviderClick: (String) -> Unit
+    onProviderClick: (String) -> Unit,
+    allCategories: List<CategoryEntity> = emptyList(),
+    favoriteProviders: List<Provider> = emptyList(),
+    onCategoryClick: (String) -> Unit = {},
+    onSuperCategoryClick: (SuperCategory) -> Unit = {}
 ) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val isVisible by viewModel.isResultadoVisible.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
 
-    // 🔥 Ciclo de Vida: Replicamos la lógica de SuperCategoryDetailsPanel de HomeScreenCliente3
+    // --- LÓGICA DE FILTRADO REACTIVO (Consumiendo del Cerebro de Be) ---
+
+    // Obtenemos categorías y supercategorías directamente del resultado global procesado por el ViewModel
+    val categories = (searchResults as? BeBrainViewModel.SearchResult.GlobalMatch)?.categories ?: emptyList()
+    val superCategories = (searchResults as? BeBrainViewModel.SearchResult.GlobalMatch)?.superCategories ?: emptyList()
+
+    // Filtrar Favoritos por nombre del prestador usando la lógica centralizada de normalización
+    val filteredFavorites = remember(favoriteProviders, searchQuery) {
+        if (searchQuery.isEmpty()) emptyList()
+        else {
+            val normalizedQuery = searchQuery.prepareForSearch()
+            favoriteProviders.filter {
+                it.displayName.prepareForSearch().wordStartsWith(normalizedQuery)
+            }
+        }
+    }
+
+    // 🔥 CICLO DE VIDA: Gestión integral de apertura y cierre del asistente
     DisposableEffect(isVisible) {
         if (isVisible) {
-            viewModel.setSearchActive(true)
-            viewModel.setBottomBarVisible(false)
+            // Al abrirse la pantalla de resultados:
+            viewModel.setSearchActive(true) // 1. Activamos el modo búsqueda (Be vuela hacia arriba)
+            viewModel.setBottomBarVisible(false) // 2. Ocultamos la barra de navegación inferior para dar espacio
+            viewModel.openKeyboard() // 3. Forzamos la apertura del teclado para que el usuario escriba de inmediato
         }
         onDispose {
-            // No reseteamos búsqueda aquí para permitir que el usuario vea lo que escribió si reabre
+            // --- SECCIÓN: LIMPIEZA AL CERRAR ---
+            if (isVisible) {
+                viewModel.cerrarBeAssistantCompleto()// Si la pantalla deja de ser visible (por navegación o cierre), ejecutamos el reset maestro para restaurar el HUD a la normalidad
+            }
         }
     }
 
     BeResultadoContent(
         searchQuery = searchQuery,
         isVisible = isVisible,
-        onClose = onClose,
-        onProviderClick = onProviderClick
+        categories = categories,
+        superCategories = superCategories,
+        favorites = filteredFavorites,
+        allCategories = allCategories,
+        onClose = {
+            // Cierre explícito desde la UI (Botón X o click fuera del panel)
+            viewModel.cerrarBeAssistantCompleto()
+            onClose() // Notifica al componente padre
+        },
+        // 🔥 MODIFICACIÓN: Al hacer click en cualquier resultado, cerramos Be completamente antes de ejecutar la acción
+        onCategoryClick = { categoryName ->
+            viewModel.cerrarBeAssistantCompleto() // Reset maestro del asistente
+            onCategoryClick(categoryName) // Navegación a resultados
+        },
+        onSuperCategoryClick = { superCat ->
+            // 🔥 MODIFICACIÓN: Al tocar una Supercategoría, notificamos al ViewModel global
+            // Esto permite que HomeScreenCliente3 reaccione y abra el SuperCategoryDetailsPanel
+           // viewModel.selectSuperCategory(superCat)
+            viewModel.cerrarBeAssistantCompleto() // Cerramos Be para dar paso al nuevo panel
+            onSuperCategoryClick(superCat)
+        },
+        onProviderClick = { providerId ->
+            viewModel.cerrarBeAssistantCompleto() // Reset maestro del asistente
+            onProviderClick(providerId) // Navega al perfil del prestador
+        }
     )
 }
 
 /**
- * Contenido de la pantalla de resultados de Be, extraído para permitir Previews y separar lógica de ViewModel.
+ * Contenido de la pantalla de resultados de Be con secciones colapsables.
  */
 @Composable
 fun BeResultadoContent(
     searchQuery: String,
     isVisible: Boolean,
+    categories: List<CategoryEntity>,
+    superCategories: List<SuperCategory>,
+    favorites: List<Provider>,
+    allCategories: List<CategoryEntity>,
     onClose: () -> Unit,
+    onCategoryClick: (String) -> Unit,
+    onSuperCategoryClick: (SuperCategory) -> Unit,
     onProviderClick: (String) -> Unit
 ) {
     val cyberBackground = Color(0xFF0A0E14)
     val textMain = Color(0xFFE2E8F0)
     val textMuted = Color(0xFF94A3B8)
+
+    // Estados locales para colapsar/expandir secciones
+    var categoriesExpanded by remember { mutableStateOf(true) }
+    var superCategoriesExpanded by remember { mutableStateOf(true) }
+    var favoritesExpanded by remember { mutableStateOf(true) }
 
     AnimatedVisibility(
         visible = isVisible,
@@ -110,11 +181,9 @@ fun BeResultadoContent(
         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
         modifier = Modifier.fillMaxSize()
     ) {
-        // Scrim de fondo para el overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                //.background(Color.Transparent)
                 .background(Color.Black.copy(alpha = 0.7f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -155,7 +224,7 @@ fun BeResultadoContent(
                         ) {
                             Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                                 AutoSizeText(
-                                    text = if (searchQuery.isEmpty()) "Análisis de Be" else "Resultados para: $searchQuery",
+                                    text = if (searchQuery.isEmpty()) "Análisis de Be" else "Resultados para: ${searchQuery.uppercase()}",
                                     color = textMain,
                                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp)
                                 )
@@ -170,7 +239,7 @@ fun BeResultadoContent(
                                 )
                             }
 
-                            // Botón 'X'
+                            // --- BOTÓN DE CIERRE (X) ---
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
@@ -190,30 +259,129 @@ fun BeResultadoContent(
                         }
 
                         HorizontalDivider(color = Color.White.copy(alpha = 0.05f), thickness = 1.dp)
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Lista de Resultados
+                        
+                        // Lista de Resultados Dinámica
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
-                            contentPadding = PaddingValues(bottom = 32.dp)
+                            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
                         ) {
-                            item {
-                                SmartResultCard(
-                                    title = "Búsqueda predictiva",
-                                    description = "Encuentra lo que necesitas escribiendo arriba o hablando con Be.",
-                                    icon = Icons.Default.Star,
-                                    badgeText = "TIP"
-                                )
+                            // --- SECCIÓN: CATEGORÍAS (SERVICIOS) ---
+                            if (categories.isNotEmpty()) {
+                                item {
+                                    CollapsibleSectionHeader(
+                                        title = "Servicios",
+                                        count = categories.size,
+                                        isExpanded = categoriesExpanded,
+                                        onToggle = { categoriesExpanded = !categoriesExpanded }
+                                    )
+                                }
+
+                                if (categoriesExpanded) {
+                                    item {
+                                        LazyRow(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                                        ) {
+                                            items(categories) { category ->
+                                                Box(modifier = Modifier.width(150.dp)) {
+                                                    CompactCategoryCard(
+                                                        item = category,
+                                                        onClick = { onCategoryClick(category.name) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            item {
-                                SmartResultCard(
-                                    title = "Sugerencias inteligentes",
-                                    description = "Be analiza los mejores prestadores cercanos a tu ubicación.",
-                                    icon = Icons.Default.Settings
-                                )
+
+                            // --- SECCIÓN: SUPERCATEGORÍAS (GRUPOS) ---
+                            if (superCategories.isNotEmpty()) {
+                                item {
+                                    CollapsibleSectionHeader(
+                                        title = "Grupos",
+                                        count = superCategories.size,
+                                        isExpanded = superCategoriesExpanded,
+                                        onToggle = { superCategoriesExpanded = !superCategoriesExpanded }
+                                    )
+                                }
+                                if (superCategoriesExpanded) {
+                                    item {
+                                        LazyRow(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                        ) {
+                                            items(superCategories) { superCat ->
+                                                Box(modifier = Modifier.width(280.dp)) {
+                                                    BentoSuperCategoryCard(
+                                                        superCategory = superCat,
+                                                        emoji = superCat.icon,
+                                                        height = 180.dp,
+                                                        onClick = { onSuperCategoryClick(superCat) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            // Aquí se inyectarían los resultados reales del ViewModel
+
+                            // --- SECCIÓN: FAVORITOS (PRESTADORES) ---
+                            if (favorites.isNotEmpty()) {
+                                item {
+                                    CollapsibleSectionHeader(
+                                        title = "Mis Favoritos",
+                                        count = favorites.size,
+                                        isExpanded = favoritesExpanded,
+                                        onToggle = { favoritesExpanded = !favoritesExpanded }
+                                    )
+                                }
+                                if (favoritesExpanded) {
+                                    item {
+                                        LazyRow(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(0.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                        ) {
+                                            items(favorites) { provider ->
+                                                PrestadorCardVerticalV2(
+                                                    provider = provider,
+                                                    onClick = { onProviderClick(provider.id) },
+                                                    allCategories = allCategories
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // --- EMPTY STATE ---
+                            if (categories.isEmpty() && superCategories.isEmpty() && favorites.isEmpty()) {
+                                item {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = textMuted.copy(alpha = 0.3f),
+                                            modifier = Modifier.size(48.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            text = "Busca categorías, grupos o profesionales favoritos para ver resultados.",
+                                            color = textMuted,
+                                            fontSize = 14.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(horizontal = 32.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -223,82 +391,55 @@ fun BeResultadoContent(
 }
 
 /**
- * Tarjeta de resultado individual (Smart Card).
+ * Encabezado colapsable para secciones de resultados con contador.
  */
 @Composable
-fun SmartResultCard(
+fun CollapsibleSectionHeader(
     title: String,
-    description: String,
-    icon: ImageVector,
-    badgeText: String? = null,
-    opacity: Float = 1f
+    count: Int,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
 ) {
-    Box(
+    val rotation by animateFloatAsState(targetValue = if (isExpanded) 90f else 0f, label = "rotation")
+    
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.03f * opacity),
-                        Color.White.copy(alpha = 0.01f * opacity)
-                    )
-                )
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.05f * opacity), RoundedCornerShape(20.dp))
-            .padding(16.dp)
+            .clickable { onToggle() }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF2197F5).copy(alpha = 0.1f * opacity)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = Color(0xFF2197F5).copy(alpha = opacity),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.padding(end = if (badgeText != null) 60.dp else 0.dp)) {
-                Text(
-                    text = title,
-                    color = Color(0xFFE2E8F0).copy(alpha = opacity),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    color = Color(0xFF94A3B8).copy(alpha = opacity),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-            }
-        }
-
-        if (badgeText != null) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF9B51E0).copy(alpha = 0.2f * opacity))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title.uppercase(),
+                color = Color(0xFF22D3EE),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.1f)
             ) {
                 Text(
-                    text = badgeText,
-                    color = Color(0xFFD8B4FE).copy(alpha = opacity),
+                    text = count.toString(),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                     fontSize = 10.sp,
+                    color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.5f),
+            modifier = Modifier
+                .size(20.dp)
+                .rotate(rotation)
+        )
     }
 }
 
@@ -307,44 +448,16 @@ fun SmartResultCard(
 fun BeResultadoContentPreview() {
     MyApplicationTheme(darkTheme = true) {
         BeResultadoContent(
-            searchQuery = "Soporte Técnico",
+            searchQuery = "Soporte",
             isVisible = true,
+            categories = emptyList(),
+            superCategories = emptyList(),
+            favorites = emptyList(),
+            allCategories = emptyList(),
             onClose = {},
+            onCategoryClick = {},
+            onSuperCategoryClick = {},
             onProviderClick = {}
         )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun SmartResultCardPreview() {
-    MyApplicationTheme(darkTheme = true) {
-        Box(modifier = Modifier.padding(16.dp).background(Color(0xFF0A0E14))) {
-            SmartResultCard(
-                title = "Resultado de Ejemplo",
-                description = "Esta es una descripción detallada de un resultado inteligente de Be.",
-                icon = Icons.Default.Star,
-                badgeText = "NUEVO"
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun AutoSizeTextPreview() {
-    MyApplicationTheme(darkTheme = true) {
-        Column(modifier = Modifier.padding(16.dp).background(Color(0xFF0A0E14))) {
-            AutoSizeText(
-                text = "Texto corto",
-                color = Color.White
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            AutoSizeText(
-                text = "Este es un texto extremadamente largo para probar la funcionalidad de auto size",
-                color = Color.White,
-                modifier = Modifier.width(200.dp)
-            )
-        }
     }
 }

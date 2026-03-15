@@ -2,7 +2,6 @@ package com.example.myapplication.presentation.client
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,7 +9,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
@@ -29,7 +27,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,17 +58,20 @@ fun ResultBusquedaCategoriaScreen(
     onNavigateToProviderProfile: (String) -> Unit,
     onNavigateToChat: (String) -> Unit,
     providerViewModel: ProviderViewModel = hiltViewModel(),
-    categoryViewModel: CategoryViewModel = hiltViewModel()
+    categoryViewModel: CategoryViewModel = hiltViewModel(),
+    beViewModel: BeBrainViewModel = hiltViewModel() // 🔥 Agregado
 ) {
     // 🔥 [FLUJO DE DATOS REAL] - Obtenemos todos los prestadores desde Room
     val allProviders by providerViewModel.providers.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.categories.collectAsStateWithLifecycle()
+    val searchQuery by beViewModel.searchQuery.collectAsStateWithLifecycle() // 🔥 Escucha a Be
     val isLoading by providerViewModel.isLoading.collectAsStateWithLifecycle()
 
     ResultBusquedaCategoriaContent(
         allProviders = allProviders,
         allCategories = allCategories,
         categoryName = categoryName,
+        searchQuery = searchQuery, // 🔥 Pasa la query real
         isLoading = isLoading,
         onBack = onBack,
         onNavigateToProviderProfile = onNavigateToProviderProfile,
@@ -83,14 +83,13 @@ fun ResultBusquedaCategoriaScreen(
     )
 }
 
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultBusquedaCategoriaContent(
     allProviders: List<Provider>,
     allCategories: List<CategoryEntity>,
     categoryName: String,
+    searchQuery: String, // 🔥 Recibe la query
     isLoading: Boolean,
     onBack: () -> Unit,
     onNavigateToProviderProfile: (String) -> Unit,
@@ -100,9 +99,6 @@ fun ResultBusquedaCategoriaContent(
     hasProviderPhysicalLocation: (Provider) -> Boolean,
     toggleFavoriteStatus: (String, Boolean) -> Unit
 ) {
-    var isSearchActive by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-
     var subscribedOnly by remember { mutableStateOf(true) }
     var verifiedOnly by remember { mutableStateOf(false) }
     var works24hOnly by remember { mutableStateOf(false) }
@@ -112,15 +108,13 @@ fun ResultBusquedaCategoriaContent(
 
     // 🔥 ESTADO ESTRELLA: Guarda el proveedor seleccionado para expandirlo en el Overlay
     var expandedProvider by remember { mutableStateOf<Provider?>(null) }
-
     val selectedCategory = remember(allCategories, categoryName) {
         allCategories.find { it.name.equals(categoryName, ignoreCase = true) }
     }
-
-    //val filteredList = // ... (MANTÉN TU LÓGICA DE FILTRADO AQUÍ TAL CUAL LA TIENES) ...
-
-    // 🔥 [LÓGICA DE FILTRADO REAL]
+    // 🔥 [LÓGICA DE FILTRADO REAL ACTUALIZADA]
     val filteredList = remember(allProviders, categoryName, searchQuery, subscribedOnly, verifiedOnly, works24hOnly, homeVisitsOnly, physicalLocationOnly, sortOrder) {
+        val normalizedQuery = searchQuery.prepareForSearch()
+
         allProviders
             .filter { p ->
                 // Filtro 1: Categoría
@@ -128,11 +122,12 @@ fun ResultBusquedaCategoriaContent(
                         p.companies.any { it.categories.any { s -> s.equals(categoryName, ignoreCase = true) } }
             }
             .filter { p ->
-                // Filtro 2: Búsqueda por texto en nombre o categorías de empresa
-                if (searchQuery.isNotEmpty()) {
-                    p.name.contains(searchQuery, ignoreCase = true) ||
-                            p.lastName.contains(searchQuery, ignoreCase = true) ||
-                            p.companies.any { it.categories.any { s -> s.contains(searchQuery, ignoreCase = true) } }
+                // Filtro 2: Búsqueda por texto usando la lógica de Be
+                if (normalizedQuery.isNotEmpty()) {
+                    p.name.prepareForSearch().wordStartsWith(normalizedQuery) ||
+                    p.lastName.prepareForSearch().wordStartsWith(normalizedQuery) ||
+                    p.companies.any { it.name.prepareForSearch().wordStartsWith(normalizedQuery) } ||
+                    p.companies.any { it.categories.any { s -> s.prepareForSearch().wordStartsWith(normalizedQuery) } }
                 } else true
             }
             .filter { p -> if (subscribedOnly) p.isSubscribed else true }
@@ -146,7 +141,6 @@ fun ResultBusquedaCategoriaContent(
                 else list.sortedBy { it.name }
             }
     }
-
 
     Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
@@ -163,7 +157,6 @@ fun ResultBusquedaCategoriaContent(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // ==========================================
                 // CAPA 1: FONDO Y GRILLA NORMAL
                 // ==========================================
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -205,26 +198,17 @@ fun ResultBusquedaCategoriaContent(
                     }
                 }
 
-                // ==========================================
                 // CAPA 2: OVERLAY ANIMADO (TARJETA FLOTANTE)
                 // ==========================================
                 AnimatedVisibility(
                     visible = expandedProvider != null,
                     enter = fadeIn(animationSpec = tween(400)) + scaleIn(
-                        initialScale = 0.5f, // Empieza pequeña como la de la grilla
+                        initialScale = 0.8f, // Empieza pequeña como la de la grilla
                         transformOrigin = TransformOrigin(0.5f, 0.5f),
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioLowBouncy, // Un poco de rebote premium
                             stiffness = Spring.StiffnessLow
                         )
-                    /**
-                    visible = expandedProvider != null,
-                    // Animación premium: Aparece, se desenfoca el fondo y salta desde un 80% de su tamaño con efecto resorte
-                    enter = fadeIn(animationSpec = tween(300)) + scaleIn(
-                        initialScale = 0.8f,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-                    **/
-
                     ),
                     exit = fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 0.8f)
                 ) {
@@ -243,25 +227,17 @@ fun ResultBusquedaCategoriaContent(
                         contentAlignment = Alignment.Center // 🔥 Centra la tarjeta en la pantalla
                     ) {
                         expandedProvider?.let { provider ->
-                            // Contenedor "trampa" para evitar que al tocar la tarjeta se cierre el fondo
-                            Box(
-                                modifier = Modifier.clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {}
-                            ) {
-                                // Renderizamos la tarjeta forzada a su estado Expandido
                                 PrestadorCardVerticalV2(
                                     provider = provider,
                                     isExpanded = true, // 🔥 Siempre abierta en esta capa
                                     onExpandToggle = { expandedProvider = null }, // La cerramos si la vuelven a tocar
+                                    columnIndex = 0, // En el centro no importa el offset lateral
                                     onClick = {
                                         expandedProvider = null // Cerramos overlay
                                         onNavigateToProviderProfile(provider.id) // Navegamos al perfil
                                     },
                                     onChat = { onNavigateToChat(provider.id) },
-                                    onToggleFavorite = { id, isFav -> toggleFavoriteStatus(id, isFav) },
-                                    allCategories = allCategories
+                                    onToggleFavorite = { id, isFav -> toggleFavoriteStatus(id, isFav) }
                                 )
                             }
                         }
@@ -269,7 +245,6 @@ fun ResultBusquedaCategoriaContent(
                 }
             }
         }
-}
 
 // --- ACTUALIZACIÓN DE LA LISTA ---
 @Composable
@@ -282,7 +257,7 @@ fun ProviderListContent(
     onExpandToggle: (Provider) -> Unit // 🔥 Nuevo parámetro
 ) {
     if (professionals.isEmpty()) {
-        // EmptyStateMessage() // Asegúrate de tener tu función aquí
+        EmptyStateMessage()
     } else {
         LazyVerticalGrid(
             columns = GridCells.Fixed(4), // 4 Tarjetas
@@ -291,259 +266,25 @@ fun ProviderListContent(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(professionals, key = { p -> p.id }) { professional ->
+            // 🔥 CAMBIO: Usamos itemsIndexed para calcular la columna
+            itemsIndexed(professionals, key = { _, p -> p.id }) { index, professional ->
+                val columnIndex = index % 4 // Calcula si es col 0, 1, 2 o 3
+
                 PrestadorCardVerticalV2(
                     provider = professional,
+                    allCategories = allCategories,
                     isExpanded = false, // 🔥 En la grilla SIEMPRE son compactas
                     onExpandToggle = { onExpandToggle(professional) }, // Avisa al padre
+                    columnIndex = columnIndex, // 🔥 Pasa la posición
                     onClick = { onNavigateToProviderProfile(professional.id) },
                     onChat = { onNavigateToChat(professional.id) },
                     onToggleFavorite = onToggleFavorite,
-                    allCategories = allCategories
+
                 )
             }
         }
     }
 }
-
-
-
-/**
-/**
- * Pantalla que muestra los prestadores filtrados por una categoría específica.
- * Consume datos de Room a través del ProviderViewModel.
- */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-fun ResultBusquedaCategoriaScreen(
-    categoryName: String,
-    onBack: () -> Unit,
-    onNavigateToProviderProfile: (String) -> Unit,
-    onNavigateToChat: (String) -> Unit,
-    providerViewModel: ProviderViewModel = hiltViewModel(),
-    categoryViewModel: CategoryViewModel = hiltViewModel()
-) {
-    // 🔥 [FLUJO DE DATOS REAL] - Obtenemos todos los prestadores desde Room
-    val allProviders by providerViewModel.providers.collectAsStateWithLifecycle()
-    val allCategories by categoryViewModel.categories.collectAsStateWithLifecycle()
-    val isLoading by providerViewModel.isLoading.collectAsStateWithLifecycle()
-
-    ResultBusquedaCategoriaContent(
-        allProviders = allProviders,
-        allCategories = allCategories,
-        categoryName = categoryName,
-        isLoading = isLoading,
-        onBack = onBack,
-        onNavigateToProviderProfile = onNavigateToProviderProfile,
-        onNavigateToChat = onNavigateToChat,
-        isProvider24h = { provider -> providerViewModel.isProvider24h(provider) },
-        doesProviderHomeVisits = { provider -> providerViewModel.doesProviderHomeVisits(provider) },
-        hasProviderPhysicalLocation = { provider -> providerViewModel.hasProviderPhysicalLocation(provider) },
-        toggleFavoriteStatus = { id, isFav -> providerViewModel.toggleFavoriteStatus(id, isFav) }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ResultBusquedaCategoriaContent(
-    allProviders: List<Provider>,
-    allCategories: List<CategoryEntity>,
-    categoryName: String,
-    isLoading: Boolean,
-    onBack: () -> Unit,
-    onNavigateToProviderProfile: (String) -> Unit,
-    onNavigateToChat: (String) -> Unit,
-    isProvider24h: (Provider) -> Boolean,
-    doesProviderHomeVisits: (Provider) -> Boolean,
-    hasProviderPhysicalLocation: (Provider) -> Boolean,
-    toggleFavoriteStatus: (String, Boolean) -> Unit
-) {
-    // --- ESTADOS DE UI PARA FILTROS ---
-    var isSearchActive by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-
-    var subscribedOnly by remember { mutableStateOf(true) }
-    var verifiedOnly by remember { mutableStateOf(false) }
-    var works24hOnly by remember { mutableStateOf(false) }
-    var homeVisitsOnly by remember { mutableStateOf(false) }
-    var physicalLocationOnly by remember { mutableStateOf(false) }
-    var sortOrder by remember { mutableStateOf("Rating") }
-
-    // --- LÓGICA DEL ASISTENTE Y EXPANSIÓN (ELIMINADA) ---
-    // var expandedId by remember { mutableStateOf<String?>(null) }
-    // --- REQUERIMIENTO: Reintroducir el estado de expansión ---
-    var expandedId by remember { mutableStateOf<String?>(null) }
-    // Obtenemos la categoría seleccionada para el encabezado dinámico
-    val selectedCategory = remember(allCategories, categoryName) {
-        allCategories.find { it.name.equals(categoryName, ignoreCase = true) }
-    }
-
-    // 🔥 [LÓGICA DE FILTRADO REAL]
-    val filteredList = remember(allProviders, categoryName, searchQuery, subscribedOnly, verifiedOnly, works24hOnly, homeVisitsOnly, physicalLocationOnly, sortOrder) {
-        allProviders
-            .filter { p ->
-                // Filtro 1: Categoría
-                p.categories.any { it.equals(categoryName, ignoreCase = true) } ||
-                        p.companies.any { it.categories.any { s -> s.equals(categoryName, ignoreCase = true) } }
-            }
-            .filter { p ->
-                // Filtro 2: Búsqueda por texto en nombre o categorías de empresa
-                if (searchQuery.isNotEmpty()) {
-                    p.name.contains(searchQuery, ignoreCase = true) ||
-                            p.lastName.contains(searchQuery, ignoreCase = true) ||
-                            p.companies.any { it.categories.any { s -> s.contains(searchQuery, ignoreCase = true) } }
-                } else true
-            }
-            .filter { p -> if (subscribedOnly) p.isSubscribed else true }
-            .filter { p -> if (verifiedOnly) p.isVerified else true }
-            .filter { p -> if (works24hOnly) isProvider24h(p) else true }
-            .filter { p -> if (homeVisitsOnly) doesProviderHomeVisits(p) else true }
-            .filter { p -> if (physicalLocationOnly) hasProviderPhysicalLocation(p) else true }
-            // Ordenamiento
-            .let { list ->
-                if (sortOrder == "Rating") list.sortedByDescending { it.rating }
-                else list.sortedBy { it.name }
-            }
-    }
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            // La barra de búsqueda del asistente se ha eliminado de aquí.
-            ResultHeaderSection(
-                category = selectedCategory,
-                categoryName = categoryName,
-                onBack = onBack
-            )
-        }
-    ) { paddingValues ->
-// REQUERIMIENTO: Contenedor Box para superponer el scrim y el contenido
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                if (filteredList.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (subscribedOnly) "Recomendados" else "Todos los resultados",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                            Text(
-                                "${filteredList.size}",
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                }
-
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                } else {
-                    // 🔥 Lista Real (4 columnas) - Ahora con lógica de expansión
-                    ProviderListContent(
-                        professionals = filteredList,
-                        allCategories = allCategories,
-                        onNavigateToProviderProfile = onNavigateToProviderProfile,
-                        onNavigateToChat = onNavigateToChat,
-                        onToggleFavorite = { id, isFav -> toggleFavoriteStatus(id, isFav) },
-                        expandedId = expandedId,
-                        onExpandToggle = { id -> expandedId = id }
-                    )
-                }
-            }
-
-            // REQUERIMIENTO: Scrim (fondo desenfocado) que aparece cuando una tarjeta se expande
-            AnimatedVisibility(
-                visible = expandedId != null,
-                enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .blur(8.dp) // Efecto de desenfoque suave
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null // Sin efecto ripple al tocar
-                        ) {
-                            expandedId = null // Al tocar el fondo, se cierra la tarjeta
-                        }
-                )
-            }
-        }
-    }
-}
-
-
-// ==================================================================================
-// --- SECCIÓN: COMPONENTES DE LISTA ---
-// ==================================================================================
-
-@Composable
-fun ProviderListContent(
-    professionals: List<Provider>,
-    allCategories: List<CategoryEntity>,
-    onNavigateToProviderProfile: (String) -> Unit,
-    onNavigateToChat: (String) -> Unit,
-    onToggleFavorite: (String, Boolean) -> Unit,
-    expandedId: String?,
-    onExpandToggle: (String?) -> Unit
-) {
-    if (professionals.isEmpty()) {
-        EmptyStateMessage()
-    } else {
-        // Grid simple con 4 columnas, sin modificadores de posicionamiento para la expansión
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(4), // 🔥 4 tarjetas por fila
-            contentPadding = PaddingValues(top = 6.dp, start = 2.dp, end = 1.dp, bottom = 80.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxSize()
-                //.graphicsLayer(clip = false) // Permite que la tarjeta expandida se vea completa
-        ) {
-            items(professionals, key = { p -> p.id }) { professional ->
-                val isExpanded = expandedId == professional.id
-
-                // REQUERIMIENTO: Contenedor para aplicar zIndex y que la tarjeta expandida se muestre por encima
-                Box(
-                    //modifier = Modifier.zIndex(if (isExpanded) 500f else 400f)
-                ) {
-                    PrestadorCardVerticalV2(
-                        provider = professional,
-                        onClick = { onNavigateToProviderProfile(professional.id) },
-                        onChat = { onNavigateToChat(professional.id) },
-                        onToggleFavorite = onToggleFavorite,
-                        allCategories = allCategories,
-                        //isExpanded = isExpanded,
-                        //onExpandToggle = {
-                           // onExpandToggle(if (isExpanded) null else professional.id)
-                        //}
-                    )
-                }
-
-
-            }
-        }
-    }
-}
-**/
 
 @Composable
 fun ResultHeaderSection(
@@ -573,7 +314,6 @@ fun ResultHeaderSection(
             }
         )
     }
-
     val baseColor = category?.let { Color(it.color) } ?: MaterialTheme.colorScheme.surface
 
     Surface(
@@ -605,7 +345,6 @@ fun ResultHeaderSection(
                     }
                 }
             )
-
             // 2. Gradiente horizontal oscuro para legibilidad
             Box(modifier = Modifier
                 .fillMaxSize()
@@ -617,7 +356,6 @@ fun ResultHeaderSection(
                     )
                 )
             )
-
             // 3. Icono de categoría en el fondo (Derecha)
             category?.icon?.let { iconEmoji ->
                 Box(
@@ -636,7 +374,6 @@ fun ResultHeaderSection(
                     )
                 }
             }
-
             // 4. Contenido Principal
             Row(
                 modifier = Modifier
@@ -671,9 +408,8 @@ fun ResultHeaderSection(
                             .background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(2.dp))
                     )
                 }
-
                 Spacer(modifier = Modifier.weight(1f))
-                            }
+           }
         }
     }
 }
@@ -689,18 +425,14 @@ fun EmptyStateMessage() {
         }
     }
 }
-
 // --- [SECCIÓN: HELPERS DE FILTRADO] ---
-
 fun isProvider24h(provider: Provider): Boolean =
     provider.companies.any { it.works24h }
-
 fun doesProviderHomeVisits(provider: Provider): Boolean =
     provider.companies.any { it.doesHomeVisits }
-
 fun hasProviderPhysicalLocation(provider: Provider): Boolean =
     provider.companies.any { it.hasPhysicalLocation }
-
+//------------------------------------------------PREVIEW---------------------------------------------------
 @Preview(showBackground = true)
 @Composable
 fun ResultBusquedaCategoriaScreenPreview() {
@@ -786,6 +518,7 @@ fun ResultBusquedaCategoriaScreenPreview() {
                 )
             ),
             categoryName = "Informatica",
+            searchQuery = "",
             isLoading = false,
             onBack = {},
             onNavigateToProviderProfile = {},

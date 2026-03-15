@@ -2,8 +2,10 @@ package com.example.myapplication.presentation.components
 
 import android.R.attr.enabled
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.expandVertically
@@ -18,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,8 +85,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -95,6 +101,9 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.example.myapplication.R
 import com.example.myapplication.data.local.CategoryEntity
@@ -312,7 +321,7 @@ fun PrestadorCard(
         DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }, offset = DpOffset(x = 16.dp, y = 0.dp)) {
             DropdownMenuItem(text = { Text("Ver Perfil Completo") }, leadingIcon = { Icon(Icons.Default.Person, null) }, onClick = { showContextMenu = false; onClick() })
             HorizontalDivider()
-            DropdownMenuItem(text = { Text(if (provider.isFavorite) "Quitar de Favoritos" else "Añadir a Favoritos") }, leadingIcon = { Icon(imageVector = if (provider.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, null, tint = if (provider.isFavorite) Color.Red else Color.Unspecified) }, onClick = { showContextMenu = false; showFavoriteDialog = true })
+            DropdownMenuItem(text = { Text(if (provider.isFavorite) "Quitar de Favoritos" else "Añadir de Favoritos") }, leadingIcon = { Icon(imageVector = if (provider.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, null, tint = if (provider.isFavorite) Color.Red else Color.Unspecified) }, onClick = { showContextMenu = false; showFavoriteDialog = true })
         }
     }
 
@@ -357,269 +366,21 @@ fun PrestadorCard(
 // ==========================================================================================
 // ------------------ TARJETA PRESTADOR VERTICAL --------------------------------------
 // ==========================================================================================
-// Actualización en TarjetaPrestador.kt
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)@Composable
-fun PrestadorCardVertical(
-    provider: Provider,
-    onClick: () -> Unit, // Navegación a PerfilPrestadorScreen
-    onChat: (() -> Unit)? = null,
-    onToggleFavorite: ((String, Boolean) -> Unit)? = null,
-    allCategories: List<CategoryEntity> = emptyList()
-) {
-    var expandedBadgeId by remember { mutableStateOf<String?>(null) }
-    var showVerifiedPopup by remember { mutableStateOf(false) }
+// ==========================================================================================// ------------------ TARJETA PRESTADOR VERTICAL V2 (EXPANDIBLE) ----------------------------
+// ==========================================================================================
 
-    val animateBrush = geminiGradientBrush(isAnimated = true)
-    val baseColor = Color(0xFF22D3EE)
+// * Versión 2 de la Tarjeta de Prestador.
+// * Implementa un modo compacto que se expande al tocarlo con animaciones premium.
+// */
 
-    val mainCompany = provider.companies.firstOrNull()
-    val companyName = mainCompany?.name ?: ""
-
-    val works24h = mainCompany?.works24h ?: provider.works24h
-    val doesHomeVisits = mainCompany?.doesHomeVisits ?: provider.doesHomeVisits
-    val acceptsAppointments = mainCompany?.acceptsAppointments ?: provider.acceptsAppointments
-    val hasPhysicalLocation = mainCompany?.hasPhysicalLocation ?: provider.hasPhysicalLocation
-    val doesShipping = provider.doesShipping
-
-    // Ordenamiento: True primero
-    val inferiorBadges = remember(provider) {
-        listOf(
-            BadgeItem("24h", "🕒", Icons.Default.AccessTimeFilled, "Atención las 24 Horas", works24h),
-            BadgeItem("loc", "🏪", Icons.Default.Storefront, "Tiene Local Físico", hasPhysicalLocation),
-            BadgeItem("visit", "🚚", Icons.Default.LocalShipping, "Servicio/Visitas TÉCNICAS a Domicilio", doesHomeVisits),
-            BadgeItem("env", "📦", Icons.Default.LocalShipping, "Realiza Envíos", doesShipping),
-            BadgeItem("date", "📅", Icons.Default.EventAvailable, "Turnos Disponibles", acceptsAppointments)
-        ).sortedByDescending { it.isActive }
-    }
-
-    val superiorBadges = remember {
-        listOf(
-            BadgeItem("serv", "🛠️", Icons.Default.Build, "Ofrece Servicios Profesionales Especializados", true),
-            BadgeItem("prod", "🛍️", Icons.Default.ShoppingBag, "Venta Directa de Productos y Accesorios", true)
-        ).sortedByDescending { it.isActive }
-    }
-
-    Box(
-        modifier = Modifier
-            .width(185.dp)
-            .padding(top = 15.dp, end = 15.dp, bottom = 15.dp)
-    ) {
-        // --- TARJETA BASE ---
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(245.dp) // Altura optimizada
-                .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                .combinedClickable(onClick = onClick),
-            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-            elevation = CardDefaults.cardElevation(8.dp)
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                // Fondo Cyberpunk
-                Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF1A1F26), Color(0xFF0A0E14)))))
-
-                // Glow superior
-                Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(0.7f).height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(0.3f), Color.Transparent))))
-
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    //Spacer(modifier = Modifier.height(10.dp))
-
-                    // 1. IMAGEN DE PERFIL CENTRADA
-                    Box(contentAlignment = Alignment.BottomEnd) {
-                        Box(contentAlignment = Alignment.TopStart) {
-                            AsyncImage(
-                                model = provider.photoUrl,
-                                contentDescription = "Perfil",
-                                modifier = Modifier
-                                    .size(95.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
-                                    .clickable { onClick() },
-                                contentScale = ContentScale.Crop
-                            )
-                            if (provider.isOnline) {
-                                Box(modifier = Modifier.size(16.dp).offset((-4).dp, (-4).dp).background(Color(0xFF00E676), CircleShape).border(2.dp, Color(0xFF0A0E14), CircleShape))
-                            }
-                        }
-                        if (provider.isVerified) {
-                            Icon(
-                                imageVector = Icons.Filled.Verified,
-                                contentDescription = "Verificado",
-                                tint = Color(0xFF9B51E0),
-                                modifier = Modifier.size(30.dp).offset(x = 4.dp, y = 4.dp).background(Color(0xFF0A0E14), CircleShape).padding(2.dp).clickable { showVerifiedPopup = true }
-                            )
-                            DropdownMenu(expanded = showVerifiedPopup, onDismissRequest = { showVerifiedPopup = false }, modifier = Modifier.background(Color(0xFF161C24)).border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))) {
-                                Text("Prestador verificado por la app. Identidad y servicios validados.", modifier = Modifier.padding(12.dp).widthIn(max = 200.dp), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 14.sp)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // 2. NOMBRE Y EMPRESA
-                    Text(text = provider.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, textAlign = TextAlign.Center, lineHeight = 18.sp)
-
-                    if (companyName.isNotEmpty()) {
-                        Text(text = companyName.uppercase(), style = MaterialTheme.typography.labelSmall, color = baseColor.copy(alpha = 0.7f), fontWeight = FontWeight.Black, fontSize = 8.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp))
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.1f))
-                    // ESPACIO REDUCIDO
-                    //Spacer(modifier = Modifier.height(8.dp))
-                    // 3. RANKING Y FAVORITO
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
-                            Text(text = " ${provider.rating}", style = MaterialTheme.typography.bodySmall, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                            Text(text = " VALORACIÓN", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.4f), fontSize = 7.sp, fontWeight = FontWeight.Bold)
-                        }
-                        IconButton(onClick = { onToggleFavorite?.invoke(provider.id, !provider.isFavorite) }, modifier = Modifier.size(24.dp)) {
-                            Icon(imageVector = if (provider.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, contentDescription = null, tint = if (provider.isFavorite) Color.Red else Color.Gray, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    //Spacer(modifier = Modifier.weight(1f))
-                    // 4. DIVIDER SUTIL
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.White.copy(alpha = 0.1f))
-
-                    // Espacio para los badges inferiores superpuestos
-                   // Spacer(modifier = Modifier.height(12.dp))
-                }
-            }
-        }
-
-        // --- BADGES SUPERIORES VERTICALES (SUPERPUESTOS AL BORDE IZQUIERDO) ---
-        Column(
-            modifier = Modifier.align(Alignment.CenterStart).offset(x = 4.dp, y = (-65).dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            superiorBadges.forEach { badge ->
-                BadgeConPopup(
-                    item = badge,
-                    isExpanded = expandedBadgeId == badge.id,
-                    onToggle = { expandedBadgeId = if (expandedBadgeId == badge.id) null else badge.id },
-                    size = 30.dp,
-                    fontSize = 15.sp
-                )
-            }
-        }
-
-        // --- BADGES INFERIORES (SUPERPUESTOS AL BORDE INFERIOR) ---
-        Row(
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = (-2).dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-        ) {
-            inferiorBadges.forEach { badge ->
-                BadgeConPopup(
-                    item = badge,
-                    isExpanded = expandedBadgeId == badge.id,
-                    onToggle = { expandedBadgeId = if (expandedBadgeId == badge.id) null else badge.id }
-                )
-            }
-        }
-
-        // --- BOTÓN DE MENSAJE FLOTANTE (CORNER DERECHO SUPERIOR) ---
-        Box(modifier = Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-8).dp)) {
-            IconButton(
-                onClick = { onChat?.invoke() },
-                modifier = Modifier.size(44.dp).background(animateBrush, CircleShape).border(1.5.dp, Color.White.copy(0.3f), CircleShape)
-            ) {
-                Icon(imageVector = Icons.Default.Email, contentDescription = "Mensaje", tint = Color.White, modifier = Modifier.size(22.dp))
-            }
-        }
-    }
-}
-
-@Composable
-fun BadgeConPopup(
-    item: BadgeItem,
-    isExpanded: Boolean,
-    onToggle: () -> Unit,
-    size: Dp = 26.dp,
-    fontSize: TextUnit = 13.sp
-) {
-    Box {
-        @Suppress("DEPRECATION")
-        Box(
-            modifier = Modifier
-                .size(size)
-                .background(Color(0xFF1C222A), CircleShape)
-                // Borde más claro para diferenciar del fondo
-                .border(1.2.dp, if (item.isActive) Color.White.copy(0.4f) else Color.White.copy(0.2f), CircleShape)
-                .clip(CircleShape)
-                .clickable { onToggle() }
-                .drawWithContent {
-                    drawContent()
-                    // Si no está activo, dibujamos una línea diagonal (tachado)
-                    if (!item.isActive) {
-                        drawLine(
-                            color = Color.Gray.copy(alpha = 0.5f),
-                            start = Offset(x = size.toPx() * 0.25f, y = size.toPx() * 0.25f),
-                            end = Offset(x = size.toPx() * 0.75f, y = size.toPx() * 0.75f),
-                            strokeWidth = 2.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            if (item.isActive) {
-                // Estado Activo: Emoji
-                Text(text = item.icon, fontSize = fontSize)
-            } else {
-                // Estado Inactivo: Icono gris
-                Icon(
-                    imageVector = item.inactiveIcon,
-                    contentDescription = null,
-                    tint = Color.Gray.copy(alpha = 0.4f),
-                    modifier = Modifier.size(size * 0.55f)
-                )
-            }
-        }
-
-        // Popup descriptivo al tocar el badge
-        DropdownMenu(
-            expanded = isExpanded,
-            onDismissRequest = onToggle,
-            modifier = Modifier
-                .background(Color(0xFF161C24))
-                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                if (item.isActive) {
-                    Text(text = item.icon, fontSize = 14.sp)
-                } else {
-                    Icon(item.inactiveIcon, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = if (item.isActive) item.label else "${item.label} (No disponible)",
-                    color = if (item.isActive) Color.White else Color.Gray,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    textDecoration = if (!item.isActive) TextDecoration.LineThrough else null,
-                    modifier = Modifier.widthIn(max = 200.dp)
-                )
-            }
-        }
-    }
-}
-/**
- * Versión 2 de la Tarjeta de Prestador.
- * Implementa un modo compacto que se expande al tocarlo con animaciones premium.
- */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun PrestadorCardVerticalV2(
     provider: Provider,
     isExpanded: Boolean = false, // 🔥 NUEVO: El estado viene de afuera
     onExpandToggle: () -> Unit = {}, // 🔥 NUEVO: Callback para avisar que se tocó
+    columnIndex: Int = 0,               // 🔥 DEBES AGREGAR ESTE PARÁMETRO AQUÍ
     onClick: () -> Unit,
     onChat: (() -> Unit)? = null,
     onToggleFavorite: ((String, Boolean) -> Unit)? = null,
@@ -959,20 +720,6 @@ fun PrestadorCardPreview() {
     MyApplicationTheme {
         Box(modifier = Modifier.padding(16.dp)) {
             PrestadorCard(
-                provider = mockProviderPreview,
-                onClick = {},
-                allCategories = mockCategoriesPreview
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFF0A0E14)
-@Composable
-fun PrestadorCardVerticalPreview() {
-    MyApplicationTheme {
-        Box(modifier = Modifier.padding(16.dp)) {
-            PrestadorCardVertical(
                 provider = mockProviderPreview,
                 onClick = {},
                 allCategories = mockCategoriesPreview

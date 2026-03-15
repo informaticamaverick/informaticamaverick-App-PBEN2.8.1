@@ -1,47 +1,46 @@
 package com.example.myapplication.presentation.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication.ui.theme.MyApplicationTheme
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import androidx.compose.animation.core.*
-import androidx.compose.ui.graphics.graphicsLayer
-
+import com.example.myapplication.ui.theme.MyApplicationTheme
 
 @Composable
 fun MenuOrdenamiento(
     activeFilters: Set<String>,
-    onAction: (String) -> Unit, // Se dispara en cada clic para actualización real-time
-    onApply: () -> Unit,       // Solo para cerrar el menú formalmente
+    onAction: (String) -> Unit,
+    onApply: () -> Unit,
     onClearFilters: () -> Unit,
-    modifier: Modifier = Modifier,
+    //modifier: Modifier = Modifier,
     showNombre: Boolean = false,
     showRank: Boolean = false,
     showViewModes: Boolean = false
@@ -49,68 +48,90 @@ fun MenuOrdenamiento(
     var isExpanded by remember { mutableStateOf(false) }
     val hasFilters = activeFilters.isNotEmpty()
 
-    // --- ANIMACIÓN DE REBOTE PARA EL CONTENIDO ---
-    // Usamos un float que va de 0 a 1 para controlar la escala con rebote
-    val transitionState = remember { MutableTransitionState(false) }
-    transitionState.targetState = isExpanded
+    // 1. Rotación de la tuerca
+    val gearRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        label = "GearRotation"
+    )
 
+    // 2. Escala con Rebote (Spring)
     val scale by animateFloatAsState(
         targetValue = if (isExpanded) 1f else 0f,
         animationSpec = if (isExpanded) {
-            // Spring con bajo damping causa el efecto "boing" o rebote
-            spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessLow
-            )
+            spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
         } else {
-            tween(durationMillis = 150)
-        },
-        label = "ReboteMenu"
+            tween(200)
+        }
     )
 
     val cardBackground = Brush.verticalGradient(
         colors = listOf(Color(0xFF1A1F26), Color(0xFF0A0E14))
     )
 
-    Box(modifier = modifier) {
-        // --- 1. BOTONES BASE (X y Engranaje) ---
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(4.dp)
+    // 🔥 CORRECCIÓN: Quitamos fillMaxWidth() para que no tape el texto de HomeScreen
+    Box(
+
+       modifier = Modifier,
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        // 🔥 BOTÓN X (Limpiar): Brota y se esconde detrás del engranaje
+        // Lo ponemos ANTES en el código para que el Engranaje se dibuje ENCIMA (Z-index natural)
+        AnimatedVisibility(
+            visible = hasFilters,
+            enter = fadeIn(tween(400)) +
+                    slideInHorizontally(initialOffsetX = { it }), // Sale desde la posición del gear
+            exit = fadeOut(tween(300)) +
+                    slideOutHorizontally(targetOffsetX = { it })  // Se esconde hacia el gear
         ) {
-            // Botón X (Limpiar)
-            if (hasFilters) {
-                IconButton(
-                    onClick = { onClearFilters() },
-                    modifier = Modifier
-                        .size(32.dp)
-                        .background(Color.Red.copy(alpha = 0.1f), CircleShape)
+            // El paddingEnd asegura que la X se detenga a la izquierda del engranaje
+            Surface(
+                onClick = { onClearFilters() },
+                modifier = Modifier
+                    .padding(end = 40.dp) // 32dp del gear + 8dp de espacio
+                    .size(32.dp),
+                shape = CircleShape,
+                color = Color(0xFF1A1F26),
+                border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(0.7f), Color.Transparent))),
+                shadowElevation = 6.dp
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.radialGradient(listOf(Color(0xFFEF4444).copy(0.15f), Color.Transparent))
+                    )
                 ) {
-                    Icon(Icons.Default.Close, null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = Color(0xFFEF4444))
                 }
             }
-
-            // Engranaje (Solo emoji)
-            Text(
-                text = "⚙️",
-                fontSize = 28.sp,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { isExpanded = !isExpanded }
-            )
         }
 
-        // --- 2. POPUP CON REBOTE ---
-        if (isExpanded || scale > 0.01f) { // Mantenemos el popup vivo mientras la animación termina
+        // --- BOTÓN ENGRANAJE (Ancla absoluta) ---
+        // Al estar al final del Box y alineado al End, nunca se moverá
+        Surface(
+            onClick = { isExpanded = !isExpanded },
+            modifier = Modifier
+                .size(32.dp)
+                .graphicsLayer { rotationZ = gearRotation },
+            shape = CircleShape,
+            color = Color(0xFF1A1F26),
+            border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(0.7f), Color.Transparent))),
+            shadowElevation = 6.dp
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Text(text = "⚙️", fontSize = 16.sp)
+            }
+        }
+    }
+
+        // --- EL POPUP QUE "BROTA" ---
+        if (isExpanded || scale > 0.01f) {
             Popup(
                 alignment = Alignment.TopEnd,
-                offset = IntOffset(0, -10), // Ajuste fino sobre el icono
+                offset = IntOffset(-50, 115),
                 properties = PopupProperties(focusable = true, dismissOnClickOutside = true),
                 onDismissRequest = { isExpanded = false }
             ) {
-                // Aplicamos la escala de rebote al contenedor
                 Column(
                     horizontalAlignment = Alignment.End,
                     modifier = Modifier
@@ -118,44 +139,72 @@ fun MenuOrdenamiento(
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale
-                            // El punto de origen es abajo a la derecha (donde está el icono)
-                            transformOrigin = TransformOrigin(1f, 1f)
                             alpha = scale.coerceIn(0f, 1f)
+                            transformOrigin = TransformOrigin(1f, 0f)
                         }
-                        .padding(bottom = 45.dp) // Espacio para que la cola apunte al icono
                 ) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp)),
-                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 24.dp,
+                                    topEnd = 4.dp,
+                                    bottomStart = 24.dp,
+                                    bottomEnd = 24.dp
+                                )
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(
+                                    topStart = 24.dp,
+                                    topEnd = 4.dp,
+                                    bottomStart = 24.dp,
+                                    bottomEnd = 24.dp
+                                )
+                            )
                     ) {
                         Box(modifier = Modifier.background(cardBackground)) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                // HEADER
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                // Header del Menú
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("ORDENAR POR", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                                    Text(
+                                        text = "ORDENAR POR",
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 10.sp,
+                                        letterSpacing = 1.5.sp
+                                    )
 
-                                    // Botón aplicar (Cierra el menú)
-                                    IconButton(
-                                        onClick = {
-                                            isExpanded = false
-                                            onApply()
-                                        },
-                                        modifier = Modifier.size(24.dp).background(Color(0xFF10B981), CircleShape)
+                                    HorizontalDivider(
+                                        modifier = Modifier.weight(1f).padding(horizontal = 1.dp),
+                                        thickness = 0.5.dp,
+                                        color = Color.White.copy(alpha = 0.9f)
+                                    )
+
+                                    Surface(
+                                        onClick = { isExpanded = false; onApply() },
+                                        modifier = Modifier.size(36.dp),
+                                        shape = CircleShape,
+                                        color = Color(0xFF1A1F26),
+                                        border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(0.7f), Color.Transparent))),
+                                        shadowElevation = 6.dp
                                     ) {
-                                        Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Check, null, tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
+                                        }
                                     }
                                 }
+                                // ... (Sigue el contenido de CompactItemButton igual que antes)
 
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
 
-                                // BOTONES DE ACCIÓN (MULTISELECCIÓN REAL-TIME)
+                                // BOTONES DE OPCIONES
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -163,20 +212,12 @@ fun MenuOrdenamiento(
                                     if (showNombre) {
                                         val isAsc = activeFilters.contains("sort_nombre_asc")
                                         val isDesc = activeFilters.contains("sort_nombre_desc")
-
-                                        // Cada clic llama a onAction, actualizando la lista externa inmediatamente
                                         CompactItemButton(
                                             item = ControlItem("Nombre", Icons.Default.SortByAlpha, "ABC", Color(0xFF2197F5), "sort_nombre"),
                                             isSelected = isAsc || isDesc,
                                             onClick = {
-                                                val next = when {
-                                                    isAsc -> "sort_nombre_desc"
-                                                    isDesc -> ""
-                                                    else -> "sort_nombre_asc"
-                                                }
-                                                onAction(next)
-                                            },
-                                            overlayEmoji = if (isAsc) "🔼" else if (isDesc) "🔽" else null
+                                                onAction(if (isAsc) "sort_nombre_desc" else if (isDesc) "" else "sort_nombre_asc")
+                                            }
                                         )
                                     }
 
@@ -188,16 +229,15 @@ fun MenuOrdenamiento(
                                             isSelected = isRAsc || isRDesc,
                                             onClick = {
                                                 onAction(if (isRAsc) "sort_rank_desc" else if (isRDesc) "" else "sort_rank_asc")
-                                            },
-                                            overlayEmoji = if (isRAsc) "🔼" else if (isRDesc) "🔽" else null
+                                            }
                                         )
                                     }
+
 
                                     if (showViewModes) {
                                         val isBento = activeFilters.contains("view_bento")
                                         val isGrid = activeFilters.contains("view_grid")
 
-                                        // Update instantáneo de modo de vista
                                         CompactItemButton(
                                             item = ControlItem("Grupos", Icons.Default.GridView, "🍱", Color(0xFF2197F5), "view_bento"),
                                             isSelected = isBento,
@@ -213,28 +253,10 @@ fun MenuOrdenamiento(
                             }
                         }
                     }
-                    // COLA DE LA BURBUJA (Apunta al engranaje)
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 15.dp)
-                            .size(18.dp, 10.dp)
-                            .background(Color(0xFF0A0E14), DownwardComicTailShape())
-                    )
                 }
             }
         }
     }
-}
-
-/**
- * Triángulo que apunta hacia abajo para la burbuja.
- */
-fun DownwardComicTailShape() = GenericShape { size, _ ->
-    moveTo(0f, 0f)
-    lineTo(size.width, 0f)
-    lineTo(size.width / 2f, size.height)
-    close()
-}
 
 @Preview(showBackground = true, backgroundColor = 0xFF05070A)
 @Composable

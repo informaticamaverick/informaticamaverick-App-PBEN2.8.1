@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -25,6 +28,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,9 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlurEffect
@@ -48,22 +54,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.local.CategoryEntity
+import com.example.myapplication.presentation.client.SuperCategory
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import androidx.compose.ui.draw.drawBehind
 
 // ==========================================================================================
-// ------------------------ NUEVA TARJETA VERTICAL BENTO GLASS ---
+// ------------------------ NUEVA TARJETA CATEGORIA VERTICAL BENTO GLASS ---
 // ==========================================================================================
 @Composable
 fun CompactCategoryCard(item: CategoryEntity, onClick: () -> Unit) {
     val baseColor = Color(item.color)
-
     var expandedBadge by remember { mutableStateOf<String?>(null) }
     var expandedInfoBadge by remember { mutableStateOf(false) }
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -100,7 +106,6 @@ fun CompactCategoryCard(item: CategoryEntity, onClick: () -> Unit) {
                             )
                         )
                 )
-
                 // CAPA DE DIFUMINADO SUPERIOR (Neblina de color)
                 Box(
                     modifier = Modifier
@@ -109,7 +114,6 @@ fun CompactCategoryCard(item: CategoryEntity, onClick: () -> Unit) {
                         .blur(5.dp)
                         .background(baseColor.copy(alpha = 0.9f))
                 )
-
                 // EMOJI CENTRAL CON SOMBRA NATURAL (Solución a los "2 iconos")
                 Text(
                     text = item.icon,
@@ -125,8 +129,6 @@ fun CompactCategoryCard(item: CategoryEntity, onClick: () -> Unit) {
                         )
                     )
                 )
-
-
                 // SECCIÓN INFERIOR: Divider, Info Badge y Nombre
                 Column(
                     modifier = Modifier
@@ -362,7 +364,6 @@ fun CompactCategoryCardHorizontal(item: CategoryEntity, onClick: () -> Unit) {
                             )
                         }
                     }
-
                     // SECCIÓN DERECHA (Icono)
                     Box(
                         modifier = Modifier
@@ -385,7 +386,6 @@ fun CompactCategoryCardHorizontal(item: CategoryEntity, onClick: () -> Unit) {
                 }
             }
         }
-
         // BADGES SUPERIORES (Centrados a la izquierda)
         Row(
             modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp),
@@ -397,33 +397,120 @@ fun CompactCategoryCardHorizontal(item: CategoryEntity, onClick: () -> Unit) {
         }
     }
 }
-
+// ==========================================================================================
+// ------------------- TARJETA ESTILO BENTO PARA SUPERCATEGORÍAS (Extraída de HomeScreenCliente3)--------------------------------
+// ==========================================================================================
+@Composable
+fun BentoSuperCategoryCard(
+    superCategory: SuperCategory, 
+    emoji: String, 
+    height: Dp, 
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .clickable(onClick = onClick)
+            .shadow(12.dp, RoundedCornerShape(32.dp)),
+        shape = RoundedCornerShape(32.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1C1E))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Fondo con degradado
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color.Black.copy(0.85f)
+                        )
+                    )
+                ))
+            // Iconos internos difuminados
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .blur(radius = 20.dp)
+                .alpha(0.35f)) {
+                LazyVerticalGrid(GridCells.Fixed(2), userScrollEnabled = false) {
+                    items(items = superCategory.items, key = { it.name }) { item ->
+                        Text(item.icon, fontSize = 55.sp, modifier = Modifier
+                            .padding(8.dp)
+                            .alpha(0.5f))
+                    }
+                }
+            }
+            // Info inferior
+            Column(modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(20.dp)) {
+                Text(
+                    text = superCategory.title, 
+                    color = Color.White, 
+                    style = MaterialTheme.typography.titleLarge, 
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = "${superCategory.items.size} servicios", 
+                    color = Color.White.copy(alpha = 0.7f), 
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+           // Emoji identificador superior
+            Text(emoji, fontSize = 44.sp, modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .alpha(0.85f))
+        }
+    }
+}
+//==========================================================================================
+// ------------------- PREVIEWS--------------------------------
+// ==========================================================================================
 @Preview(showBackground = true)
 @Composable
-fun CompactCategoryCardPreview() {
-    MyApplicationTheme {
-        val sampleItem = CategoryEntity(
-            name = "Peluquería",
-            icon = "✂️",
-            color = 0xFFF8BBD0,
-            superCategory = "Cuidado Personal y Moda",
-            isNew = true,
-            isNewPrestador = true,
-            isAd = true,
-            imageUrl = null
+fun BentoSuperCategoryCardPreview() {
+    val sampleCategories = listOf(
+        CategoryEntity(
+            name = "Limpieza", icon = "🧹", color = 0xFFFAD2E1L, superCategory = "Hogar",
+            superCategoryIcon = "🏠", providerIds = emptyList(), imageUrl = null, isNew = false, isNewPrestador = false, isAd = false
+        ),
+        CategoryEntity(
+            name = "Plomería", icon = "🪠", color = 0xFFBCAAA4L, superCategory = "Hogar",
+            superCategoryIcon = "🏠", providerIds = emptyList(), imageUrl = null, isNew = false, isNewPrestador = false, isAd = false
+        ),
+        CategoryEntity(
+            name = "Electricidad", icon = "⚡", color = 0xFFFFF59DL, superCategory = "Hogar",
+            superCategoryIcon = "🏠", providerIds = emptyList(), imageUrl = null, isNew = false, isNewPrestador = false, isAd = false
+        ),
+        CategoryEntity(
+            name = "Carpintería", icon = "🪚", color = 0xFFD7CCC8L, superCategory = "Hogar",
+            superCategoryIcon = "🏠", providerIds = emptyList(), imageUrl = null, isNew = false, isNewPrestador = false, isAd = false
         )
-        Box(modifier = Modifier.padding(16.dp).width(160.dp)) {
-            CompactCategoryCard(
-                item = sampleItem,
+    )
+    val sampleSuperCat = SuperCategory(
+        title = "Hogar y Construcción",
+        icon = "🏠",
+        items = sampleCategories
+    )
+    MyApplicationTheme {
+        Box(modifier = Modifier
+            .padding(16.dp)
+            .width(300.dp)) {
+            BentoSuperCategoryCard(
+                superCategory = sampleSuperCat,
+                emoji = sampleSuperCat.icon,
+                height = 200.dp,
                 onClick = {}
             )
         }
     }
 }
-
 @Preview(showBackground = true)
 @Composable
-fun CompactCategoryCardHorizontalPreview() {
+fun CompactCategoryCardhHorizontalPreview() {
     MyApplicationTheme {
         val sampleItem = CategoryEntity(
             name = "Peluquería",
@@ -437,6 +524,29 @@ fun CompactCategoryCardHorizontalPreview() {
         )
         Box(modifier = Modifier.padding(16.dp).fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
             CompactCategoryCardHorizontal(
+                item = sampleItem,
+                onClick = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun CompactCategoryCardPreview() {
+    val sampleItem = CategoryEntity(
+        name = "Electricidad",
+        icon = "⚡",
+        color = 0xFFFFD54F,
+        superCategory = "Hogar",
+        isNew = true,
+        isNewPrestador = true,
+        isAd = true,
+        imageUrl = null
+    )
+    MyApplicationTheme {
+        Box(modifier = Modifier.padding(16.dp).width(160.dp)) {
+            CompactCategoryCard(
                 item = sampleItem,
                 onClick = {}
             )

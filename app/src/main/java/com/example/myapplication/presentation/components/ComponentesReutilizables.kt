@@ -1,6 +1,12 @@
 package com.example.myapplication.presentation.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -33,9 +39,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +57,7 @@ import kotlinx.coroutines.delay
 import java.text.Normalizer
 import java.util.Locale
 import kotlin.math.absoluteValue
+
 // ==========================================================================================
 // --- SECCIÓN 1: UTILIDADES Y EXTENSIONES ---
 // ==========================================================================================
@@ -237,10 +246,11 @@ data class AccordionBanner(
 @Composable
 fun PremiumLensCarousel(
     items: List<AccordionBanner>,
+    isPaused: Boolean = false, // 🔥 AGREGA ESTA LÍNEA
     onSettingsClick: () -> Unit,
     onItemClick: (AccordionBanner) -> Unit,
     modifier: Modifier = Modifier,
-    autoplayDelay: Long = 5000L
+    autoplayDelay: Long = 2000L
 ) {
     // Si no hay ítems, no renderizamos nada
     if (items.isEmpty()) return
@@ -249,6 +259,17 @@ fun PremiumLensCarousel(
     var expandedMenu by remember { mutableStateOf(false) }
     var activeFilters by remember { mutableStateOf<Set<String>>(emptySet()) }
     var tempFilters by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // --- ANIMACIÓN DE ROTACIÓN PARA EL ENGRANAJE ---
+    // Definimos una animación para que el engranaje gire 360 grados cuando el menú se expande.
+    val gearRotation by animateFloatAsState(
+        targetValue = if (expandedMenu) 360f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "gearRotation"
+    )
 
     // Lógica de filtrado base: Mantiene anuncios y filtra contenido según selección
     val baseFilteredItems = remember(items, activeFilters) {
@@ -299,24 +320,42 @@ fun PremiumLensCarousel(
     val initialPage = infiniteCount / 2 - (infiniteCount / 2 % displayItems.size.coerceAtLeast(1))
     val pagerState = rememberPagerState(initialPage = initialPage) { infiniteCount }
 
-    // Efecto para el Autoplay automático del carrusel
-    LaunchedEffect(key1 = displayItems) {
-        while (true) {
-            delay(autoplayDelay)
-            if (displayItems.size > 1) {
-                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+    // 🔥 SOLUCIÓN: Unificamos los efectos en uno solo que respete isPaused
+    LaunchedEffect(isPaused, displayItems) {
+        // Solo iniciamos el bucle si NO está pausado y hay más de un ítem
+        if (!isPaused && displayItems.size > 1) {
+            while (true) {
+                delay(autoplayDelay)
+                // Verificamos de nuevo isPaused por si cambió durante el delay
+                 if (!isPaused) {
+                  pagerState.animateScrollToPage(pagerState.currentPage + 1)
+             }
             }
         }
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // Cabecera con título y botón de filtros (Tres puntos)
+        // Cabecera con título y botones de acción (Filtros y Limpieza)
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 3.dp)
+                .animateContentSize( // 🔥 Esto anima el crecimiento/achique del divider
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                ),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            // --- ESTRUCTURA: TEXTO + DIVISOR DINÁMICO ---
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 1.dp)
+            ) {
                 Text(
                     text = "DESTACADOS & NOVEDADES",
                     color = Color.White.copy(alpha = 0.9f),
@@ -324,96 +363,227 @@ fun PremiumLensCarousel(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 2.sp
                 )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                HorizontalDivider(
+                    modifier = Modifier.weight(1f),
+                    thickness = 0.5.dp,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
             }
-            Box {
-                // Si hay filtros activos, mostramos botón de cerrar para limpiar
-                if (activeFilters.isNotEmpty()) {
-                    IconButton(
-                        onClick = {
-                            activeFilters = emptySet()
-                            tempFilters = emptySet()
-                        },
-                        modifier = Modifier
-                            .size(24.dp)
-                            .background(Color(0xFFEF4444).copy(alpha = 0.2f), CircleShape)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Limpiar Filtros", tint = Color(0xFFEF4444), modifier = Modifier.size(14.dp))
-                    }
-                } else {
-                    // Botón de tres puntos para abrir el menú de filtros
-                    IconButton(
-                        onClick = {
-                            tempFilters = activeFilters
-                            expandedMenu = true 
-                        },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Filtros", tint = Color.White.copy(alpha = 0.7f))
+
+            // --- CONTENEDOR DE BOTONES DE ACCIÓN ---
+            Row(verticalAlignment = Alignment.CenterVertically) {
+
+                // 🔥 ANIMACIÓN: El botón X brota y se esconde detrás del engranaje
+                AnimatedVisibility(
+                    visible = activeFilters.isNotEmpty(),
+                    enter = fadeIn(tween(400)) +
+                            slideInHorizontally(
+                                initialOffsetX = { it },
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                            ),
+                    exit = fadeOut(tween(300)) +
+                            slideOutHorizontally(
+                                targetOffsetX = { it },
+                                animationSpec = tween(300)
+                            )
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            onClick = {
+                                activeFilters = emptySet()
+                                tempFilters = emptySet()
+                            },
+                            modifier = Modifier.size(32.dp),
+                            shape = CircleShape,
+                            color = Color(0xFF1A1F26),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                brush = Brush.linearGradient(
+                                    colors = listOf(Color.White.copy(0.7f), Color.Transparent)
+                                )
+                            ),
+                            shadowElevation = 6.dp
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(Color(0xFFEF4444).copy(0.15f), Color.Transparent)
+                                        )
+                                    )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Limpiar Filtros",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFFEF4444)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
                 }
-                // Menú desplegable que contiene las opciones de filtrado funcionales
-                DropdownMenu(
-                    expanded = expandedMenu,
-                    onDismissRequest = { expandedMenu = false },
-                    modifier = Modifier.background(Color(0xFF161C24)).border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+
+                // Botón Engranaje
+                Box {
+                    Surface(
+                        onClick = {
+                            tempFilters = activeFilters
+                            expandedMenu = !expandedMenu
+                        },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .graphicsLayer(rotationZ = gearRotation),
+                        shape = CircleShape,
+                        color = Color(0xFF1A1F26),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color.White.copy(0.7f), Color.Transparent)
+                            )
+                        ),
+                        shadowElevation = 6.dp
                     ) {
-                        Text("FILTROS", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                        // Botón Check para aplicar los filtros seleccionados
-                        IconButton(
-                            onClick = {
-                                activeFilters = tempFilters
-                                expandedMenu = false
-                            },
-                            modifier = Modifier.size(24.dp).background(Color(0xFF10B981).copy(alpha = 0.2f), CircleShape)
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            Icon(Icons.Default.Check, contentDescription = "Aplicar", tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                            Text(text = "⚙️", fontSize = 16.sp)
                         }
                     }
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
-                    val options = listOf(
-                        "NOVEDADES" to "🚀",
-                        "PROMOCIONES" to "🔥",
-                        "PRODUCTOS" to "🛍️",
-                        "SERVICIOS" to "🛠️"
-                    )
+                    // DropdownMenu sigue aquí debajo...
+                    // Menú desplegable premium
+                    DropdownMenu(
+                        expanded = expandedMenu,
+                        onDismissRequest = { expandedMenu = false },
+                        offset = DpOffset(x = (0).dp, y = 0.dp),
+                        modifier = Modifier
+                            .width(220.dp) // Ensanchado un poco para que entren ambos botones cómodamente
+                            .background(Color(0xFF0F1419)) // Fondo más oscuro para contraste
+                            .border(
+                                1.dp,
+                                Color.White.copy(alpha = 0.12f),
+                                RoundedCornerShape(16.dp)
+                            )
+                    ) {
+                        // CABECERA DEL MENÚ CON BOTONES PREMIUM
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "FILTROS",
+                                color = Color.White.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.5.sp
+                            )
 
-                    options.forEach { (option, emoji) ->
-                        val isSelected = tempFilters.contains(option)
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(emoji, fontSize = 14.sp)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = option,
-                                        color = if (isSelected) Color(0xFF2197F5) else Color.White,
-                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal,
-                                        fontSize = 12.sp
-                                    )
+                            // CONTENEDOR DE BOTONES (LIMPIAR Y APLICAR)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                          // BOTÓN CHECK (APLICAR) ESTILO PREMIUM
+                                Surface(
+                                    onClick = {
+                                        activeFilters = tempFilters
+                                        expandedMenu = false
+                                    },
+                                    modifier = Modifier.size(36.dp), // Más grande para denotar acción principal
+                                    shape = CircleShape,
+                                    color = Color(0xFF1A1F26),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(Color.White.copy(0.2f), Color.Transparent)
+                                        )
+                                    ),
+                                    shadowElevation = 6.dp
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.radialGradient(
+                                                    listOf(
+                                                        Color(0xFF10B981).copy(0.15f),
+                                                        Color.Transparent
+                                                    ) // Resplandor Verde
+                                                )
+                                            )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Aplicar",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Color(0xFF10B981) // Verde esmeralda premium
+                                        )
+                                    }
                                 }
-                            },
-                            trailingIcon = {
-                                if (isSelected) {
-                                    Icon(Icons.Default.Check, null, tint = Color(0xFF2197F5), modifier = Modifier.size(16.dp))
-                                }
-                            },
-                            onClick = {
-                                // Actualizamos los filtros temporales antes de aplicar
-                                tempFilters = if (isSelected) tempFilters - option else tempFilters + option
                             }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            color = Color.White.copy(alpha = 0.08f)
                         )
+
+                        val options = listOf(
+                            "NOVEDADES" to "🚀",
+                            "PROMOCIONES" to "🔥",
+                            "PRODUCTOS" to "🛍️",
+                            "SERVICIOS" to "🛠️"
+                        )
+
+                        options.forEach { (option, emoji) ->
+                            val isSelected = tempFilters.contains(option)
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(emoji, fontSize = 14.sp)
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            text = option,
+                                            color = if (isSelected) Color(0xFF22D3EE) else Color.White.copy(0.8f),
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                },
+                                trailingIcon = {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = Color(0xFF22D3EE),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    tempFilters = if (isSelected) tempFilters - option else tempFilters + option
+                                },
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }
         }
 
-        HorizontalDivider(color = Color.White.copy(alpha = 0.4f))
+       // HorizontalDivider(color = Color.White.copy(alpha = 0.4f))
         Spacer(modifier = Modifier.height(4.dp))
 
         // Carrusel Horizontal con scroll infinito
@@ -422,7 +592,9 @@ fun PremiumLensCarousel(
             pageSize = PageSize.Fixed(300.dp),
             pageSpacing = 4.dp,
             contentPadding = PaddingValues(start = 10.dp, end = 64.dp),
-            modifier = Modifier.fillMaxWidth().height(140.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
         ) { index ->
             // El índice real se obtiene con el operador módulo sobre la lista de ítems a mostrar
             val actualIndex = index % displayItems.size
@@ -465,16 +637,60 @@ fun PremiumBannerItem(item: AccordionBanner, onClick: () -> Unit) {
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 if (item.imageUrl != null) AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = 0.4f)
-                Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f).drawWithCache { val gradient = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent), start = Offset(0f, 0f), end = Offset(size.width, size.height)); onDrawWithContent { drawContent(); drawRect(gradient, blendMode = BlendMode.Overlay) } })
-                Box(modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Black.copy(alpha = 0.4f), Color.Transparent), startX = 0f, endX = 600f)))
-                
-                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.weight(0.85f).fillMaxHeight().padding(start = 10.dp, top = 20.dp, bottom = 16.dp), contentAlignment = Alignment.CenterStart) {
-                        Column { AutoResizingText(text = item.title.uppercase(), color = Color.White, maxFontSize = 20.sp); Text(text = item.subtitle, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 16.sp); Spacer(modifier = Modifier.height(10.dp)); Box(modifier = Modifier.width(40.dp).height(3.dp).background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(2.dp))) }
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(alpha = 0.99f)
+                    .drawWithCache {
+                        val gradient = Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.15f),
+                                Color.Transparent
+                            ), start = Offset(0f, 0f), end = Offset(size.width, size.height)
+                        ); onDrawWithContent {
+                        drawContent(); drawRect(
+                        gradient,
+                        blendMode = BlendMode.Overlay
+                    )
                     }
-                    Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.7f).background(Brush.verticalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.4f), Color.Transparent))))
+                    })
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.85f),
+                                Color.Black.copy(alpha = 0.4f),
+                                Color.Transparent
+                            ), startX = 0f, endX = 600f
+                        )
+                    ))
 
-                    Box(modifier = Modifier.weight(0.35f).fillMaxHeight(), contentAlignment = Alignment.CenterEnd) {
+                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier
+                        .weight(0.85f)
+                        .fillMaxHeight()
+                        .padding(start = 10.dp, top = 20.dp, bottom = 16.dp), contentAlignment = Alignment.CenterStart) {
+                        Column { AutoResizingText(text = item.title.uppercase(), color = Color.White, maxFontSize = 20.sp); Text(text = item.subtitle, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 16.sp); Spacer(modifier = Modifier.height(10.dp)); Box(modifier = Modifier
+                            .width(40.dp)
+                            .height(3.dp)
+                            .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(2.dp))) }
+                    }
+                    Box(modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight(0.7f)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.4f),
+                                    Color.Transparent
+                                )
+                            )
+                        ))
+
+                    Box(modifier = Modifier
+                        .weight(0.35f)
+                        .fillMaxHeight(), contentAlignment = Alignment.CenterEnd) {
                         Text(
                             text = item.icon,
                             fontSize = 100.sp,
@@ -493,7 +709,10 @@ fun PremiumBannerItem(item: AccordionBanner, onClick: () -> Unit) {
         }
 
         // --- ETIQUETAS SUPERPUESTAS AL BORDE SUPERIOR ---
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).zIndex(1f)) {
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .zIndex(1f)) {
             Row(modifier = Modifier.align(Alignment.TopStart), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Etiqueta principal (NUEVO / NUEVA CATEGORÍA / NUEVOS PRESTADORES)
                 if (item.isNew || item.type == BannerType.NEW_CATEGORY || item.type == BannerType.NEW_PROVIDER) {
@@ -517,7 +736,7 @@ fun PremiumBannerItem(item: AccordionBanner, onClick: () -> Unit) {
                         )
                     }
                 }
-                
+
                 // Etiqueta informativa del tipo de banner
                 if (item.type != BannerType.NEW_CATEGORY && item.type != BannerType.NEW_PROVIDER && item.type != BannerType.PROMO) {
                     Surface(
@@ -554,21 +773,36 @@ fun PromotionBannerItem(item: AccordionBanner, onClick: () -> Unit) {
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 if (item.imageUrl != null) AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = 0.4f)
-                Box(modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(colors = listOf(Color.Black.copy(alpha = 0.9f), Color.Transparent), startX = 0f, endX = 500f)))
-                
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.9f),
+                                Color.Transparent
+                            ), startX = 0f, endX = 500f
+                        )
+                    ))
+
                 Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.weight(0.65f).fillMaxHeight().padding(start = 16.dp, top = 20.dp, bottom = 4.dp), contentAlignment = Alignment.CenterStart) {
+                    Box(modifier = Modifier
+                        .weight(0.65f)
+                        .fillMaxHeight()
+                        .padding(start = 16.dp, top = 20.dp, bottom = 4.dp), contentAlignment = Alignment.CenterStart) {
                         Column {
                             AutoResizingText(text = item.title.uppercase(), color = Color.White, maxFontSize = 18.sp)
                             Text(text = item.subtitle, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            
+
                             Spacer(modifier = Modifier.weight(1f))
-                            
+
                             item.provider?.let { provider ->
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
-                                        .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                        .background(
+                                            Color.Black.copy(alpha = 0.3f),
+                                            RoundedCornerShape(16.dp)
+                                        )
                                         .padding(end = 10.dp)
                                 ) {
                                     AsyncImage(
@@ -577,7 +811,11 @@ fun PromotionBannerItem(item: AccordionBanner, onClick: () -> Unit) {
                                         modifier = Modifier
                                             .size(32.dp)
                                             .clip(CircleShape)
-                                            .border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape),
+                                            .border(
+                                                1.5.dp,
+                                                Color.White.copy(alpha = 0.5f),
+                                                CircleShape
+                                            ),
                                         contentScale = ContentScale.Crop
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -604,8 +842,10 @@ fun PromotionBannerItem(item: AccordionBanner, onClick: () -> Unit) {
                             }
                         }
                     }
-                    
-                    Box(modifier = Modifier.weight(0.35f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+
+                    Box(modifier = Modifier
+                        .weight(0.35f)
+                        .fillMaxHeight(), contentAlignment = Alignment.Center) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = item.icon,
@@ -613,7 +853,7 @@ fun PromotionBannerItem(item: AccordionBanner, onClick: () -> Unit) {
                                 modifier = Modifier.offset(y = (-8).dp),
                                 style = TextStyle(shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(0f, 10f), blurRadius = 15f))
                             )
-                            
+
                             Surface(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
@@ -636,8 +876,11 @@ fun PromotionBannerItem(item: AccordionBanner, onClick: () -> Unit) {
             }
         }
 
-        // --- ETIQUETA DE DESCUENTO SUPERPUESTA ---
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).zIndex(1f)) {
+        // --- ETIQUETAS DE DESCUENTO SUPERPUESTA ---
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .zIndex(1f)) {
             Surface(
                 modifier = Modifier.align(Alignment.TopStart),
                 color = Color(0xFFE91E63),
@@ -768,7 +1011,9 @@ fun ServiceTagPreview() {
 @Composable
 fun PremiumBannerItemPreview() {
     MyApplicationTheme {
-        Box(modifier = Modifier.padding(16.dp).size(width = 300.dp, height = 140.dp)) {
+        Box(modifier = Modifier
+            .padding(16.dp)
+            .size(width = 300.dp, height = 140.dp)) {
             PremiumBannerItem(
                 item = AccordionBanner(
                     id = "1",
@@ -886,7 +1131,9 @@ fun PromotionBannerItemPreview() {
     )
 
     MyApplicationTheme {
-        Box(modifier = Modifier.padding(16.dp).size(width = 300.dp, height = 140.dp)) {
+        Box(modifier = Modifier
+            .padding(16.dp)
+            .size(width = 300.dp, height = 140.dp)) {
             PromotionBannerItem(
                 item = AccordionBanner(
                     id = "2",

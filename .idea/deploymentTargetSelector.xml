@@ -24,9 +24,6 @@
         </DropdownSelection>
         <DialogSelection />
       </SelectionState>
-      <SelectionState runConfigName="BeAssistantSearchFlowPreview">
-        <option name="selectionMode" value="DROPDOWN" />
-      </SelectionState>
       <SelectionState runConfigName="BeSmallActionsBuilderPreview">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
@@ -37,6 +34,9 @@
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
       <SelectionState runConfigName="BeSearchingScreenPreview">
+        <option name="selectionMode" value="DROPDOWN" />
+      </SelectionState>
+      <SelectionState runConfigName="PrestadorCardCompactV3Preview">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
     </selectionStates>
