@@ -47,6 +47,7 @@ import com.example.myapplication.prestador.R
 @Composable
 fun PrestadorLoginScreen(
     onLoginSuccess: (hasProfile: Boolean) -> Unit,
+    onNavigateToRegister: () -> Unit,
     viewModel: PrestadorLoginViewModel = hiltViewModel()
 ) {
     var email by remember { mutableStateOf("") }
@@ -82,17 +83,24 @@ fun PrestadorLoginScreen(
                 account.idToken?.let { idToken ->
                     viewModel.handleGoogleSignInResult(idToken)
                 } ?: run {
-                    // Si el idToken es null
-                    errorMessage = "No se pudo obtener el token de Google. Verifica la configuración de Firebase."
-                    isLoading = false
+                    // Si el idToken es null (SHA-1 no registrado en Firebase Console)
+                    errorMessage = "No se pudo obtener el token de Google. Verifica que el SHA-1 esté registrado en Firebase Console."
+                    viewModel.resetLoginState()
                 }
             } catch (e: ApiException) {
-                errorMessage = "Error al iniciar sesión con Google: ${e.message}"
-                isLoading = false
+                val detalle = when (e.statusCode) {
+                    10 -> "Error de configuración (código 10): registra el SHA-1 del certificado en Firebase Console."
+                    7  -> "Sin conexión a internet (código 7)."
+                    12500 -> "Inicio de sesión fallido (código 12500). Verifica google-services.json."
+                    12501 -> null // usuario canceló, no mostramos error
+                    else -> "Error Google (código ${e.statusCode}): ${e.message}"
+                }
+                errorMessage = detalle
+                viewModel.resetLoginState()
             }
         } else {
-            // Si el usuario cancela el login
-            isLoading = false
+            // El usuario canceló la pantalla de selección de cuenta
+            viewModel.resetLoginState()
         }
     }
 
@@ -416,8 +424,29 @@ fun PrestadorLoginScreen(
                 )
             }
         }
-                
-                Spacer(modifier = Modifier.height(16.dp))
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "¿No tienes cuenta?",
+                color = colors.textSecondary,
+                fontSize = 14.sp
+            )
+            TextButton(onClick = onNavigateToRegister) {
+                Text(
+                    text = "Registrate sin Google",
+                    color = colors.primaryOrange,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }

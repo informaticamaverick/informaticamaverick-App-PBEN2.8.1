@@ -7,6 +7,8 @@ import com.example.myapplication.prestador.data.repository.AppointmentRepository
 import com.example.myapplication.prestador.data.repository.PresupuestoRepository
 import com.example.myapplication.prestador.data.repository.ProviderRepository
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +21,7 @@ import javax.inject.Inject
 
 data class DashboardUiState(
     val saludo: String = "",
+    val nombrePrestador: String = "",
     val proximaCita: AppointmentEntity? = null,
     val citasHoy: Int = 0,
     val gananciasSemanales: Double = 0.0,
@@ -35,6 +38,7 @@ class DashboardViewModel @Inject constructor(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+    private val firestore = FirebaseFirestore.getInstance()
 
     init {
         calcularSaludo()
@@ -56,21 +60,33 @@ class DashboardViewModel @Inject constructor(
     private fun cargarServiceType() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
-            providerRepository.getProviderById(uid).collect { provider ->
-                val tipo = provider?.serviceType ?: "TECHNICAL"
-                _uiState.update {
-                    it.copy(serviceType = tipo)
-                }
+            try {
+                // Siempre cargar desde Firebase para garantizar datos del usuario correcto
+                val doc = firestore.collection("usuarios").document(uid).get().await()
+                val tipo = doc.getString("serviceType") ?: "TECHNICAL"
+                val nombre = doc.getString("nombre") ?: ""
+                _uiState.update { it.copy(serviceType = tipo, nombrePrestador = nombre) }
                 cargarDatos(tipo)
+            } catch (e: Exception) {
+                // Fallback a Room si Firebase falla
+                providerRepository.getProviderById(uid).collect { provider ->
+                    val tipo = provider?.serviceType ?: "TECHNICAL"
+                    _uiState.update {
+                        it.copy(serviceType = tipo, nombrePrestador = provider?.name ?: "")
+                    }
+                    cargarDatos(tipo)
+                }
             }
         }
     }
 
     private fun cargarDatos(serviceType: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         val hoy = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             .format(Calendar.getInstance().time)
         viewModelScope.launch {
-            appointmentRepository.getAllAppointments()
+            // Filtrar citas por el UID del usuario actual
+            appointmentRepository.getAppointmentsByProvider(uid)
                 .collect { citas ->
                     val citasHoy = citas.count {
                         it.date == hoy && it.status != "cancelado" && it.status != "cancelled"
@@ -98,7 +114,7 @@ class DashboardViewModel @Inject constructor(
             val cal = Calendar.getInstance()
             cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
             val fromDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
-            val ganancias = presupuestoRepository.getGananciasDesde("prestador_demo", fromDate)
+            val ganancias = presupuestoRepository.getGananciasDesde(uid, fromDate)
             _uiState.update { it.copy(gananciasSemanales = ganancias) }
         }
     }

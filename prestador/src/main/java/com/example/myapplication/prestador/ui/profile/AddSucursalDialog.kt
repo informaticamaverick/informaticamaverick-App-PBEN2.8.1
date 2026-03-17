@@ -18,19 +18,17 @@ import com.example.myapplication.prestador.ui.register.FloatingLabelTextField
 
 @Composable
 fun AddSucursalDialog(
-    sucursal: SucursalEntity? = null, // null = agregar, con data = editar
+    sucursal: SucursalEntity? = null,
     onDismiss: () -> Unit,
-    onConfirm: (nombre: String, direccion: String, codigoPostal: String, telefono: String?) -> Unit,
+    onConfirm: (nombre: String, telefono: String?, email: String?, horario: String?) -> Unit,
     onUpdate: (SucursalEntity) -> Unit = {}
 ) {
     var nombre by remember { mutableStateOf(sucursal?.nombre ?: "") }
-    var direccion by remember { mutableStateOf(sucursal?.direccion ?: "") }
-    var codigoPostal by remember { mutableStateOf(sucursal?.codigoPostal ?: "") }
     var telefono by remember { mutableStateOf(sucursal?.telefono ?: "") }
+    var email by remember { mutableStateOf(sucursal?.email ?: "") }
+    var horario by remember { mutableStateOf(sucursal?.horario ?: "") }
     
     var nombreError by remember { mutableStateOf(false) }
-    var direccionError by remember { mutableStateOf(false) }
-    var codigoPostalError by remember { mutableStateOf(false) }
 
     val isEditMode = sucursal != null
 
@@ -71,55 +69,11 @@ fun AddSucursalDialog(
                         nombre = it
                         nombreError = false
                     },
-                    label = "Nombre de la sucursal",
+                    label = "Nombre de la sucursal *",
                     leadingIcon = Icons.Default.Business,
                     keyboardType = KeyboardType.Text
                 )
                 if (nombreError) {
-                    Text(
-                        text = "Campo obligatorio",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Dirección
-                FloatingLabelTextField(
-                    value = direccion,
-                    onValueChange = {
-                        direccion = it
-                        direccionError = false
-                    },
-                    label = "Dirección",
-                    leadingIcon = Icons.Default.LocationOn,
-                    keyboardType = KeyboardType.Text
-                )
-                if (direccionError) {
-                    Text(
-                        text = "Campo obligatorio",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Código Postal
-                FloatingLabelTextField(
-                    value = codigoPostal,
-                    onValueChange = {
-                        codigoPostal = it
-                        codigoPostalError = false
-                    },
-                    label = "Código Postal",
-                    leadingIcon = Icons.Default.PinDrop,
-                    keyboardType = KeyboardType.Number
-                )
-                if (codigoPostalError) {
                     Text(
                         text = "Campo obligatorio",
                         color = MaterialTheme.colorScheme.error,
@@ -139,6 +93,28 @@ fun AddSucursalDialog(
                     keyboardType = KeyboardType.Phone
                 )
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Email (opcional)
+                FloatingLabelTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = "Email (opcional)",
+                    leadingIcon = Icons.Default.Email,
+                    keyboardType = KeyboardType.Email
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Horario (opcional)
+                FloatingLabelTextField(
+                    value = horario,
+                    onValueChange = { horario = it },
+                    label = "Horario (ej: Lun-Vie 9-18hs)",
+                    leadingIcon = Icons.Default.Schedule,
+                    keyboardType = KeyboardType.Text
+                )
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Botones
@@ -155,23 +131,24 @@ fun AddSucursalDialog(
 
                     Button(
                         onClick = {
-                            // Validación
                             nombreError = nombre.isBlank()
-                            direccionError = direccion.isBlank()
-                            codigoPostalError = codigoPostal.isBlank()
-
-                            if (!nombreError && !direccionError && !codigoPostalError) {
+                            if (!nombreError) {
                                 if (isEditMode) {
                                     onUpdate(
                                         sucursal!!.copy(
-                                            nombre = nombre,
-                                            direccion = direccion,
-                                            codigoPostal = codigoPostal,
-                                            telefono = telefono.takeIf { it.isNotBlank() }
+                                            nombre = nombre.trim(),
+                                            telefono = telefono.takeIf { it.isNotBlank() },
+                                            email = email.takeIf { it.isNotBlank() },
+                                            horario = horario.takeIf { it.isNotBlank() }
                                         )
                                     )
                                 } else {
-                                    onConfirm(nombre, direccion, codigoPostal, telefono.takeIf { it.isNotBlank() })
+                                    onConfirm(
+                                        nombre,
+                                        telefono.takeIf { it.isNotBlank() },
+                                        email.takeIf { it.isNotBlank() },
+                                        horario.takeIf { it.isNotBlank() }
+                                    )
                                 }
                             }
                         },

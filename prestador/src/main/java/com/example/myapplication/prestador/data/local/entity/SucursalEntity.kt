@@ -6,10 +6,9 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 
 /**
- * Entidad de base de datos: Sucursal
- * guarda las sucursales del negocio del prestador
+ * Entidadd de base de datos: Sucursal
+ * Guarda las sucursales del negocio del prestaor
  */
-
 @Entity(
     tableName = "sucursales",
     foreignKeys = [
@@ -22,19 +21,24 @@ import androidx.room.Index
     ],
     indices = [Index(value = ["businessId"])]
 )
+
 data class SucursalEntity(
     @PrimaryKey
     val id: String,
     val businessId: String,
     val nombre: String,
-    val direccion: String,
-    val codigoPostal: String,
     val telefono: String? = null,
     val email: String? = null,
-    val horario: String? = null, //Horario de atención
-    val latitude: Double? = null,
-    val longitude: Double? = null,
+    val horario: String? = null,
+
+    //Direccion ( referencia a DireccionEntity)
+    val direccionId: String? = null,
+
+    //Refrente de la sucursal (referencia a ReferenteEntity)
+    val referenteId: String? = null,
+
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
+
 )

@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -98,47 +99,36 @@ fun ChatListScreen(
         SortMode.RECENT -> filteredConversations.sortedByDescending { it.timestamp }
     }
 
+    val totalConversaciones = conversations.size
+    val noLeidos = conversations.sumOf { it.unreadCount }
+
     Scaffold(
         containerColor = colors.backgroundColor,
         topBar = {
-            if (isDeletionMode) {
-                //Top para modo de eliminacion
-                TopAppBar(
-                    title = {
-                        Text("${selectedChatsForDeletion.size} seleccionados") },
+            when {
+                isDeletionMode -> TopAppBar(
+                    title = { Text("${selectedChatsForDeletion.size} seleccionados") },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            onDeletionModeChange(false)
-                            onChatSelectionChange(emptySet())
-                        }) {
-                            Icon(Icons.Default.Close, "Cancelar")
+                        IconButton(onClick = { onDeletionModeChange(false); onChatSelectionChange(emptySet()) }) {
+                            Icon(Icons.Default.Close, "Cancelar", tint = Color.White)
                         }
                     },
                     actions = {
-                        IconButton(onClick = {
-                            //Todo: elimanr chats seleccionados
-                            onDeletionModeChange(false)
-                            onChatSelectionChange(emptySet())
-                        }) {
-                            Icon(Icons.Default.Delete, "Eliminar", tint = Color.Red)
+                        IconButton(onClick = { onDeletionModeChange(false); onChatSelectionChange(emptySet()) }) {
+                            Icon(Icons.Default.Delete, "Eliminar", tint = Color.White)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFFFF6B35),
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White,
-                        actionIconContentColor = Color.White
+                        containerColor = colors.primaryOrange,
+                        titleContentColor = Color.White
                     )
                 )
-            } else if (isSearchActive) {
-                //Barra de busqueda
-                TopAppBar(
+                isSearchActive -> TopAppBar(
                     title = {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = onSearchQueryChange,
-                            placeholder = {
-                                Text("Buscar conversaciones...") },
+                            placeholder = { Text("Buscar conversaciones...") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
@@ -150,52 +140,13 @@ fun ChatListScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            onSearchActiveChange(false)
-                            onSearchQueryChange("")
-                        }) {
+                        IconButton(onClick = { onSearchActiveChange(false); onSearchQueryChange("") }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = Color.White)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFFFF6B35)
-                    )
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.primaryOrange)
                 )
-            } else {
-                // TopBar normal con gradiente
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Conversaciones",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                "Volver",
-                                tint = Color.White
-                            )
-                        }
-                    },
-                    actions = {
-                        // Botón de búsqueda
-                        IconButton(onClick = { onSearchActiveChange(true) }) {
-                            Icon(Icons.Default.Search, "Buscar", tint = Color.White)
-                        }
-                        
-                        // Botón de configuración
-                        IconButton(onClick = { /* TODO: Abrir configuración */ }) {
-                            Icon(Icons.Default.Settings, "Configuración", tint = Color.White)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFFFF6B35)
-                    )
-                )
+                else -> null
             }
         }
     ) { paddingValues ->
@@ -203,7 +154,79 @@ fun ChatListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .background(colors.backgroundColor)
         ) {
+            // ── HEADER estilo Inicio (solo en modo normal) ────────────────
+            if (!isDeletionMode && !isSearchActive) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    colors.primaryOrange,
+                                    colors.primaryOrange.copy(alpha = 0.85f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+                        )
+                        .padding(start = 4.dp, end = 16.dp, bottom = 20.dp, top = 8.dp)
+                ) {
+                    Column {
+                        // Fila título + acciones
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = onBack) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = Color.White)
+                                }
+                                Text("Conversaciones", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                            Row {
+                                IconButton(onClick = { onSearchActiveChange(true) }) {
+                                    Icon(Icons.Default.Search, "Buscar", tint = Color.White)
+                                }
+                                IconButton(onClick = { }) {
+                                    Icon(Icons.Default.Settings, "Configuración", tint = Color.White)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // Stats chips
+                        Row(
+                            modifier = Modifier.padding(start = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                Text("$totalConversaciones chats", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            }
+                            if (noLeidos > 0) {
+                                Row(
+                                    modifier = Modifier
+                                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(Icons.Default.MarkEmailUnread, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Text("$noLeidos sin leer", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             // Barra de filtros avanzados
             if (!isSearchActive && !isDeletionMode) {
                 FilterBar(
@@ -249,7 +272,8 @@ fun ChatListScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(sortedConversations, key = { it.userId }) { conversation ->
                         ChatListItem(
@@ -486,42 +510,46 @@ fun ChatListItem(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
-        color = if (isSelected) Color(0xFFE3F2FD) else colors.surfaceColor,
-        shape = RoundedCornerShape(12.dp),
-        shadowElevation = if (isSelected) 4.dp else 2.dp
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        color = if (isSelected) colors.primaryOrange.copy(alpha = 0.1f) else colors.surfaceColor,
+        shape = RoundedCornerShape(16.dp),
+        shadowElevation = 2.dp
     ) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            // Franja de color izquierda
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(
+                        if (conversation.unreadCount > 0) colors.primaryOrange else colors.primaryOrange.copy(alpha = 0.3f),
+                        RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
+                    )
+            )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar del usuario
-            Surface(
-                modifier = Modifier.size(56.dp),
-                shape = CircleShape,
-                color = Color(0xFFF97316)
+            // Avatar
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .background(colors.primaryOrange, CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = conversation.userName.take(1).uppercase(),
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Text(
+                    text = conversation.userName.take(1).uppercase(),
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Información del chat
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -529,106 +557,68 @@ fun ChatListItem(
                 ) {
                     Text(
                         text = conversation.userName,
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary,
                         modifier = Modifier.weight(1f)
                     )
-
-                    // Timestamp
                     Text(
                         text = formatTimestamp(conversation.timestamp),
-                        fontSize = 12.sp,
-                        color = colors.textPrimary,
+                        fontSize = 11.sp,
+                        color = colors.textSecondary
                     )
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
+                Spacer(modifier = Modifier.height(3.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Último mensaje
                     Text(
                         text = conversation.lastMessage,
-                        fontSize = 14.sp,
-                        color = colors.textSecondary,
+                        fontSize = 13.sp,
+                        color = if (conversation.unreadCount > 0) colors.textPrimary else colors.textSecondary,
+                        fontWeight = if (conversation.unreadCount > 0) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
-
-                    // Badge de mensajes no leídos
                     if (conversation.unreadCount > 0) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFFF97316),
-                            modifier = Modifier.padding(start = 8.dp)
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .background(colors.primaryOrange, CircleShape)
+                                .padding(horizontal = 7.dp, vertical = 3.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString(),
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Text(
+                                text = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString(),
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
-
                 // Indicadores de estado
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Icono de notificaciones silenciadas
-                    if (!conversation.notificationsEnabled) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = "Notificaciones desactivadas",
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    // Icono de chat bloqueado
-                    if (conversation.isLocked) {
-                        Icon(
-                            Icons.Default.Lock,
-                            contentDescription = "Chat bloqueado",
-                            tint = Color.Red,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    // Icono de chat oculto
-                    if (!conversation.isVisible) {
-                        Icon(
-                            Icons.Default.Visibility,
-                            contentDescription = "Chat oculto",
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
+                if (!conversation.notificationsEnabled || conversation.isLocked || !conversation.isVisible) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (!conversation.notificationsEnabled)
+                            Icon(Icons.Default.Notifications, null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
+                        if (conversation.isLocked)
+                            Icon(Icons.Default.Lock, null, tint = Color.Red, modifier = Modifier.size(14.dp))
+                        if (!conversation.isVisible)
+                            Icon(Icons.Default.Visibility, null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
                     }
                 }
             }
 
-            // Checkbox para modo eliminación
             if (inDeletionMode) {
                 Spacer(modifier = Modifier.width(8.dp))
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = null
-                )
+                Checkbox(checked = isSelected, onCheckedChange = null)
             }
         }
+        } // cierre Row externo con franja
     }
 }
 

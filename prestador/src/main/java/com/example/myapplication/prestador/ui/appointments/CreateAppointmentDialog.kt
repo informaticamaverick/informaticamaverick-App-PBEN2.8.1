@@ -4,6 +4,7 @@ import android.app.TimePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -54,6 +56,9 @@ fun CreateAppointmentDialog(
     colors: PrestadorColors,
     availableSpaces: List<Pair<String, String>> = emptyList(),
     availableSlots: List<String> = emptyList(),
+    isSlotsLoading: Boolean = false,
+    onRequestSlots: ((date: String, duration: Int) -> Unit)? = null,
+    slotsRequestKey: Any? = null,
     availableEmployees: List<Pair<String, String>> = emptyList(),
     initialClientName: String = "",
     initialService: String = "",
@@ -84,7 +89,11 @@ fun CreateAppointmentDialog(
         calendar.add(Calendar.DAY_OF_YEAR, 1)
     }
     var selectedDateMillis by remember { mutableStateOf(calendar.timeInMillis) }
-    var selectedTime by remember { mutableStateOf(initialTime) }
+    var selectedTime by remember {
+        mutableStateOf(
+            if (serviceType == ServiceType.PROFESSIONAL && !isEditMode) "" else initialTime
+        )
+    }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
@@ -100,6 +109,22 @@ fun CreateAppointmentDialog(
     var notes by remember { mutableStateOf(initialNotes) }
     var selectedEmployeeIds by remember { mutableStateOf(setOf<String>()) }
     var peopleCount by remember { mutableStateOf(initialPeopleCount) }
+
+    // Cargar/recargar turnos disponibles cuando cambia la fecha/duración o el providerId (via slotsRequestKey)
+    LaunchedEffect(serviceType, selectedDate, duration, slotsRequestKey) {
+        if (serviceType == ServiceType.PROFESSIONAL) {
+            onRequestSlots?.invoke(selectedDate, duration)
+        }
+    }
+
+    var lastProfessionalDate by remember { mutableStateOf(selectedDate) }
+    LaunchedEffect(serviceType, selectedDate) {
+        if (serviceType == ServiceType.PROFESSIONAL && selectedDate != lastProfessionalDate) {
+            selectedSlot = null
+            selectedTime = ""
+            lastProfessionalDate = selectedDate
+        }
+    }
     
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -258,7 +283,7 @@ fun CreateAppointmentDialog(
                             placeholder = { Text(config.descriptionPlaceholder, fontSize = 14.sp) },
                             leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Default.Build,
+                                    imageVector = if (serviceType == ServiceType.PROFESSIONAL) Icons.Default.Description else Icons.Default.Build,
                                     contentDescription = null,
                                     tint = colors.primaryOrange,
                                     modifier = Modifier.size(20.dp)
@@ -445,28 +470,69 @@ fun CreateAppointmentDialog(
                                         )
                                     }
                                     
-                                    if (availableSlots.isEmpty()) {
-                                        Text(
-                                            text = "No hay turnos disponibles para esta fecha",
-                                            fontSize = 13.sp,
-                                            color = colors.textSecondary,
-                                            modifier = Modifier.padding(8.dp)
-                                        )
-                                    } else {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            availableSlots.take(4).forEach { slot ->
-                                                FilterChip(
-                                                    selected = selectedSlot == slot,
-                                                    onClick = { selectedSlot = slot; selectedTime = slot },
-                                                    label = { Text(slot, fontWeight = FontWeight.Medium) },
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        selectedContainerColor = colors.primaryOrange,
-                                                        selectedLabelColor = Color.White
-                                                    )
+                                    when {
+                                        isSlotsLoading -> {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                modifier = Modifier.padding(8.dp)
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = colors.primaryOrange
                                                 )
+                                                Text(
+                                                    text = "Cargando turnos...",
+                                                    fontSize = 13.sp,
+                                                    color = colors.textSecondary
+                                                )
+                                            }
+                                        }
+                                        availableSlots.isEmpty() -> {
+                                            Text(
+                                                text = "No hay turnos disponibles para esta fecha",
+                                                fontSize = 13.sp,
+                                                color = colors.textSecondary,
+                                                modifier = Modifier.padding(8.dp)
+                                            )
+                                        }
+                                        else -> {
+                                            val columns = 3
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                availableSlots.chunked(columns).forEach { rowSlots ->
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        for (i in 0 until columns) {
+                                                            val slot = rowSlots.getOrNull(i)
+                                                            if (slot != null) {
+                                                                FilterChip(
+                                                                    selected = selectedSlot == slot,
+                                                                    onClick = { selectedSlot = slot; selectedTime = slot },
+                                                                    label = {
+                                                                        Text(
+                                                                            text = slot,
+                                                                            fontWeight = FontWeight.Medium,
+                                                                            modifier = Modifier.fillMaxWidth(),
+                                                                            textAlign = TextAlign.Center,
+                                                                            maxLines = 1,
+                                                                            softWrap = false
+                                                                        )
+                                                                    },
+                                                                    modifier = Modifier.weight(1f),
+                                                                    colors = FilterChipDefaults.filterChipColors(
+                                                                        selectedContainerColor = colors.primaryOrange,
+                                                                        selectedLabelColor = Color.White
+                                                                    )
+                                                                )
+                                                            } else {
+                                                                Spacer(modifier = Modifier.weight(1f))
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }

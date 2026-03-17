@@ -2,7 +2,9 @@ package com.example.myapplication.prestador.ui.navigation
 
 sealed class PrestadorRoutes(val route: String) {
     object Login : PrestadorRoutes("login")
-    object Register : PrestadorRoutes("register")
+    object Register : PrestadorRoutes("register?isGoogle={isGoogle}") {
+        fun createRoute(isGoogle: Boolean) = "register?isGoogle=$isGoogle"
+    }
     object Success : PrestadorRoutes("success")
     object Dashboard : PrestadorRoutes("dashboard")
     object EditProfile : PrestadorRoutes("edit_profile")

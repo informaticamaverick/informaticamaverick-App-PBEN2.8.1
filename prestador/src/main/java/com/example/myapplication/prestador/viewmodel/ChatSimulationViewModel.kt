@@ -1,6 +1,7 @@
 package com.example.myapplication.prestador.viewmodel
 
 import android.app.Application
+import androidx.compose.runtime.saveable.listSaver
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.prestador.data.ChatData
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.StringCharacterIterator
 import javax.inject.Inject
 
 @HiltViewModel
@@ -85,6 +87,23 @@ class ChatSimulationViewModel @Inject constructor(
                                         println("📅 PROPUESTA: ${message.appointmentId} de ${cliente.nombre}")
                                         viewModelScope.launch {
                                             processAppointmentProposal(userId, cliente.nombreCompleto, message)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Detectar cuando el prestador envía un presupuesto manualmente
+                            if (message.type == Message.MessageType.BUDGET &&
+                                message.isFromCurrentUser &&
+                                message.budgetTotal != null
+                            ) {
+                                synchronized(processedMessageTimestamps) {
+                                    val lastProcessedTime = processedMessageTimestamps[message.id]
+                                    if (lastProcessedTime == null || lastProcessedTime != message.timestamp) {
+                                        processedMessageTimestamps[message.id] = message.timestamp
+                                        println("💰 PRESUPUESTO enviado al cliente ${cliente.nombre}")
+                                        viewModelScope.launch {
+                                            procesarPresupuestoEnviado(userId, cliente.nombreCompleto, message)
                                         }
                                     }
                                 }
@@ -316,17 +335,72 @@ class ChatSimulationViewModel @Inject constructor(
                         timestamp = System.currentTimeMillis(),
                         type = Message.MessageType.TEXT
                     )
-                    ChatData.addMessageToUser(randomClient.id, newMessage)
-                    println("💬 Espontáneo de ${randomClient.nombre}: ${newMessage.text}")
-                    notificationHelper.showMessageNotification(
-                        context = context,
-                        clientName = randomClient.nombre,
-                        message = newMessage.text ?: "Nuevo mensaje"
-                    )
+                    if ((0..9).random() < 3) {
+                        // 30% de chances: cliente pide cita
+                        viewModelScope.launch {
+                            simularPedidoCitaEspontaneo(randomClient.id, randomClient.nombreCompleto, serviceType)
+                        }
+                    } else {
+                        //70% mensaje de texto normal
+                        ChatData.addMessageToUser(randomClient.id, newMessage)
+                        println("Espontáneo de ${newMessage.text}")
+                        notificationHelper.showMessageNotification(
+                            context = context,
+                            clientName = randomClient.nombre,
+                            message = newMessage.text ?: "Nuevo mensaje"
+                        )
+                    }
                 } catch (e: Exception) {
                     println("❌ Error en mensaje espontáneo: ${e.message}")
                 }
             }
+        }
+    }
+
+    /**
+     * Simula que un cliente pide una cita espontáneamente desde el chat
+     */
+    private suspend fun simularPedidoCitaEspontaneo(
+        userId: String,
+        userName: String,
+        serviceType: String
+    ) {
+        try {
+            val pedidoTexto = when (serviceType) {
+                "TECHNICAL" -> listOf(
+                    "Hola, ¿tenés disponibilidad esta semana para venir a revisar?",
+                    "Nesecito coordinar una fecha para que vengas",
+                    "¿cuándo podés venir?. Quiero agendar algo",
+
+                )
+                "PROFESSIONAL" -> listOf(
+                    "¿Podría sacar un turno esta semana?",
+                    "Hola, ¿tiene disponibilidad para una consulta?",
+                    "Queria reservar un turno, ¿cuándo tiene?",
+                    "¿Me puede dar un turno para la seman que viene?"
+                )
+                "RENTAL" -> listOf(
+                    "Hola, ¿podríamos reservar el espacio?",
+                    "¿Tiene disponibilidad para este fin de semana?",
+                    "Quiero reservar una fecha, ¿hablamos?",
+                    "¿Podemos coordinar la reserva del lugar?"
+                )
+                else -> listOf(
+                    "Hola, ¿podemos agendar una cita?",
+                    "¿Tenés disponibilidad para esta semana?",
+                    "Queria coordirnar una fecha"
+                )
+            }.random()
+            ChatData.addMessageToUser(userId, Message(
+                id = "msg_pide_cita_${System.currentTimeMillis()}",
+                text = pedidoTexto,
+                isFromCurrentUser = false,
+                timestamp = System.currentTimeMillis(),
+                type = Message.MessageType.TEXT
+            ))
+            notificationHelper.showMessageNotification(context, userName, pedidoTexto)
+        } catch (e: Exception) {
+            println("Error en pedido cita espontanéo: ${e.message}")
         }
     }
 
@@ -357,41 +431,26 @@ class ChatSimulationViewModel @Inject constructor(
             ))
             notificationHelper.showMessageNotification(context, userName, pedidoMsg)
 
-            // PASO 2: Prestador envía presupuesto (simulado)
-            delay((3000..5000).random().toLong())
-            val montoEstimado = (5000..50000).random().toDouble()
-            val presupuestoId = "pres_sim_${System.currentTimeMillis()}"
-            val presupuesto = PresupuestoEntity(
-                id = presupuestoId,
-                numeroPresupuesto = "P-${(1000..9999).random()}",
-                clienteId = userId,
-                prestadorId = cita.providerId,
-                fecha = cita.date,
-                validezDias = 7,
-                subtotal = montoEstimado,
-                impuestos = montoEstimado * 0.21,
-                total = montoEstimado * 1.21,
-                estado = "Enviado",
-                notas = "Presupuesto para: ${cita.service}",
-                itemsJson = "",
-                serviciosJson = "",
-                appointmentId = cita.id
-            )
-            presupuestoRepository.insertPresupuesto(presupuesto)
+            // El prestador envía el presupuesto manualmente desde la UI
+            // El simulador detecta el mensaje BUDGET en startAutoResponseSimulation y reacciona
 
-            ChatData.addMessageToUser(userId, Message(
-                id = "msg_envia_pres_${System.currentTimeMillis()}",
-                text = "Te envié el presupuesto por \$${"%,.0f".format(presupuesto.total)} para ${cita.service}. Incluye mano de obra y materiales.",
-                isFromCurrentUser = true,
-                timestamp = System.currentTimeMillis(),
-                type = Message.MessageType.TEXT
-            ))
+        } catch (e: Exception) {
+            println("❌ Error en flujo post-aceptación: ${e.message}")
+        }
+    }
 
-            // PASO 3: Cliente acepta el presupuesto
+    /**
+     * Reacciona cuando el prestador envía un presupuesto manualmente:
+     * cliente acepta → manda ubicación
+     */
+    private suspend fun procesarPresupuestoEnviado(
+        userId: String,
+        userName: String,
+        message: Message
+    ) {
+        try {
+            // Cliente acepta el presupuesto
             delay((5000..9000).random().toLong())
-            presupuestoRepository.updateEstado(presupuestoId, "Aceptado")
-            notificationHelper.showPresupuestoAceptadoNotification(userName, presupuesto.total)
-
             val aceptaMsg = listOf(
                 "Perfecto, acepto el presupuesto 👍",
                 "Está bien ese precio, lo acepto ✅",
@@ -406,8 +465,21 @@ class ChatSimulationViewModel @Inject constructor(
                 type = Message.MessageType.TEXT
             ))
             notificationHelper.showMessageNotification(context, userName, aceptaMsg)
+            notificationHelper.showPresupuestoAceptadoNotification(userName, message.budgetTotal ?: 0.0)
 
-            // PASO 4: Cliente manda su ubicación
+            // Programar auto-eliminación del presupuesto en 5 días
+            com.example.myapplication.prestador.utils.PresupuestoCleanupScheduler
+                .scheduleDelete(context, message.id)
+
+            // Actualizar estado en BD si tenemos el id
+            // (el estado también se puede actualizar manualmente desde la pantalla de presupuestos)
+            try {
+                presupuestoRepository.updateEstado(message.id, "Aceptado")
+            } catch (e: Exception) {
+                println("⚠️ No se pudo actualizar estado presupuesto: ${e.message}")
+            }
+
+            // Cliente manda su ubicación
             delay((3000..6000).random().toLong())
             val ubicaciones = listOf(
                 Triple(-26.8241, -65.2226, "Av. Mate de Luna 1234, San Miguel de Tucuman"),
@@ -415,7 +487,6 @@ class ChatSimulationViewModel @Inject constructor(
                 Triple(-26.8167, -65.2000, "Calle Corrientes 890, Tucuman"),
                 Triple(-26.8300, -65.2100, "Av. Belgrano 456, Tucuman")
             ).random()
-
             ChatData.addMessageToUser(userId, Message(
                 id = "msg_ubic_${System.currentTimeMillis()}",
                 text = "Te comparto mi ubicación: ${ubicaciones.third}",
@@ -425,18 +496,10 @@ class ChatSimulationViewModel @Inject constructor(
                 latitude = ubicaciones.first,
                 longitude = ubicaciones.second
             ))
-
-            // Actualizar notes de la cita con la dirección
-            val citaActualizada = cita.copy(
-                notes = ubicaciones.third,
-                updatedAt = System.currentTimeMillis()
-            )
-            appointmentRepository.updateAppointment(citaActualizada)
-
             notificationHelper.showMessageNotification(context, userName, "📍 ${ubicaciones.third}")
 
         } catch (e: Exception) {
-            println("❌ Error en flujo post-aceptación: ${e.message}")
+            println("❌ Error procesando presupuesto enviado: ${e.message}")
         }
     }
 

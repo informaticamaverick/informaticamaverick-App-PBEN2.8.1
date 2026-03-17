@@ -1,4 +1,4 @@
-package com.example.myapplication.prestador.ui.presupuesto
+﻿package com.example.myapplication.prestador.ui.presupuesto
 
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -29,6 +29,9 @@ import com.example.myapplication.prestador.data.model.Message
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager
 import com.example.myapplication.prestador.viewmodel.PresupuestoViewModel
+import com.example.myapplication.prestador.viewmodel.EditProfileViewModel
+import com.example.myapplication.prestador.viewmodel.ProfileState
+import com.example.myapplication.prestador.utils.toPrestadorProfileFalso
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
@@ -40,9 +43,27 @@ fun BudgetChatSheet(
     userId: String,
     userName: String,
     onDismiss: () -> Unit,
-    viewModel: PresupuestoViewModel = hiltViewModel()
+    viewModel: PresupuestoViewModel = hiltViewModel(),
+    editProfileViewModel: EditProfileViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
+    val profileState by editProfileViewModel.profileState.collectAsState()
+    val businessEntity by editProfileViewModel.businessEntity.collectAsState()
+
+    val isProfessional = (profileState as? ProfileState.Success) ?.provider?.serviceType.equals("PROFESSIONAL", ignoreCase = true) == true
+    val provider = ( profileState as? ProfileState.Success)?.provider
+    val providerDisplayName = when {
+        provider?.tieneEmpresa == true && !provider.nombreEmpresa.isNullOrBlank() -> provider.nombreEmpresa!!
+        provider?.tieneEmpresa == true && !businessEntity?.nombreNegocio.isNullOrBlank() -> businessEntity!!.nombreNegocio
+        else -> "${provider?.name.orEmpty()} ${provider?.apellido.orEmpty()}".trim()
+    }
+    val providerDisplayAddress = when {
+        provider?.tieneEmpresa == true && !businessEntity?.direccion.isNullOrBlank() -> businessEntity!!.direccion
+        provider?.tieneEmpresa == true && !provider.direccionEmpresa.isNullOrBlank() -> provider.direccionEmpresa!!
+        provider?.turnosEnLocal == true && !provider.direccionLocal.isNullOrBlank() -> provider.direccionLocal!!
+        !provider?.address.isNullOrBlank() -> provider.address!!
+        else -> ""
+    }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -53,19 +74,24 @@ fun BudgetChatSheet(
     val miscExpenses = remember { mutableStateListOf<BudgetMiscExpense>() }
     val taxes = remember { mutableStateListOf<BudgetTax>() }
 
-    // --- SECTION EXPANSION ---
-    var isArticlesExpanded by remember { mutableStateOf(true) }
-    var isServicesExpanded by remember { mutableStateOf(true) }
-    var isProfessionalFeesExpanded by remember { mutableStateOf(true) }
-    var isMiscExpanded by remember { mutableStateOf(true) }
-    var isTaxesExpanded by remember { mutableStateOf(true) }
+    // --- DATOS DEL CLIENTE ---
+    var clienteData by remember { mutableStateOf<ClienteEntity?>(null) }
+    LaunchedEffect(userId) {
+        if (userId.isNotBlank())  {
+            clienteData = viewModel.getClienteById(userId)
+        }
+    }
+
+    //---SECTION EPANSION (accordion: solo una abierta ala vez, todas cerradas por defecto) ---
+    var expandedSection by remember { mutableStateOf<String?>(null) }
 
     // --- DIALOG STATES ---
     var sheetType by remember { mutableStateOf<SheetType?>(null) }
     var itemToEdit by remember { mutableStateOf<Any?>(null) }
     var showPreviewDialog by remember { mutableStateOf(false) }
-    var showSaveCatalogDialog by remember { mutableStateOf(false) }
     var pendingPresupuesto by remember { mutableStateOf<PresupuestoEntity?>(null) }
+    var showIIBBDialog by remember { mutableStateOf(false) }
+    var showTaxDetail by remember { mutableStateOf(false) }
     val presupuestos by viewModel.presupuestos.collectAsState()
 
     // --- NOTES / VALIDITY ---
@@ -115,6 +141,34 @@ fun BudgetChatSheet(
         }.distinctBy { it.description }
     }
 
+    val suggServices = remember(presupuestos) {
+        presupuestos.flatMap { p ->
+            if (p.serviciosJson.isBlank()) emptyList()
+            else p.serviciosJson.split("|").mapNotNull { s ->
+                val parts = s.split(";")
+                if (parts.size >= 2) BudgetService(
+                    id = 0L, code = parts[0],
+                    description = parts[1],
+                    total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+                ) else null
+            }
+        }.distinctBy { it.description }
+    }
+
+    val suggFees = remember(presupuestos) {
+        presupuestos.flatMap { p ->
+            if (p.honorariosJson.isBlank()) emptyList()
+            else p.honorariosJson.split("|").mapNotNull { s ->
+                val parts = s.split(";")
+                if (parts.size >= 2) BudgetProfessionalFee(
+                    id = 0L, code = parts[0],
+                    description = parts[1],
+                    total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+                ) else null
+            }
+        }.distinctBy { it.description }
+    }
+
     // Descripciones ya guardadas en el catálogo (para detectar items nuevos)
     val knownItemDescriptions = remember(presupuestos) {
         presupuestos.flatMap { p ->
@@ -148,19 +202,15 @@ fun BudgetChatSheet(
     }
 
     fun hasNewItems(): Boolean {
+        val predefinedTaxLabels = setOf("IVA 21%", "IVA 10.5%", "IVA 27%") + taxes.filter { it.description.startsWith("IIBB") }.map { it.description }.toSet()
         return items.any { it.description !in knownItemDescriptions } ||
                services.any { it.description !in knownServiceDescriptions } ||
                professionalFees.any { it.description !in knownFeeDescriptions } ||
                miscExpenses.any { it.description !in knownMiscDescriptions } ||
-               taxes.any { it.description !in knownTaxDescriptions }
+               taxes.any { it.description !in knownTaxDescriptions && it.description !in predefinedTaxLabels }
     }
 
     fun buildPresupuesto(): PresupuestoEntity {
-        val clienteId = "cliente_chat_${System.currentTimeMillis()}"
-        viewModel.insertCliente(ClienteEntity(
-            id = clienteId, nombre = userName,
-            email = "", telefono = "", direccion = ""
-        ))
         val itemsJson = items.joinToString("|") {
             "${it.code};${it.description};${it.quantity};${it.unitPrice};${it.taxPercentage};${it.discountPercentage}"
         }
@@ -178,8 +228,8 @@ fun BudgetChatSheet(
         }
         return PresupuestoEntity(
             id = "pres_chat_${System.currentTimeMillis()}",
-            numeroPresupuesto = "P-${(1000..9999).random()}",
-            clienteId = clienteId,
+            numeroPresupuesto = (if (isProfessional) "C-%03d" else "P-%03d").format(presupuestos.size + 1),
+            clienteId = userId,
             prestadorId = "prestador_demo",
             fecha = java.time.LocalDate.now().toString(),
             validezDias = validity.toIntOrNull() ?: 7,
@@ -221,7 +271,7 @@ fun BudgetChatSheet(
                     )
                     Column {
                         Text(
-                            "Presupuesto para",
+                            if (isProfessional) "Consulta para" else "Presupuesto para",
                             style = MaterialTheme.typography.labelSmall,
                             color = colors.textSecondary
                         )
@@ -248,92 +298,55 @@ fun BudgetChatSheet(
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
                 // Articles
-                item {
+                if (!isProfessional) item {
                     CollapsibleSection(
                         title = "Artículos",
                         items = items,
                         sectionTotal = itemsSubtotal,
-                        isExpanded = isArticlesExpanded,
-                        onToggleExpand = { isArticlesExpanded = !isArticlesExpanded },
+                        isExpanded = expandedSection == "articles",
+                        onToggleExpand = { expandedSection = if (expandedSection == "articles") null else "articles" },
                         onAddClick = { itemToEdit = null; sheetType = SheetType.Article },
                         quickAddSlot = {
                             ArticleAutoCompleteFields(
                                 suggestions = suggestionItems,
                                 onAdd = { selected ->
                                     items.add(selected.copy(id = System.currentTimeMillis()))
-                                    isArticlesExpanded = true
+                                    expandedSection = "articles"
                                 }
                             )
                         }
                     ) { item, index ->
-                        var showMenu by remember { mutableStateOf(false) }
-                        Box {
                             ArticleSummaryRow(
-                                modifier = Modifier.pointerInput(Unit) {
-                                    detectTapGestures(onLongPress = { showMenu = true })
-                                },
-                                item = item
+                                item = item,
+                                onEdit = { itemToEdit = item; sheetType = SheetType.Article },
+                                onDelete = { items.removeAt(index) }
                             )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(text = { Text("Editar") }, onClick = {
-                                    itemToEdit = item; sheetType = SheetType.Article; showMenu = false
-                                })
-                                DropdownMenuItem(text = { Text("Eliminar") }, onClick = {
-                                    items.removeAt(index); showMenu = false
-                                })
-                            }
-                        }
                     }
                 }
                 // Services
-                item {
+                if (!isProfessional) item {
                     CollapsibleSection(
                         title = "Mano de Obra / Servicios",
                         items = services,
                         sectionTotal = servicesSubtotal,
-                        isExpanded = isServicesExpanded,
-                        onToggleExpand = { isServicesExpanded = !isServicesExpanded },
+                        isExpanded = expandedSection == "services",
+                        onToggleExpand = { expandedSection = if (expandedSection == "services") null else "services" },
                         onAddClick = { itemToEdit = null; sheetType = SheetType.Service },
                         quickAddSlot = {
-                            val suggServices = remember(presupuestos) {
-                                presupuestos.flatMap { p ->
-                                    if (p.serviciosJson.isBlank()) emptyList()
-                                    else p.serviciosJson.split("|").mapNotNull { s ->
-                                        val parts = s.split(";")
-                                        if (parts.size >= 2) BudgetService(
-                                            id = 0L, code = parts[0],
-                                            description = parts[1],
-                                            total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
-                                        ) else null
-                                    }
-                                }.distinctBy { it.description }
-                            }
                             ServiceAutoCompleteFields(
                                 suggestions = suggServices,
                                 onAdd = { selected ->
                                     services.add(selected.copy(id = System.currentTimeMillis()))
-                                    isServicesExpanded = true
+                                    expandedSection = "services"
                                 }
                             )
                         }
                     ) { item, index ->
-                        var showMenu by remember { mutableStateOf(false) }
-                        Box {
-                            ServiceSummaryRow(
-                                modifier = Modifier.pointerInput(Unit) {
-                                    detectTapGestures(onLongPress = { showMenu = true })
-                                },
-                                item = item
-                            )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(text = { Text("Editar") }, onClick = {
-                                    itemToEdit = item; sheetType = SheetType.Service; showMenu = false
-                                })
-                                DropdownMenuItem(text = { Text("Eliminar") }, onClick = {
-                                    services.removeAt(index); showMenu = false
-                                })
-                            }
-                        }
+                        ServiceSummaryRow(
+                            item = item,
+                            onEdit = { itemToEdit = item; sheetType = SheetType.Service },
+                            onDelete = { services.removeAt(index) }
+                        )
                     }
                 }
                 // Professional Fees
@@ -342,59 +355,34 @@ fun BudgetChatSheet(
                         title = "Honorarios del Profesional",
                         items = professionalFees,
                         sectionTotal = feesSubtotal,
-                        isExpanded = isProfessionalFeesExpanded,
-                        onToggleExpand = { isProfessionalFeesExpanded = !isProfessionalFeesExpanded },
+                        isExpanded = expandedSection == "fees",
+                        onToggleExpand = { expandedSection = if (expandedSection == "fees") null else "fees" },
                         onAddClick = { itemToEdit = null; sheetType = SheetType.ProfessionalFee },
                         quickAddSlot = {
-                            val suggFees = remember(presupuestos) {
-                                presupuestos.flatMap { p ->
-                                    if (p.honorariosJson.isBlank()) emptyList()
-                                    else p.honorariosJson.split("|").mapNotNull { s ->
-                                        val parts = s.split(";")
-                                        if (parts.size >= 2) BudgetProfessionalFee(
-                                            id = 0L, code = parts[0],
-                                            description = parts[1],
-                                            total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
-                                        ) else null
-                                    }
-                                }.distinctBy { it.description }
-                            }
                             FeeAutoCompleteFields(
                                 suggestions = suggFees,
                                 onAdd = { selected ->
                                     professionalFees.add(selected.copy(id = System.currentTimeMillis()))
-                                    isProfessionalFeesExpanded = true
+                                    expandedSection = "fees"
                                 }
                             )
                         }
                     ) { item, index ->
-                        var showMenu by remember { mutableStateOf(false) }
-                        Box {
-                            ProfessionalFeeSummaryRow(
-                                modifier = Modifier.pointerInput(Unit) {
-                                    detectTapGestures(onLongPress = { showMenu = true })
-                                },
-                                item = item
-                            )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(text = { Text("Editar") }, onClick = {
-                                    itemToEdit = item; sheetType = SheetType.ProfessionalFee; showMenu = false
-                                })
-                                DropdownMenuItem(text = { Text("Eliminar") }, onClick = {
-                                    professionalFees.removeAt(index); showMenu = false
-                                })
-                            }
-                        }
+                        ProfessionalFeeSummaryRow(
+                            item = item,
+                            onEdit = { itemToEdit = item; sheetType = SheetType.ProfessionalFee },
+                            onDelete = { professionalFees.removeAt(index) }
+                        )
                     }
                 }
                 // Misc
-                item {
+                if (!isProfessional) item {
                     CollapsibleSection(
                         title = "Gastos Varios",
                         items = miscExpenses,
                         sectionTotal = miscSubtotal,
-                        isExpanded = isMiscExpanded,
-                        onToggleExpand = { isMiscExpanded = !isMiscExpanded },
+                        isExpanded = expandedSection == "misc",
+                        onToggleExpand = { expandedSection = if (expandedSection == "misc") null else "misc" },
                         onAddClick = { itemToEdit = null; sheetType = SheetType.Misc },
                         quickAddSlot = {
                             val suggMisc = remember(presupuestos) {
@@ -418,83 +406,158 @@ fun BudgetChatSheet(
                                         }
                                     }.firstOrNull() ?: 0.0
                                     miscExpenses.add(BudgetMiscExpense(id = System.currentTimeMillis(), description = desc, amount = prevAmount))
-                                    isMiscExpanded = true
+                                    expandedSection = "misc"
                                 }
                             )
                         }
                     ) { item, index ->
-                        var showMenu by remember { mutableStateOf(false) }
-                        Box {
-                            MiscExpenseSummaryRow(
-                                modifier = Modifier.pointerInput(Unit) {
-                                    detectTapGestures(onLongPress = { showMenu = true })
-                                },
-                                item = item
-                            )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(text = { Text("Editar") }, onClick = {
-                                    itemToEdit = item; sheetType = SheetType.Misc; showMenu = false
-                                })
-                                DropdownMenuItem(text = { Text("Eliminar") }, onClick = {
-                                    miscExpenses.removeAt(index); showMenu = false
-                                })
-                            }
-                        }
+                        MiscExpenseSummaryRow(
+                            item = item,
+                            onEdit = { itemToEdit = item; sheetType = SheetType.Misc },
+                            onDelete = { miscExpenses.removeAt(index) }
+                        )
                     }
                 }
                 // Taxes
-                item {
+                if (!isProfessional) item {
                     CollapsibleSection(
                         title = "Impuestos",
                         items = taxes,
                         sectionTotal = taxesSubtotal,
-                        isExpanded = isTaxesExpanded,
-                        onToggleExpand = { isTaxesExpanded = !isTaxesExpanded },
+                        isExpanded = expandedSection == "taxes",
+                        onToggleExpand = { expandedSection = if (expandedSection == "taxes") null else "taxes" },
                         onAddClick = { itemToEdit = null; sheetType = SheetType.Tax },
                         quickAddSlot = {
-                            val suggTaxes = remember(presupuestos) {
+                            val predefinedLabels = setOf("IVA 21%", "IVA 10.5%", "IVA 27%")
+                            val predefinedTaxes = listOf(
+                                "IVA 21%" to 21.0,
+                                "IVA 10.5%" to 10.5,
+                                "IVA 27%" to 27.0
+                            )
+                            // Custom taxes saved in previous presupuestos
+                            val savedCustomTaxes = remember(presupuestos) {
                                 presupuestos.flatMap { p ->
                                     if (p.impuestosJson.isBlank()) emptyList()
                                     else p.impuestosJson.split("|").mapNotNull { s ->
                                         val parts = s.split(";")
-                                        if (parts.size >= 1) parts[0] else null
+                                        val desc = parts.getOrNull(0) ?: return@mapNotNull null
+                                        val amt = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+                                        if (desc !in predefinedLabels && !desc.startsWith("IIBB")) desc to amt else null
                                     }
-                                }.distinct()
+                                }.distinctBy { it.first }
                             }
-                            DescriptionAutoCompleteField(
-                                label = "Descripción de impuesto",
-                                suggestions = suggTaxes,
-                                onSelect = { desc ->
-                                    val prevAmount = presupuestos.flatMap { p ->
-                                        if (p.impuestosJson.isBlank()) emptyList()
-                                        else p.impuestosJson.split("|").mapNotNull { s ->
-                                            val parts = s.split(";")
-                                            if (parts.size >= 2 && parts[0] == desc) parts[1].toDoubleOrNull() else null
-                                        }
-                                    }.firstOrNull() ?: 0.0
-                                    taxes.add(BudgetTax(id = System.currentTimeMillis(), description = desc, amount = prevAmount))
-                                    isTaxesExpanded = true
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) {
+                                predefinedTaxes.forEach { (label, pct) ->
+                                    val alreadyAdded = taxes.any { it.description == label }
+                                    FilterChip(
+                                        selected = alreadyAdded,
+                                        onClick = {
+                                            if (!alreadyAdded) {
+                                                taxes.add(BudgetTax(id = System.currentTimeMillis(), description = label, amount = subtotal * pct / 100))
+                                                expandedSection = "taxes"
+                                            } else {
+                                                taxes.removeAll { it.description == label }
+                                            }
+                                        },
+                                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = colors.primaryOrange,
+                                            selectedLabelColor = Color.White,
+                                            containerColor = colors.primaryOrange.copy(alpha = 0.08f),
+                                            labelColor = colors.textPrimary
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            enabled = true,
+                                            selected = alreadyAdded,
+                                            borderColor = colors.border,
+                                            selectedBorderColor = colors.primaryOrange
+                                        )
+                                    )
                                 }
-                            )
+                                // IIBB chip
+                                val iibbAdded = taxes.any { it.description.startsWith("IIBB") }
+                                FilterChip(
+                                    selected = iibbAdded,
+                                    onClick = {
+                                        if (!iibbAdded) showIIBBDialog = true
+                                        else taxes.removeAll { it.description.startsWith("IIBB") }
+                                    },
+                                    label = { Text("IIBB", style = MaterialTheme.typography.labelSmall) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = colors.primaryOrange,
+                                        selectedLabelColor = Color.White,
+                                        containerColor = colors.primaryOrange.copy(alpha = 0.08f),
+                                        labelColor = colors.textPrimary
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = iibbAdded,
+                                        borderColor = colors.border,
+                                        selectedBorderColor = colors.primaryOrange
+                                    )
+                                )
+                                // Saved custom taxes as chips
+                                savedCustomTaxes.forEach { (desc, savedAmt) ->
+                                    val alreadyAdded = taxes.any { it.description == desc }
+                                    val pctFromDesc = Regex("(\\d+(?:\\.\\d+)?)%").find(desc)?.groupValues?.get(1)?.toDoubleOrNull()
+                                    FilterChip(
+                                        selected = alreadyAdded,
+                                        onClick = {
+                                            if (!alreadyAdded) {
+                                                val amount = if (pctFromDesc != null) subtotal * pctFromDesc / 100.0 else savedAmt
+                                                taxes.add(BudgetTax(id = System.currentTimeMillis(), description = desc, amount = amount))
+                                                expandedSection = "taxes"
+                                            } else {
+                                                taxes.removeAll { it.description == desc }
+                                            }
+                                        },
+                                        label = { Text(desc, style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = colors.primaryOrange,
+                                            selectedLabelColor = Color.White,
+                                            containerColor = colors.primaryOrange.copy(alpha = 0.08f),
+                                            labelColor = colors.textPrimary
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            enabled = true,
+                                            selected = alreadyAdded,
+                                            borderColor = colors.border,
+                                            selectedBorderColor = colors.primaryOrange
+                                        )
+                                    )
+                                }
+                                // + Otro
+                                AssistChip(
+                                    onClick = { itemToEdit = null; sheetType = SheetType.Tax },
+                                    label = { Text("+ Otro", style = MaterialTheme.typography.labelSmall) },
+                                    colors = AssistChipDefaults.assistChipColors(labelColor = colors.primaryOrange),
+                                    border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = colors.primaryOrange.copy(alpha = 0.4f))
+                                )
+                            }
+                            // Toggle: detallar impuestos en el presupuesto
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Detallar en el presupuesto", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+                                Switch(
+                                    checked = showTaxDetail,
+                                    onCheckedChange = { showTaxDetail = it },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.primaryOrange)
+                                )
+                            }
                         }
                     ) { item, index ->
-                        var showMenu by remember { mutableStateOf(false) }
-                        Box {
-                            TaxSummaryRow(
-                                modifier = Modifier.pointerInput(Unit) {
-                                    detectTapGestures(onLongPress = { showMenu = true })
-                                },
-                                item = item
-                            )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(text = { Text("Editar") }, onClick = {
-                                    itemToEdit = item; sheetType = SheetType.Tax; showMenu = false
-                                })
-                                DropdownMenuItem(text = { Text("Eliminar") }, onClick = {
-                                    taxes.removeAt(index); showMenu = false
-                                })
-                            }
-                        }
+                        TaxSummaryRow(
+                            item = item,
+                            onEdit = { itemToEdit = item; sheetType = SheetType.Tax },
+                            onDelete = { taxes.removeAt(index) }
+                        )
                     }
                 }
             }
@@ -528,8 +591,7 @@ fun BudgetChatSheet(
                     Button(
                         onClick = {
                             pendingPresupuesto = buildPresupuesto()
-                            if (hasNewItems()) showSaveCatalogDialog = true
-                            else showPreviewDialog = true
+                            showPreviewDialog = true
                         },
                         enabled = hasItems,
                         colors = ButtonDefaults.buttonColors(
@@ -558,7 +620,7 @@ fun BudgetChatSheet(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth(0.97f)
-                    .wrapContentHeight(),
+                    .fillMaxHeight(0.88f),
                 shape = RoundedCornerShape(16.dp),
                 color = colors.backgroundColor
             ) {
@@ -566,86 +628,123 @@ fun BudgetChatSheet(
                     SheetType.Article -> AddArticleSheetContent(
                         itemToEdit = itemToEdit as? BudgetItem,
                         suggestionItems = suggestionItems,
-                        onAddItem = { items.add(it); sheetType = null; isArticlesExpanded = true },
+                        currentItems = items,
+                        onAddItem = { items.add(it); expandedSection = "articles" },
                         onUpdateItem = { updated ->
                             val i = items.indexOfFirst { it.id == updated.id }
                             if (i != -1) items[i] = updated
                             sheetType = null
-                        }
+                        },
+                        onDeleteCurrentItem = { index -> if (index in items.indices) items.removeAt(index) },
+                        onDeleteSaved = { saved -> viewModel.deleteArticleFromSuggestions(saved.description) },
+                        onSaveToSuggestions = { viewModel.saveArticleToSuggestions(it) },
+                        onAddComplete = { sheetType = null }
                     )
                     SheetType.Service -> AddServiceSheetContent(
                         itemToEdit = itemToEdit as? BudgetService,
-                        onAddItem = { services.add(it); sheetType = null; isServicesExpanded = true },
+                        suggestionItems = suggServices,
+                        currentItems = services,
+                        onAddItem = { services.add(it); expandedSection = "services" },
                         onUpdateItem = { updated ->
                             val i = services.indexOfFirst { it.id == updated.id }
                             if (i != -1) services[i] = updated
                             sheetType = null
-                        }
+                        },
+                        onDeleteCurrentItem = { index -> if (index in services.indices) services.removeAt(index) },
+                        onDeleteSaved = { saved -> viewModel.deleteServiceFromSuggestions(saved.description) },
+                        onSaveToSuggestions = { viewModel.saveServiceToSuggestions(it) },
+                        onAddComplete = { sheetType = null }
                     )
                     SheetType.ProfessionalFee -> AddProfessionalFeeSheetContent(
                         itemToEdit = itemToEdit as? BudgetProfessionalFee,
-                        onAddItem = { professionalFees.add(it); sheetType = null; isProfessionalFeesExpanded = true },
+                        suggestionItems = suggFees,
+                        currentItems = professionalFees,
+                        onAddItem = { professionalFees.add(it); expandedSection = "fees" },
                         onUpdateItem = { updated ->
                             val i = professionalFees.indexOfFirst { it.id == updated.id }
                             if (i != -1) professionalFees[i] = updated
                             sheetType = null
-                        }
+                        },
+                        onDeleteCurrentItem = { index -> if (index in professionalFees.indices) professionalFees.removeAt(index) },
+                        onDeleteSaved = { saved -> viewModel.deleteProfessionalFeeFromSuggestions(saved.description) },
+                        onSaveToSuggestions = { viewModel.saveProfessionalFeeToSuggestions(it) },
+                        onAddComplete = { sheetType = null }
                     )
                     SheetType.Misc -> AddMiscExpenseSheetContent(
                         itemToEdit = itemToEdit as? BudgetMiscExpense,
-                        onAddItem = { list -> miscExpenses.addAll(list); sheetType = null; isMiscExpanded = true },
+                        existingItems = miscExpenses.toList(),
+                        savedGastos = presupuestos.flatMap { p ->
+                            if (p.gastosJson.isBlank()) emptyList()
+                            else p.gastosJson.split("|").mapNotNull { s ->
+                                val parts = s.split(";")
+                                val desc = parts.getOrNull(0) ?: return@mapNotNull null
+                                val amt = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+                                desc to amt
+                            }
+                        }.distinctBy { it.first },
+                        onAddItem = { list -> miscExpenses.addAll(list); expandedSection = "misc" },
                         onUpdateItem = { updated ->
                             val i = miscExpenses.indexOfFirst { it.id == updated.id }
                             if (i != -1) miscExpenses[i] = updated
                             sheetType = null
-                        }
+                        },
+                        onDeleteItem = { item -> miscExpenses.removeAll { it.id == item.id } },
+                        onDeleteSaved = { desc -> viewModel.deleteMiscExpenseFromSuggestions(desc) },
+                        onUpdateSaved = { oldDesc, newDesc, newAmt -> viewModel.updateMiscExpenseInSuggestions(oldDesc, newDesc, newAmt) }
                     )
-                    SheetType.Tax -> AddTaxSheetContent(
-                        itemToEdit = itemToEdit as? BudgetTax,
-                        onAddItem = { list -> taxes.addAll(list); sheetType = null; isTaxesExpanded = true },
-                        onUpdateItem = { updated ->
-                            val i = taxes.indexOfFirst { it.id == updated.id }
-                            if (i != -1) taxes[i] = updated
-                            sheetType = null
-                        }
-                    )
+                    SheetType.Tax -> {
+                        val predefinedLabels = setOf("IVA 21%", "IVA 10.5%", "IVA 27%")
+                        val customForSheet = presupuestos.flatMap { p ->
+                            if (p.impuestosJson.isBlank()) emptyList()
+                            else p.impuestosJson.split("|").mapNotNull { s ->
+                                val parts = s.split(";")
+                                val desc = parts.getOrNull(0) ?: return@mapNotNull null
+                                val amt = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+                                if (desc !in predefinedLabels && !desc.startsWith("IIBB")) desc to amt else null
+                            }
+                        }.distinctBy { it.first }
+                        AddTaxSheetContent(
+                            itemToEdit = itemToEdit as? BudgetTax,
+                            subtotal = subtotal,
+                            savedCustomTaxes = customForSheet,
+                            onDeleteSaved = { desc -> viewModel.deleteCustomTaxFromSuggestions(desc) },
+                            onUpdateSaved = { desc, newAmt -> viewModel.updateCustomTaxInSuggestions(desc, newAmt) },
+                            onAddItem = { list -> taxes.addAll(list); sheetType = null; expandedSection = "taxes" },
+                            onUpdateItem = { updated ->
+                                val i = taxes.indexOfFirst { it.id == updated.id }
+                                if (i != -1) taxes[i] = updated
+                                sheetType = null
+                            }
+                        )
+                    }
                     else -> {}
                 }
             }
         }
     }
 
-    // --- SAVE CATALOG DIALOG ---
-    if (showSaveCatalogDialog) {
-        AlertDialog(
-            onDismissRequest = { showSaveCatalogDialog = false; showPreviewDialog = true },
-            title = { Text("¿Guardar en catálogo?", fontWeight = FontWeight.Bold) },
-            text = { Text("¿Querés guardar estos ítems para autocompletar futuros presupuestos?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingPresupuesto?.let { viewModel.insertPresupuesto(it) }
-                    showSaveCatalogDialog = false
-                    showPreviewDialog = true
-                }) { Text("Sí, guardar", color = colors.primaryOrange) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showSaveCatalogDialog = false
-                    showPreviewDialog = true
-                }) { Text("No") }
-            }
-        )
-    }
-
     // --- PREVIEW WITH CAPTURE ---
     if (showPreviewDialog) {
-        val prestador = remember {
-            PPrestadorProfileFalso(
-                id = "demo_1", name = "Prestador", lastName = "", profileImageUrl = "",
-                bannerImageUrl = null, rating = 5.0f, isVerified = true, isOnline = true,
-                services = emptyList(), companyName = "Mi Empresa", address = "",
-                email = "", doesHomeVisits = false, hasPhysicalLocation = true,
-                works24h = false, galleryImages = emptyList(), isFavorite = false, isSubscribed = true
+        val prestador = remember(provider?.id, providerDisplayName, providerDisplayAddress) {
+            provider?.toPrestadorProfileFalso(businessEntity) ?: PPrestadorProfileFalso(
+                id = "demo",
+                name = providerDisplayName.ifBlank { "Prestador" },
+                lastName = "",
+                profileImageUrl = "",
+                bannerImageUrl = null,
+                rating = 0f,
+                isVerified = false,
+                isOnline = false,
+                services = emptyList(),
+                companyName = null,
+                address = providerDisplayAddress,
+                email = "",
+                doesHomeVisits = false,
+                hasPhysicalLocation = false,
+                works24h = false,
+                galleryImages = emptyList(),
+                isFavorite = false,
+                isSubscribed = false
             )
         }
         BudgetPreviewPDFDialog(
@@ -661,6 +760,11 @@ fun BudgetChatSheet(
             discountAmount = itemsDiscountTotal,
             onDismiss = { showPreviewDialog = false },
             onEnviar = { showPreviewDialog = false; onDismiss() },
+            showTaxDetail = showTaxDetail,
+            providerName = providerDisplayName,
+            providerAddress = providerDisplayAddress,
+            isProfessional = isProfessional,
+            presupuestoNumero = pendingPresupuesto?.numeroPresupuesto ?: "",
             onEnviarBudget = {
                 val pres = pendingPresupuesto ?: buildPresupuesto()
                 val message = Message(
@@ -668,7 +772,7 @@ fun BudgetChatSheet(
                     timestamp = System.currentTimeMillis(),
                     isFromCurrentUser = true,
                     type = Message.MessageType.BUDGET,
-                    text = "📋 Presupuesto",
+                    text = if (isProfessional) "Consulta" else "Presupuesto",
                     budgetNumero = pres.numeroPresupuesto,
                     budgetTotal = pres.total,
                     budgetSubtotal = pres.subtotal,
@@ -681,9 +785,59 @@ fun BudgetChatSheet(
                     budgetNotas = pres.notas,
                     budgetValidezDias = pres.validezDias
                 )
+
+                // Asegurar que el cliente exista y luego guardar el presupuesto
+                coroutineScope.launch {
+                    if (clienteData == null) {
+                        viewModel.insertCliente(ClienteEntity(
+                            id = userId, nombre = userName,
+                            email = "", telefono = "", direccion = ""
+                        ))
+                        kotlinx.coroutines.delay(100)
+                    }
+                    viewModel.insertPresupuesto(pres)
+                }
                 AppointmentRescheduleManager.addMessage(userId, message)
                 showPreviewDialog = false
                 onDismiss()
+            },
+            clientName = userName,
+            clientAddress = clienteData?.direccion
+        )
+    }
+
+    // IIBB Dialog
+    if (showIIBBDialog) {
+        var iibbPctText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showIIBBDialog = false; iibbPctText = "" },
+            title = { Text("IIBB", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = iibbPctText,
+                    onValueChange = { iibbPctText = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Alícuota %") },
+                    singleLine = true,
+                    suffix = { Text("%") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        focusedLabelColor = colors.primaryOrange,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val pct = iibbPctText.toDoubleOrNull() ?: 0.0
+                    if (pct > 0) {
+                        taxes.add(BudgetTax(id = System.currentTimeMillis(), description = "IIBB ${iibbPctText}%", amount = subtotal * pct / 100))
+                        expandedSection = "taxes"
+                    }
+                    showIIBBDialog = false; iibbPctText = ""
+                }) { Text("Agregar", color = colors.primaryOrange, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showIIBBDialog = false; iibbPctText = "" }) { Text("Cancelar") }
             }
         )
     }

@@ -1,11 +1,15 @@
 package com.example.myapplication.prestador.ui.presupuesto
 
+import android.graphics.drawable.Icon
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,13 +23,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import java.util.UUID
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import com.example.myapplication.prestador.data.local.entity.ClienteEntity
+
 
 // --- SHEET CONTENT COMPOSABLES ---
 
@@ -33,12 +43,18 @@ import java.util.UUID
 fun AddArticleSheetContent(
     itemToEdit: BudgetItem?,
     suggestionItems: List<BudgetItem> = emptyList(),
+    currentItems: List<BudgetItem> = emptyList(),
     onAddItem: (BudgetItem) -> Unit,
-    onUpdateItem: (BudgetItem) -> Unit
+    onUpdateItem: (BudgetItem) -> Unit,
+    onDeleteCurrentItem: ((Int) -> Unit)? = null,
+    onDeleteSaved: ((BudgetItem) -> Unit)? = null,
+    onSaveToSuggestions: ((BudgetItem) -> Unit)? = null,
+    onAddComplete: () -> Unit = {}
 ) {
     val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetItem()) }
+    var searchQuery by remember { mutableStateOf("") }
 
     val baseAmount = currentItem.quantity * currentItem.unitPrice
     val taxAmountValue = baseAmount * (currentItem.taxPercentage / 100)
@@ -48,6 +64,7 @@ fun AddArticleSheetContent(
     var taxAmountStr by remember { mutableStateOf(if (currentItem.taxPercentage > 0) "%.2f".format(taxAmountValue) else "") }
     var discountPercentStr by remember { mutableStateOf(if (currentItem.discountPercentage > 0) currentItem.discountPercentage.toString() else "") }
     var discountAmountStr by remember { mutableStateOf(if (currentItem.discountPercentage > 0) "%.2f".format(baseWithTax * currentItem.discountPercentage / 100) else "") }
+    var pendingItemToSave by remember { mutableStateOf<BudgetItem?>(null) }
 
     LaunchedEffect(baseAmount) {
          if (baseAmount > 0) {
@@ -76,13 +93,29 @@ fun AddArticleSheetContent(
                 .clip(RoundedCornerShape(2.dp))
                 .background(Color(0xFFCBD5E1))
         )
-        Text(
-            if (isEditMode) "Editar Artículo" else "Agregar Nuevo Artículo",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = colors.primaryOrange,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(bottom = 16.dp)
-        )
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.primaryOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Inventory2, contentDescription = null,
+                    tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                if (isEditMode) "Editar Artículo" else "Agregar Nuevo Artículo",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+        }
 
         BudgetItemRow(item = currentItem, suggestionItems = suggestionItems, onUpdate = { currentItem = it })
 
@@ -183,9 +216,22 @@ fun AddArticleSheetContent(
 
         Spacer(modifier = Modifier.height(24.dp))
         Button(
-            onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) },
+            onClick = {
+                if (isEditMode) onUpdateItem(currentItem)
+                else {
+                    val added = currentItem
+                    onAddItem(added)
+                    // Si es artículo nuevo (no está en el catálogo), preguntar si guardar
+                    if (onSaveToSuggestions != null && suggestionItems.none { it.description.equals(added.description, ignoreCase = true) }) {
+                        pendingItemToSave = added
+                    }
+                    currentItem = BudgetItem()
+                    searchQuery = ""
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             enabled = currentItem.description.isNotBlank() && currentItem.unitPrice > 0 && currentItem.quantity > 0,
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = colors.primaryOrange,
                 contentColor = Color.White
@@ -196,6 +242,162 @@ fun AddArticleSheetContent(
                 fontWeight = FontWeight.Bold
             )
         }
+
+        // Lista de artículos ya agregados al presupuesto actual
+        if (currentItems.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = colors.border)
+            Text(
+                "Artículos en este presupuesto (${currentItems.size})",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.textPrimary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            currentItems.forEachIndexed { index, item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.primaryOrange.copy(alpha = 0.08f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            buildString { if (item.code.isNotBlank()) append("[${item.code}] "); append(item.description) },
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            "${item.quantity} u.  •  \$${"%.2f".format(item.unitPrice)}  =  \$${"%.2f".format(item.quantity * item.unitPrice)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textSecondary
+                        )
+                    }
+                    IconButton(onClick = { currentItem = item }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                    }
+                    IconButton(onClick = { onDeleteCurrentItem?.invoke(index) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+
+        // Diálogo: ¿guardar artículo nuevo en catálogo?
+        pendingItemToSave?.let { newArt ->
+            AlertDialog(
+                onDismissRequest = { pendingItemToSave = null; onAddComplete() },
+                title = { Text("Artículo nuevo", fontWeight = FontWeight.Bold) },
+                text = { Text("\"${newArt.description}\" no está en tu lista.\n¿Deseas guardarlo para usarlo en futuros presupuestos?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onSaveToSuggestions?.invoke(newArt)
+                        pendingItemToSave = null
+                        onAddComplete()
+                    }) {
+                        Text("Guardar", color = colors.primaryOrange, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingItemToSave = null; onAddComplete() }) { Text("No, gracias") }
+                }
+            )
+        }
+
+        // Catálogo de artículos guardados
+        if (!isEditMode && suggestionItems.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = colors.border)
+            Text(
+                "Artículos guardados (${suggestionItems.size})",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Buscar artículo...") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primaryOrange,
+                    unfocusedBorderColor = colors.border,
+                    focusedLabelColor = colors.primaryOrange,
+                    cursorColor = colors.primaryOrange,
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
+            val filtered = if (searchQuery.isBlank()) suggestionItems
+                           else suggestionItems.filter { it.description.contains(searchQuery, ignoreCase = true) || it.code.contains(searchQuery, ignoreCase = true) }
+            filtered.forEach { saved ->
+                key(saved.description) {
+                    var showConfirmDelete by remember { mutableStateOf(false) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.primaryOrange.copy(alpha = 0.06f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                buildString {
+                                    if (saved.code.isNotBlank()) append("[${saved.code}] ")
+                                    append(saved.description)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                "${saved.quantity} u.  •  \$${"%.2f".format(saved.unitPrice)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.textSecondary
+                            )
+                        }
+                        IconButton(
+                            onClick = { currentItem = saved.copy(id = currentItem.id) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(
+                            onClick = { showConfirmDelete = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    if (showConfirmDelete) {
+                        AlertDialog(
+                            onDismissRequest = { showConfirmDelete = false },
+                            title = { Text("¿Eliminar?", fontWeight = FontWeight.Bold) },
+                            text = { Text("Se eliminará \"${saved.description}\" de la lista.") },
+                            confirmButton = {
+                                TextButton(onClick = { onDeleteSaved?.invoke(saved); showConfirmDelete = false }) {
+                                    Text("Eliminar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            dismissButton = { TextButton(onClick = { showConfirmDelete = false }) { Text("Cancelar") } }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -203,14 +405,22 @@ fun AddArticleSheetContent(
 fun AddServiceSheetContent(
     itemToEdit: BudgetService?,
     onAddItem: (BudgetService) -> Unit,
-    onUpdateItem: (BudgetService) -> Unit
+    onUpdateItem: (BudgetService) -> Unit,
+    currentItems: List<BudgetService> = emptyList(),
+    onDeleteCurrentItem: ((Int) -> Unit)? = null,
+    suggestionItems: List<BudgetService> = emptyList(),
+    onDeleteSaved: ((BudgetService) -> Unit)? = null,
+    onSaveToSuggestions: ((BudgetService) -> Unit)? = null,
+    onAddComplete: () -> Unit = {}
 ) {
     val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetService()) }
+    var pendingItemToSave by remember { mutableStateOf<BudgetService?>(null) }
 
     Column(modifier = Modifier
         .padding(16.dp)
+        .verticalScroll(rememberScrollState())
         .imePadding()
         .navigationBarsPadding()
         .background(colors.backgroundColor)) {
@@ -223,19 +433,46 @@ fun AddServiceSheetContent(
                 .clip(RoundedCornerShape(2.dp))
                 .background(Color(0xFFCBD5E1))
         )
-        Text(
-            if (isEditMode) "Editar Servicio" else "Agregar Nuevo Servicio",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = colors.primaryOrange,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(bottom = 16.dp)
-        )
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.primaryOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Build, contentDescription = null,
+                    tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                if (isEditMode) "Editar Servicio" else "Agregar Nuevo Servicio",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+        }
         BudgetServiceRow(service = currentItem, onUpdate = { currentItem = it })
         Spacer(modifier = Modifier.height(16.dp))
         Button(
-            onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) },
+            onClick = {
+                if (isEditMode) onUpdateItem(currentItem)
+                else {
+                    val added = currentItem
+                    onAddItem(added)
+                    if (onSaveToSuggestions != null && suggestionItems.none { it.description.equals(added.description, ignoreCase = true) }) {
+                        pendingItemToSave = added
+                    }
+                    currentItem = BudgetService()
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             enabled = currentItem.description.isNotBlank() && currentItem.total > 0,
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = colors.primaryOrange,
                 contentColor = Color.White
@@ -246,6 +483,90 @@ fun AddServiceSheetContent(
                 fontWeight = FontWeight.Bold
             )
         }
+
+        // Lista de servicios ya agregados al presupuesto actual
+        if (currentItems.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = colors.border)
+            Text(
+                "Servicios en este presupuesto (${currentItems.size})",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.textPrimary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            currentItems.forEachIndexed { index, item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.primaryOrange.copy(alpha = 0.08f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            buildString { if (item.code.isNotBlank()) append("[${item.code}] "); append(item.description) },
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            "\$${"%.2f".format(item.total)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textSecondary
+                        )
+                    }
+                    IconButton(onClick = { currentItem = item }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                    }
+                    IconButton(onClick = { onDeleteCurrentItem?.invoke(index) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+
+        pendingItemToSave?.let { newItem ->
+            AlertDialog(
+                onDismissRequest = { pendingItemToSave = null; onAddComplete() },
+                title = { Text("Servicio nuevo", fontWeight = FontWeight.Bold) },
+                text = { Text("\"${newItem.description}\" no está en tu lista.\n¿Deseas guardarlo para futuros presupuestos?") },
+                confirmButton = {
+                    TextButton(onClick = { onSaveToSuggestions?.invoke(newItem); pendingItemToSave = null; onAddComplete() }) {
+                        Text("Guardar", color = colors.primaryOrange, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = { TextButton(onClick = { pendingItemToSave = null; onAddComplete() }) { Text("No, gracias") } }
+            )
+        }
+        if (!isEditMode && suggestionItems.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = colors.border)
+            Text("Servicios guardados (${suggestionItems.size})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = colors.textSecondary, modifier = Modifier.padding(bottom = 8.dp))
+            var searchQuery by remember { mutableStateOf("") }
+            OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, placeholder = { Text("Buscar servicio...") }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) }, trailingIcon = { if (searchQuery.isNotEmpty()) IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primaryOrange, unfocusedBorderColor = colors.border, focusedLabelColor = colors.primaryOrange, cursorColor = colors.primaryOrange, focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary), shape = RoundedCornerShape(8.dp))
+            val filtered = if (searchQuery.isBlank()) suggestionItems else suggestionItems.filter { it.description.contains(searchQuery, ignoreCase = true) || it.code.contains(searchQuery, ignoreCase = true) }
+            filtered.forEach { saved ->
+                key(saved.description) {
+                    var showConfirmDelete by remember { mutableStateOf(false) }
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF3B82F6).copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(buildString { if (saved.code.isNotBlank()) append("[${saved.code}] "); append(saved.description) }, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                            Text("\$${"%.2f".format(saved.total)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                        }
+                        IconButton(onClick = { currentItem = saved.copy(id = currentItem.id) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = { showConfirmDelete = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    if (showConfirmDelete) {
+                        AlertDialog(onDismissRequest = { showConfirmDelete = false }, title = { Text("¿Eliminar?", fontWeight = FontWeight.Bold) }, text = { Text("Se eliminará \"${saved.description}\" de la lista.") }, confirmButton = { TextButton(onClick = { onDeleteSaved?.invoke(saved); showConfirmDelete = false }) { Text("Eliminar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold) } }, dismissButton = { TextButton(onClick = { showConfirmDelete = false }) { Text("Cancelar") } })
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -253,14 +574,22 @@ fun AddServiceSheetContent(
 fun AddProfessionalFeeSheetContent(
     itemToEdit: BudgetProfessionalFee?,
     onAddItem: (BudgetProfessionalFee) -> Unit,
-    onUpdateItem: (BudgetProfessionalFee) -> Unit
+    onUpdateItem: (BudgetProfessionalFee) -> Unit,
+    currentItems: List<BudgetProfessionalFee> = emptyList(),
+    onDeleteCurrentItem: ((Int) -> Unit)? = null,
+    suggestionItems: List<BudgetProfessionalFee> = emptyList(),
+    onDeleteSaved: ((BudgetProfessionalFee) -> Unit)? = null,
+    onSaveToSuggestions: ((BudgetProfessionalFee) -> Unit)? = null,
+    onAddComplete: () -> Unit = {}
 ) {
     val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
     var currentItem by remember { mutableStateOf(itemToEdit ?: BudgetProfessionalFee()) }
+    var pendingItemToSave by remember { mutableStateOf<BudgetProfessionalFee?>(null) }
 
     Column(modifier = Modifier
         .padding(16.dp)
+        .verticalScroll(rememberScrollState())
         .imePadding()
         .navigationBarsPadding()
         .background(colors.backgroundColor)) {
@@ -273,28 +602,154 @@ fun AddProfessionalFeeSheetContent(
                 .clip(RoundedCornerShape(2.dp))
                 .background(Color(0xFFCBD5E1))
         )
-        Text(
-            if (isEditMode) "Editar Honorario" else "Agregar Honorario Profesional",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = colors.primaryOrange,
+        // Header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(bottom = 16.dp)
-        )
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.primaryOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.AttachMoney, contentDescription = null,
+                    tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                if (isEditMode) "Editar Honorario" else "Honorarios Profesionales",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+        }
         BudgetProfessionalFeeRow(fee = currentItem, onUpdate = { updatedItem -> currentItem = updatedItem })
         Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { if (isEditMode) onUpdateItem(currentItem) else onAddItem(currentItem) },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            enabled = currentItem.description.isNotBlank() && currentItem.total > 0,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = colors.primaryOrange,
-                contentColor = Color.White
-            )
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            OutlinedButton(
+                onClick = { onAddComplete() },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Text("Cancelar", color = colors.textPrimary)
+            }
+            Button(
+                onClick = {
+                    if (isEditMode) onUpdateItem(currentItem)
+                    else {
+                        val added = currentItem
+                        onAddItem(added)
+                        if (onSaveToSuggestions != null && suggestionItems.none { it.description.equals(added.description, ignoreCase = true) }) {
+                            pendingItemToSave = added
+                        }
+                        currentItem = BudgetProfessionalFee()
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                enabled = currentItem.description.isNotBlank() && currentItem.total > 0,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.primaryOrange,
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    if (isEditMode) "Guardar Cambios" else "Guardar Ítem",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        // Lista de honorarios ya agregados al presupuesto actual
+        if (currentItems.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = colors.border)
             Text(
-                if (isEditMode) "Guardar Cambios" else "Agregar Honorario",
-                fontWeight = FontWeight.Bold
+                "Honorarios en este presupuesto (${currentItems.size})",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.textPrimary,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
+            currentItems.forEachIndexed { index, item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.primaryOrange.copy(alpha = 0.08f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            buildString { if (item.code.isNotBlank()) append("[${item.code}] "); append(item.description) },
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            "\$${"%.2f".format(item.total)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textSecondary
+                        )
+                    }
+                    IconButton(onClick = { currentItem = item }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                    }
+                    IconButton(onClick = { onDeleteCurrentItem?.invoke(index) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+
+        pendingItemToSave?.let { newItem ->
+            AlertDialog(
+                onDismissRequest = { pendingItemToSave = null; onAddComplete() },
+                title = { Text("Honorario nuevo", fontWeight = FontWeight.Bold) },
+                text = { Text("\"${newItem.description}\" no está en tu lista.\n¿Deseas guardarlo para futuros presupuestos?") },
+                confirmButton = {
+                    TextButton(onClick = { onSaveToSuggestions?.invoke(newItem); pendingItemToSave = null; onAddComplete() }) {
+                        Text("Guardar", color = colors.primaryOrange, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = { TextButton(onClick = { pendingItemToSave = null; onAddComplete() }) { Text("No, gracias") } }
+            )
+        }
+
+        if (!isEditMode && suggestionItems.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = colors.border)
+            Text("Honorarios guardados (${suggestionItems.size})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = colors.textSecondary, modifier = Modifier.padding(bottom = 8.dp))
+            var searchQuery by remember { mutableStateOf("") }
+            OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, placeholder = { Text("Buscar honorario...") }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) }, trailingIcon = { if (searchQuery.isNotEmpty()) IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primaryOrange, unfocusedBorderColor = colors.border, focusedLabelColor = colors.primaryOrange, cursorColor = colors.primaryOrange, focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary), shape = RoundedCornerShape(8.dp))
+            val filtered = if (searchQuery.isBlank()) suggestionItems else suggestionItems.filter { it.description.contains(searchQuery, ignoreCase = true) || it.code.contains(searchQuery, ignoreCase = true) }
+            filtered.forEach { saved ->
+                key(saved.description) {
+                    var showConfirmDelete by remember { mutableStateOf(false) }
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF8B5CF6).copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(buildString { if (saved.code.isNotBlank()) append("[${saved.code}] "); append(saved.description) }, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                            Text("\$${"%.2f".format(saved.total)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                        }
+                        IconButton(onClick = { currentItem = saved.copy(id = currentItem.id) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = { showConfirmDelete = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    if (showConfirmDelete) {
+                        AlertDialog(onDismissRequest = { showConfirmDelete = false }, title = { Text("¿Eliminar?", fontWeight = FontWeight.Bold) }, text = { Text("Se eliminará \"${saved.description}\" de la lista.") }, confirmButton = { TextButton(onClick = { onDeleteSaved?.invoke(saved); showConfirmDelete = false }) { Text("Eliminar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold) } }, dismissButton = { TextButton(onClick = { showConfirmDelete = false }) { Text("Cancelar") } })
+                    }
+                }
+            }
         }
     }
 }
@@ -308,26 +763,356 @@ data class TempMiscExpense(
 @Composable
 fun AddMiscExpenseSheetContent(
     itemToEdit: BudgetMiscExpense?,
+    existingItems: List<BudgetMiscExpense> = emptyList(),
+    savedGastos: List<Pair<String, Double>> = emptyList(),
     onAddItem: (List<BudgetMiscExpense>) -> Unit,
-    onUpdateItem: (BudgetMiscExpense) -> Unit
+    onUpdateItem: (BudgetMiscExpense) -> Unit,
+    onDeleteItem: ((BudgetMiscExpense) -> Unit)? = null,
+    onDeleteSaved: ((String) -> Unit)? = null,
+    onUpdateSaved: ((String, String, Double) -> Unit)? = null
 ) {
     val colors = getPrestadorColors()
     val isEditMode = itemToEdit != null
-    val initialList = if (itemToEdit != null) {
-        listOf(TempMiscExpense(description = itemToEdit.description, amount = if(itemToEdit.amount > 0) itemToEdit.amount.toString() else ""))
-    } else {
-        listOf(TempMiscExpense())
+
+    var description by remember { mutableStateOf(itemToEdit?.description ?: "") }
+    var amountStr by remember { mutableStateOf(if ((itemToEdit?.amount ?: 0.0) > 0) itemToEdit!!.amount.toString() else "") }
+
+    val enteredAmount = amountStr.toDoubleOrNull() ?: 0.0
+
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .navigationBarsPadding()
+            .background(colors.backgroundColor)
+    ) {
+        // Handle pill
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(bottom = 12.dp)
+                .size(width = 36.dp, height = 4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color(0xFFCBD5E1))
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.primaryOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Receipt, contentDescription = null,
+                    tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                if (isEditMode) "Editar Gasto" else "Agregar Gasto",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Column(modifier = Modifier.padding(bottom = 12.dp)) {
+            Text("DESCRIPCIÓN", style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                modifier = Modifier.padding(bottom = 4.dp))
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("...", style = MaterialTheme.typography.bodySmall) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                shape = RoundedCornerShape(8.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primaryOrange,
+                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary,
+                    cursorColor = colors.primaryOrange
+                )
+            )
+        }
+
+        Column(modifier = Modifier.padding(bottom = 20.dp)) {
+            Text("IMPORTE ($)", style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                modifier = Modifier.padding(bottom = 4.dp))
+            OutlinedTextField(
+                value = amountStr,
+                onValueChange = { amountStr = it.filter { c -> c.isDigit() || c == '.' } },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("0.00", style = MaterialTheme.typography.bodySmall) },
+                prefix = { Text("$") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                shape = RoundedCornerShape(8.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primaryOrange,
+                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary,
+                    cursorColor = colors.primaryOrange
+                )
+            )
+        }
+
+        Button(
+            onClick = {
+                val expense = BudgetMiscExpense(
+                    id = itemToEdit?.id ?: System.currentTimeMillis(),
+                    description = description,
+                    amount = enteredAmount
+                )
+                if (isEditMode) {
+                    onUpdateItem(expense)
+                } else {
+                    onAddItem(listOf(expense))
+                    description = ""
+                    amountStr = ""
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = description.isNotBlank() && enteredAmount > 0,
+            colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange, contentColor = Color.White)
+        ) {
+            Text(if (isEditMode) "Guardar Cambios" else "Agregar Gasto", fontWeight = FontWeight.Bold)
+        }
+
+        // Lista de gastos existentes (solo en modo agregar)
+        if (!isEditMode) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = colors.border)
+            Text(
+                "Gastos agregados",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            if (existingItems.isEmpty()) {
+                Text(
+                    "Sin gastos agregados aún",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+            existingItems.forEach { expense ->
+                key(expense.id) {
+                var editingThis by remember { mutableStateOf(false) }
+                var editDesc by remember { mutableStateOf(expense.description) }
+                var editAmt by remember { mutableStateOf(expense.amount.toString()) }
+                var showConfirmDelete by remember { mutableStateOf(false) }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.primaryOrange.copy(alpha = 0.06f))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(expense.description, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                            if (!editingThis) Text("$ ${"%.2f".format(expense.amount)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                        }
+                        IconButton(onClick = { editingThis = !editingThis }, modifier = Modifier.size(32.dp)) {
+                            Icon(if (editingThis) Icons.Default.Close else Icons.Default.Edit, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+                        }
+                        IconButton(onClick = { showConfirmDelete = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    if (editingThis) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = editDesc,
+                            onValueChange = { editDesc = it },
+                            label = { Text("Descripción") },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primaryOrange, unfocusedBorderColor = colors.border, focusedLabelColor = colors.primaryOrange, cursorColor = colors.primaryOrange, focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        OutlinedTextField(
+                            value = editAmt,
+                            onValueChange = { editAmt = it.filter { c -> c.isDigit() || c == '.' } },
+                            label = { Text("Importe") },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            singleLine = true,
+                            prefix = { Text("$") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primaryOrange, unfocusedBorderColor = colors.border, focusedLabelColor = colors.primaryOrange, cursorColor = colors.primaryOrange, focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        Button(
+                            onClick = {
+                                val v = editAmt.toDoubleOrNull() ?: 0.0
+                                if (editDesc.isNotBlank() && v > 0) {
+                                    onUpdateItem(expense.copy(description = editDesc, amount = v))
+                                    editingThis = false
+                                }
+                            },
+                            enabled = editDesc.isNotBlank() && (editAmt.toDoubleOrNull() ?: 0.0) > 0,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange, contentColor = Color.White)
+                        ) { Text("Guardar cambio", fontWeight = FontWeight.Bold) }
+                    }
+                }
+                if (showConfirmDelete) {
+                    AlertDialog(
+                        onDismissRequest = { showConfirmDelete = false },
+                        title = { Text("¿Eliminar?", fontWeight = FontWeight.Bold) },
+                        text = { Text("Se eliminará \"${expense.description}\".") },
+                        confirmButton = {
+                            TextButton(onClick = { onDeleteItem?.invoke(expense); showConfirmDelete = false }) {
+                                Text("Eliminar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = { TextButton(onClick = { showConfirmDelete = false }) { Text("Cancelar") } }
+                    )
+                }
+                } // key
+            }
+
+            // Gastos guardados (del catálogo / presupuestos anteriores)
+            if (savedGastos.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = colors.border)
+                Text(
+                    "Guardados",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                savedGastos.forEach { (desc, amount) ->
+                    key(desc) {
+                        var editingThis by remember { mutableStateOf(false) }
+                        var editDesc by remember { mutableStateOf(desc) }
+                        var editAmt by remember { mutableStateOf(amount.toString()) }
+                        var showConfirmDelete by remember { mutableStateOf(false) }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                .padding(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(desc, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                    if (!editingThis) Text("$ ${"%.2f".format(amount)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                                }
+                                IconButton(onClick = { editingThis = !editingThis }, modifier = Modifier.size(32.dp)) {
+                                    Icon(if (editingThis) Icons.Default.Close else Icons.Default.Edit, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+                                }
+                                IconButton(onClick = { showConfirmDelete = true }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            if (editingThis) {
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = editDesc,
+                                    onValueChange = { editDesc = it },
+                                    label = { Text("Descripción") },
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primaryOrange, unfocusedBorderColor = colors.border, focusedLabelColor = colors.primaryOrange, cursorColor = colors.primaryOrange, focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                OutlinedTextField(
+                                    value = editAmt,
+                                    onValueChange = { editAmt = it.filter { c -> c.isDigit() || c == '.' } },
+                                    label = { Text("Importe") },
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                    singleLine = true,
+                                    prefix = { Text("$") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colors.primaryOrange, unfocusedBorderColor = colors.border, focusedLabelColor = colors.primaryOrange, cursorColor = colors.primaryOrange, focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        val v = editAmt.toDoubleOrNull() ?: 0.0
+                                        if (editDesc.isNotBlank() && v > 0) {
+                                            onUpdateSaved?.invoke(desc, editDesc, v)
+                                            editingThis = false
+                                        }
+                                    },
+                                    enabled = editDesc.isNotBlank() && (editAmt.toDoubleOrNull() ?: 0.0) > 0,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange, contentColor = Color.White)
+                                ) { Text("Guardar cambio", fontWeight = FontWeight.Bold) }
+                            }
+                        }
+                        if (showConfirmDelete) {
+                            AlertDialog(
+                                onDismissRequest = { showConfirmDelete = false },
+                                title = { Text("¿Eliminar?", fontWeight = FontWeight.Bold) },
+                                text = { Text("Se eliminará \"$desc\" de todos los presupuestos guardados.") },
+                                confirmButton = {
+                                    TextButton(onClick = { onDeleteSaved?.invoke(desc); showConfirmDelete = false }) {
+                                        Text("Eliminar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                                    }
+                                },
+                                dismissButton = { TextButton(onClick = { showConfirmDelete = false }) { Text("Cancelar") } }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddTaxSheetContent(
+    itemToEdit: BudgetTax?,
+    subtotal: Double = 0.0,
+    savedCustomTaxes: List<Pair<String, Double>> = emptyList(),
+    onDeleteSaved: ((String) -> Unit)? = null,
+    onUpdateSaved: ((String, Double) -> Unit)? = null,
+    onAddItem: (List<BudgetTax>) -> Unit,
+    onUpdateItem: (BudgetTax) -> Unit
+) {
+    val colors = getPrestadorColors()
+    val isEditMode = itemToEdit != null
+
+    var description by remember { mutableStateOf(itemToEdit?.description ?: "") }
+    var valueStr by remember { mutableStateOf("") }
+    var isPercentage by remember { mutableStateOf(true) }
+
+    // Pre-fill when editing
+    LaunchedEffect(itemToEdit) {
+        if (itemToEdit != null) {
+            description = itemToEdit.description
+            // Try to detect if it was a percentage (description ends with %)
+            val pctFromDesc = Regex("(\\d+(?:\\.\\d+)?)%").find(itemToEdit.description)?.groupValues?.get(1)?.toDoubleOrNull()
+            if (pctFromDesc != null && subtotal > 0) {
+                isPercentage = true
+                valueStr = pctFromDesc.toString()
+            } else {
+                isPercentage = false
+                valueStr = if (itemToEdit.amount > 0) itemToEdit.amount.toString() else ""
+            }
+        }
     }
 
-    val expenseRows = remember { mutableStateListOf<TempMiscExpense>().apply { addAll(initialList) } }
-
-    val commonRows = remember {
-        mutableStateListOf(
-            TempMiscExpense(description = "Gastos de envios"),
-            TempMiscExpense(description = "Viáticos"),
-            TempMiscExpense(description = "Logística"),
-            TempMiscExpense(description = "Movilidad")
-        )
+    val computedAmount = remember(valueStr, isPercentage, subtotal) {
+        val v = valueStr.toDoubleOrNull() ?: 0.0
+        if (isPercentage) subtotal * v / 100.0 else v
     }
 
     Column(
@@ -348,247 +1133,257 @@ fun AddMiscExpenseSheetContent(
                 .background(Color(0xFFCBD5E1))
         )
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 20.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.primaryOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Percent, contentDescription = null,
+                    tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+            }
             Text(
-                if (isEditMode) "Editar Gasto" else "Agregar Gastos Varios",
+                if (isEditMode) "Editar Impuesto" else "Impuesto Personalizado",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = colors.primaryOrange
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
             )
-            if (!isEditMode) {
-                IconButton(
-                    onClick = { expenseRows.add(TempMiscExpense()) },
-                    modifier = Modifier.background(colors.primaryOrange, CircleShape)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Agregar fila", tint = Color.White)
-                }
-            }
         }
 
-        expenseRows.forEachIndexed { index, row ->
-            Row(modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CompactTextField(
-                    value = row.description,
-                    onValueChange = { expenseRows[index] = row.copy(description = it) },
-                    label = { Text("Descripción") },
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                )
-                CompactTextField(
-                    value = row.amount,
-                    onValueChange = { expenseRows[index] = row.copy(amount = it) },
-                    label = { Text("Importe ($)") },
-                    modifier = Modifier.width(100.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done)
-                )
-                if (!isEditMode && expenseRows.size > 1) {
-                    IconButton(onClick = { expenseRows.removeAt(index) }) { 
-                        Icon(
-                            Icons.Default.Delete, 
-                            contentDescription = "Eliminar", 
-                            tint = Color(0xFFEF4444)
-                        ) 
-                    }
-                }
-            }
-        }
-
-        if (!isEditMode) {
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
-                color = colors.border
-            )
-            Text(
-                "Gastos Comunes", 
-                style = MaterialTheme.typography.titleMedium, 
-                modifier = Modifier.padding(bottom = 8.dp), 
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary
-            )
-            commonRows.forEachIndexed { index, row ->
-                Row(modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CompactTextField(value = row.description, onValueChange = { commonRows[index] = row.copy(description = it) }, label = { Text("Descripción") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-                    CompactTextField(
-                        value = row.amount,
-                        onValueChange = { commonRows[index] = row.copy(amount = it) },
-                        label = { Text("Importe ($)") },
-                        modifier = Modifier.width(100.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done)
-                    )
-                    Spacer(modifier = Modifier.size(48.dp))
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        val totalAmount = (expenseRows + commonRows).sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
-        Text(
-            text = "Total Gasto: \$${"%.2f".format(totalAmount)}", 
-            style = MaterialTheme.typography.titleMedium, 
-            fontWeight = FontWeight.Bold,
-            color = colors.primaryOrange,
-            modifier = Modifier
-                .align(Alignment.End)
-                .padding(vertical = 8.dp)
+        // Description
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text("Descripción") },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colors.primaryOrange,
+                unfocusedBorderColor = colors.border,
+                focusedLabelColor = colors.primaryOrange,
+                cursorColor = colors.primaryOrange,
+                focusedTextColor = colors.textPrimary,
+                unfocusedTextColor = colors.textPrimary
+            ),
+            shape = RoundedCornerShape(8.dp)
         )
-        Spacer(modifier = Modifier.height(16.dp))
 
-        Button(
-            onClick = {
-                if (itemToEdit != null) {
-                    val row = expenseRows.first()
-                    onUpdateItem(itemToEdit.copy(description = row.description, amount = row.amount.toDoubleOrNull() ?: 0.0))
-                } else {
-                    val newExpenses = (expenseRows + commonRows).mapNotNull { row ->
-                        val amt = row.amount.toDoubleOrNull() ?: 0.0
-                        if (row.description.isNotBlank() && amt > 0) {
-                            BudgetMiscExpense(description = row.description, amount = amt)
-                        } else null
-                    }
-                    if (newExpenses.isNotEmpty()) onAddItem(newExpenses)
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = totalAmount > 0,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = colors.primaryOrange,
-                contentColor = Color.White
-            )
+        // Value + toggle
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            OutlinedTextField(
+                value = valueStr,
+                onValueChange = { valueStr = it.filter { c -> c.isDigit() || c == '.' } },
+                label = { Text(if (isPercentage) "Porcentaje" else "Importe") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                suffix = { Text(if (isPercentage) "%" else "$") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primaryOrange,
+                    unfocusedBorderColor = colors.border,
+                    focusedLabelColor = colors.primaryOrange,
+                    cursorColor = colors.primaryOrange,
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
+            // % / $ toggle
+            Row(
+                modifier = Modifier
+                    .height(56.dp)
+                    .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+            ) {
+                listOf("%" to true, "$" to false).forEachIndexed { idx, (label, isPct) ->
+                    val selected = isPercentage == isPct
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .background(if (selected) colors.primaryOrange else Color.Transparent)
+                            .clickable { isPercentage = isPct }
+                            .width(48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            label,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selected) Color.White else colors.textSecondary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    if (idx == 0) Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(colors.border))
+                }
+            }
+        }
+
+        val enteredValue = valueStr.toDoubleOrNull() ?: 0.0
+        val finalAmount = if (isPercentage) subtotal * enteredValue / 100.0 else enteredValue
+
+        // Preview
+        if (enteredValue > 0 && subtotal > 0) {
+            val previewText = if (isPercentage)
+                "${"%.1f".format(enteredValue)}% de ${"%.2f".format(subtotal)} = ${"%.2f".format(finalAmount)}"
+            else
+                "${"%.2f".format(enteredValue)} sobre subtotal ${"%.2f".format(subtotal)}"
             Text(
-                if (isEditMode) "Guardar Cambios" else "Agregar Gastos",
-                fontWeight = FontWeight.Bold
+                previewText,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.primaryOrange,
+                modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
             )
         }
-    }
-}
 
-@Composable
-fun AddTaxSheetContent(
-    itemToEdit: BudgetTax?,
-    onAddItem: (List<BudgetTax>) -> Unit,
-    onUpdateItem: (BudgetTax) -> Unit
-) {
-    val colors = getPrestadorColors()
-    val isEditMode = itemToEdit != null
-    val initialList = if (itemToEdit != null) {
-        listOf(BudgetTax(description = itemToEdit.description, amount = itemToEdit.amount))
-    } else {
-        listOf(BudgetTax())
-    }
-    val taxRows = remember { mutableStateListOf<BudgetTax>().apply { addAll(initialList) } }
-    val commonTaxes = remember { mutableStateListOf(BudgetTax(description = "IVA 21%"), BudgetTax(description = "IVA 10.5%"), BudgetTax(description = "Retenciones"), BudgetTax(description = "Ingresos Brutos")) }
+        Spacer(modifier = Modifier.height(20.dp))
 
-    Column(modifier = Modifier
-        .padding(16.dp)
-        .verticalScroll(rememberScrollState())
-        .imePadding()
-        .navigationBarsPadding()
-        .background(colors.backgroundColor)) {
-        // Handle pill
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(bottom = 12.dp)
-                .size(width = 36.dp, height = 4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color(0xFFCBD5E1))
-        )
-        Row(modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        // Personalizados guardados
+        if (savedCustomTaxes.isNotEmpty() && !isEditMode) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = colors.border)
             Text(
-                if (isEditMode) "Editar Impuesto" else "Agregar Impuestos",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = colors.primaryOrange
+                "Guardados",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
-            if (!isEditMode) {
-                IconButton(
-                    onClick = { taxRows.add(BudgetTax()) },
-                    modifier = Modifier.background(colors.primaryOrange, CircleShape)
+            savedCustomTaxes.forEach { (savedDesc, savedAmt) ->
+                var editMode by remember { mutableStateOf(false) }
+                var editValueStr by remember { mutableStateOf(savedAmt.toString()) }
+                var editIsPercent by remember { mutableStateOf(Regex("\\d+%").containsMatchIn(savedDesc)) }
+                var showDelete by remember { mutableStateOf(false) }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.primaryOrange.copy(alpha = 0.06f))
+                        .padding(12.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Add, 
-                        contentDescription = "Agregar fila", 
-                        tint = Color.White
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(savedDesc, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                            if (!editMode) Text("${"%.2f".format(savedAmt)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                        }
+                        IconButton(onClick = { editMode = !editMode }, modifier = Modifier.size(32.dp)) {
+                            Icon(if (editMode) Icons.Default.Close else Icons.Default.Edit, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+                        }
+                        IconButton(onClick = { showDelete = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    if (editMode) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = editValueStr,
+                                onValueChange = { editValueStr = it.filter { c -> c.isDigit() || c == '.' } },
+                                label = { Text(if (editIsPercent) "Porcentaje" else "Importe") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                suffix = { Text(if (editIsPercent) "%" else "$") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.primaryOrange,
+                                    unfocusedBorderColor = colors.border,
+                                    focusedLabelColor = colors.primaryOrange,
+                                    cursorColor = colors.primaryOrange,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .height(56.dp)
+                                    .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(8.dp))
+                            ) {
+                                listOf("%" to true, "$" to false).forEachIndexed { idx, (lbl, isPct) ->
+                                    val sel = editIsPercent == isPct
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .background(if (sel) colors.primaryOrange else Color.Transparent)
+                                            .clickable { editIsPercent = isPct }
+                                            .width(44.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(lbl, fontWeight = FontWeight.Bold, color = if (sel) Color.White else colors.textSecondary, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                    if (idx == 0) Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(colors.border))
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                val v = editValueStr.toDoubleOrNull() ?: 0.0
+                                val newAmt = if (editIsPercent) subtotal * v / 100.0 else v
+                                onUpdateSaved?.invoke(savedDesc, newAmt)
+                                editMode = false
+                            },
+                            enabled = editValueStr.toDoubleOrNull() != null && editValueStr.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange, contentColor = Color.White)
+                        ) { Text("Guardar cambio", fontWeight = FontWeight.Bold) }
+                    }
+                }
+                if (showDelete) {
+                    AlertDialog(
+                        onDismissRequest = { showDelete = false },
+                        title = { Text("¿Eliminar?", fontWeight = FontWeight.Bold) },
+                        text = { Text("Se eliminará \"$savedDesc\" de las sugerencias.") },
+                        confirmButton = {
+                            TextButton(onClick = { onDeleteSaved?.invoke(savedDesc); showDelete = false }) {
+                                Text("Eliminar", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancelar") } }
                     )
                 }
             }
         }
 
-        taxRows.forEachIndexed { index, row ->
-            var amountStr by remember { mutableStateOf("") }
-            Row(modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CompactTextField(value = row.description, onValueChange = { taxRows[index] = row.copy(description = it) }, label = { Text("Descripción") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-                CompactTextField(value = amountStr, onValueChange = { amountStr = it; taxRows[index] = row.copy(amount = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Importe ($)") }, modifier = Modifier.width(100.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done))
-                if (!isEditMode && taxRows.size > 1) {
-                    IconButton(onClick = { taxRows.removeAt(index) }) { 
-                        Icon(
-                            Icons.Default.Delete, 
-                            contentDescription = "Eliminar", 
-                            tint = Color(0xFFEF4444)
-                        ) 
-                    }
-                }
-            }
-        }
-
-        if (!isEditMode) {
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
-                color = colors.border
-            )
-            Text(
-                "Impuestos Comunes", 
-                style = MaterialTheme.typography.titleMedium, 
-                modifier = Modifier.padding(bottom = 8.dp), 
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary
-            )
-            commonTaxes.forEachIndexed { index, row ->
-                var amountStr by remember { mutableStateOf("") }
-                Row(modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CompactTextField(value = row.description, onValueChange = { commonTaxes[index] = row.copy(description = it) }, label = { Text("Descripción") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-                    CompactTextField(value = amountStr, onValueChange = { amountStr = it; commonTaxes[index] = row.copy(amount = it.toDoubleOrNull() ?: 0.0) }, label = { Text("Importe ($)") }, modifier = Modifier.width(100.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done))
-                    Spacer(modifier = Modifier.size(48.dp))
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = {
-                if (isEditMode) {
-                    onUpdateItem(taxRows.first())
-                } else {
-                    val newTaxes = (taxRows + commonTaxes).filter { it.amount > 0 }
-                    if (newTaxes.isNotEmpty()) onAddItem(newTaxes)
-                }
-            },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = colors.primaryOrange,
-                contentColor = Color.White
-            )
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                if (isEditMode) "Guardar Cambios" else "Agregar Impuestos",
-                fontWeight = FontWeight.Bold
-            )
+            OutlinedButton(
+                onClick = {},
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Text("Cancelar", color = colors.textPrimary)
+            }
+            Button(
+                onClick = {
+                    val autoDesc = if (isPercentage) "${valueStr}%" else "$$valueStr"
+                    val tax = BudgetTax(
+                        id = itemToEdit?.id ?: System.currentTimeMillis(),
+                        description = description.ifBlank { autoDesc },
+                        amount = finalAmount
+                    )
+                    if (isEditMode) onUpdateItem(tax) else onAddItem(listOf(tax))
+                },
+                modifier = Modifier.weight(1f),
+                enabled = enteredValue > 0,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange, contentColor = Color.White)
+            ) {
+                Text(if (isEditMode) "Guardar Cambios" else "Guardar Ítem", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -677,6 +1472,7 @@ fun AddAttachmentSheetContent(
 
 @Composable
 fun SectionsSheetContent(
+    isProfessional: Boolean = false,
     showArticles: Boolean,
     showServices: Boolean,
     showProfessionalFees: Boolean,
@@ -702,11 +1498,13 @@ fun SectionsSheetContent(
             color = colors.textPrimary,
             modifier = Modifier.padding(bottom = 16.dp)
         )
-        SectionSwitch(title = "Artículos", checked = showArticles, onCheckedChange = onShowArticlesChange)
-        SectionSwitch(title = "Mano de Obra / Servicios", checked = showServices, onCheckedChange = onShowServicesChange)
+        if (!isProfessional) {
+            SectionSwitch(title = "Artículos", checked = showArticles, onCheckedChange = onShowArticlesChange)
+            SectionSwitch(title = "Mano de Obra / Servicios", checked = showServices, onCheckedChange = onShowServicesChange)
+            SectionSwitch(title = "Gastos Varios", checked = showMisc, onCheckedChange = onShowMiscChange)
+            SectionSwitch(title = "Impuestos", checked = showTaxes, onCheckedChange = onShowTaxesChange)
+        }
         SectionSwitch(title = "Honorarios del Profesional", checked = showProfessionalFees, onCheckedChange = onShowProfessionalFeesChange)
-        SectionSwitch(title = "Gastos Varios", checked = showMisc, onCheckedChange = onShowMiscChange)
-        SectionSwitch(title = "Impuestos", checked = showTaxes, onCheckedChange = onShowTaxesChange)
         SectionSwitch(title = "Archivos Adjuntos", checked = showAttachments, onCheckedChange = onShowAttachmentsChange)
     }
 }
@@ -743,23 +1541,267 @@ fun SectionSwitch(
 }
 
 @Composable
-fun ClientDetailsSheetContent() {
+fun ClientDetailsSheetContent(
+    clienteNombre: String,
+    onClienteNombreChange: (String) -> Unit,
+    clienteEmail: String,
+    onClienteEmailChange: (String) -> Unit,
+    clienteTelefono: String,
+    onClienteTelefonoChange: (String) -> Unit,
+    clienteDireccion: String,
+    onClienteDireccionChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onSave: () -> Unit
+) {
     val colors = getPrestadorColors()
-    Column(modifier = Modifier
-        .padding(16.dp)
-        .navigationBarsPadding()
-        .background(colors.backgroundColor)) {
-        Text(
-            "Datos del Cliente", 
-            style = MaterialTheme.typography.titleLarge, 
-            fontWeight = FontWeight.Bold,
-            color = colors.textPrimary,
-            modifier = Modifier.padding(bottom = 16.dp)
+
+    val fieldShape = RoundedCornerShape(12.dp)
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = colors.primaryOrange,
+        unfocusedBorderColor = colors.border,
+        focusedLabelColor = colors.primaryOrange,
+        unfocusedLabelColor = colors.textSecondary,
+        cursorColor = colors.primaryOrange,
+        focusedTextColor = colors.textPrimary,
+        unfocusedTextColor = colors.textPrimary,
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent
+    )
+
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .navigationBarsPadding()
+            .background(colors.backgroundColor)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Datos del Cliente",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = colors.textSecondary)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = clienteNombre,
+            onValueChange = onClienteNombreChange,
+            label = { Text("Nombre") },
+            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.textSecondary) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            colors = textFieldColors,
+            shape = fieldShape
         )
-        Text(
-            "Funcionalidad en desarrollo", 
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.textSecondary
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedTextField(
+            value = clienteEmail,
+            onValueChange = onClienteEmailChange,
+            label = { Text("Email") },
+            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = colors.textSecondary) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            ),
+            colors = textFieldColors,
+            shape = fieldShape
         )
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedTextField(
+            value = clienteTelefono,
+            onValueChange = { value ->
+                onClienteTelefonoChange(value.filter { c -> c.isDigit() || c == '+' || c == ' ' })
+            },
+            label = { Text("Teléfono") },
+            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = colors.textSecondary) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Phone,
+                imeAction = ImeAction.Next
+            ),
+            colors = textFieldColors,
+            shape = fieldShape
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedTextField(
+            value = clienteDireccion,
+            onValueChange = onClienteDireccionChange,
+            label = { Text("Dirección") },
+            leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = colors.textSecondary) },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            colors = textFieldColors,
+            shape = fieldShape
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    onClienteNombreChange("")
+                    onClienteEmailChange("")
+                    onClienteTelefonoChange("")
+                    onClienteDireccionChange("")
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primaryOrange),
+                border = BorderStroke(1.dp, colors.primaryOrange.copy(alpha = 0.5f)),
+                shape = fieldShape
+            ) {
+                Text("Limpiar")
+            }
+
+            Button(
+                onClick = onSave,
+                enabled = clienteNombre.isNotBlank(),
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.primaryOrange,
+                    contentColor = Color.White
+                ),
+                shape = fieldShape
+            ) {
+                Text("Guardar", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun ClientPickerSheetContent(
+    clientes: List<ClienteEntity>,
+    selectedClienteId: String?,
+    onSelectCliente: (ClienteEntity) -> Unit,
+    onClose: () -> Unit
+) {
+    val colors = getPrestadorColors()
+    var query by remember { mutableStateOf("") }
+
+    val filtered = remember(clientes, query) {
+        val q = query.trim().lowercase()
+        if (q.isBlank()) clientes
+        else clientes.filter { c ->
+            c.nombre.lowercase().contains(q) ||
+                (c.email ?: "").lowercase().contains(q) ||
+                (c.telefono ?: "").lowercase().contains(q)
+        }
+    }
+
+    val fieldShape = RoundedCornerShape(12.dp)
+
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .navigationBarsPadding()
+            .background(colors.backgroundColor)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Buscar cliente",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = colors.textSecondary)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text("Buscar") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = colors.textSecondary) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colors.primaryOrange,
+                unfocusedBorderColor = colors.border,
+                focusedLabelColor = colors.primaryOrange,
+                unfocusedLabelColor = colors.textSecondary,
+                cursorColor = colors.primaryOrange,
+                focusedTextColor = colors.textPrimary,
+                unfocusedTextColor = colors.textPrimary,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent
+            ),
+            shape = fieldShape
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        if (filtered.isEmpty()) {
+            Text(
+                "No se encontraron clientes.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textSecondary
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filtered, key = { it.id }) { cliente ->
+                    val isSelected = cliente.id == selectedClienteId
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) colors.primaryOrange.copy(alpha = 0.10f) else colors.surfaceColor
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        onClick = { onSelectCliente(cliente) }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(cliente.nombre, color = colors.textPrimary, fontWeight = FontWeight.SemiBold)
+                            val line2 = listOfNotNull(
+                                cliente.telefono?.takeIf { it.isNotBlank() },
+                                cliente.email?.takeIf { it.isNotBlank() }
+                            ).joinToString(" • ")
+                            if (line2.isNotBlank()) {
+                                Text(line2, color = colors.textSecondary, style = MaterialTheme.typography.bodySmall)
+                            }
+                            val addr = cliente.direccion?.takeIf { it.isNotBlank() }
+                            if (addr != null) {
+                                Text(addr, color = colors.textSecondary, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
     }
 }

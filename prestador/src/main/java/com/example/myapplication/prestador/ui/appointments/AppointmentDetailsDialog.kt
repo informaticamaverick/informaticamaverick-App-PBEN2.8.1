@@ -92,7 +92,7 @@ fun AppointmentDetailsDialog(
                 // Información del servicio
                 InfoSection(
                     title = "Servicio",
-                    icon = Icons.Default.Build,
+                    icon = if (appointment.serviceType.equals("PROFESSIONAL", ignoreCase = true)) Icons.Default.Description else Icons.Default.Build,
                     colors = colors
                 ) {
                     InfoRow(label = "Descripción", value = appointment.service, colors = colors)

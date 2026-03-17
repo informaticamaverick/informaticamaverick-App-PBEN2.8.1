@@ -1,6 +1,7 @@
 package com.example.myapplication.prestador.data.local.entity
 
 
+import android.R
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import okhttp3.Address
@@ -53,12 +54,31 @@ data class ProviderEntity(
     val direccionLocal: String? = null,
     val provinciaLocal: String? = null,
     val codigoPostalLocal: String? = null,
+    val horarioLocal: String? = null,
     
     // Datos de empresa (si tieneEmpresa = true)
     val nombreEmpresa: String? = null,
     val cuitEmpresa: String? = null,
     val direccionEmpresa: String? = null,
     
+    //Datos personales adicionales
+    val apellido: String? = null,
+    val titulo: String? = null, //Titulo profesional (separado de prefesión)
+
+    //GPS
+    val latitud: Double? = null,
+    val longitud: Double? = null,
+
+    //Estado del prestador
+    val suscripto: Boolean = false, //Paga el servicio completo de la app
+    val verificado: Boolean = false, // Datos corroborados
+    val favorito: Boolean = false, //Destacado en la app
+
+    //Servicio adicional
+    val envios: Boolean = false,
+
     // Tipo de servicio
-    val serviceType: String = "TECHNICAL"  // ServiceType enum as String
+    val serviceType: String = "TECHNICAL",
+    // Modalidad de atencion(PROFESIONAL)
+    val atiendeVirtual: Boolean = false
 )

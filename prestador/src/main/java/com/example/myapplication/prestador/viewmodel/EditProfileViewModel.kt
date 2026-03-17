@@ -44,6 +44,9 @@ class EditProfileViewModel @Inject constructor(
     // ID del business del prestador (si tiene empresa)
     private val _businessId = MutableStateFlow<String?>(null)
     val businessId: StateFlow<String?> = _businessId.asStateFlow()
+
+    private val _bussinesEntity = MutableStateFlow<com.example.myapplication.prestador.data.local.entity.BusinessEntity?>(null)
+    val businessEntity: StateFlow<com.example.myapplication.prestador.data.local.entity.BusinessEntity?> = _bussinesEntity.asStateFlow()
     
     // Configuración de tipo de servicio
     private val _serviceTypeConfig = MutableStateFlow(getServiceTypeConfig(ServiceType.TECHNICAL))
@@ -59,61 +62,9 @@ class EditProfileViewModel @Inject constructor(
             try {
                 val userId = auth.currentUser?.uid ?: throw Exception("Usuario no autenticado")
                 
-                // Intentar cargar desde Room primero
-                val provider = providerRepository.getProviderByIdOnce(userId)
-                
-                if (provider != null) {
-                    _profileState.value = ProfileState.Success(provider)
-                    // Sincronizar el modo con tieneEmpresa
-                    _profileMode.value = if (provider.tieneEmpresa) {
-                        PrestadorProfileMode.EMPRESA
-                    } else {
-                        PrestadorProfileMode.PERSONAL
-                    }
-                    
-                    // Actualizar configuración de tipo de servicio
-                    _serviceTypeConfig.value = getServiceTypeConfig(
-                        ServiceType.fromString(provider.serviceType)
-                    )
-                    
-                    // Cargar businessId si tiene empresa
-                    if (provider.tieneEmpresa) {
-                        val businesses = businessRepository.getBusinessesByProvider(userId).first()
-                        val existingBusiness = businesses.firstOrNull()
-                        
-                        if (existingBusiness != null) {
-                            _businessId.value = existingBusiness.id
-                        } else {
-                            // Si tiene empresa pero no existe BusinessEntity, crearlo
-                            if (!provider.nombreEmpresa.isNullOrBlank() &&
-                                !provider.cuitEmpresa.isNullOrBlank() &&
-                                !provider.direccionEmpresa.isNullOrBlank()) {
-                                
-                                val newBusinessId = UUID.randomUUID().toString()
-                                val newBusiness = BusinessEntity(
-                                    id = newBusinessId,
-                                    providerId = userId,
-                                    nombreNegocio = provider.nombreEmpresa!!,
-                                    razonSocial = provider.nombreEmpresa!!,
-                                    cuitNegocio = provider.cuitEmpresa!!,
-                                    direccion = provider.direccionEmpresa!!,
-                                    codigoPostal = "",
-                                    createdAt = System.currentTimeMillis(),
-                                    updatedAt = System.currentTimeMillis()
-                                )
-                                businessRepository.saveBusiness(newBusiness)
-                                _businessId.value = newBusinessId
-                            } else {
-                                _businessId.value = null
-                            }
-                        }
-                    } else {
-                        _businessId.value = null
-                    }
-                } else {
-                    // Si no existe en Room, cargar desde Firebase
-                    loadFromFirebase(userId)
-                }
+                // Siempre cargar desde Firebase para garantizar datos frescos
+                // (evita mostrar datos de otra sesión que quedaron en cache de Room)
+                loadFromFirebase(userId)
             } catch (e: Exception) {
                 _profileState.value = ProfileState.Error(e.message ?: "Error al cargar perfil")
             }
@@ -127,6 +78,7 @@ class EditProfileViewModel @Inject constructor(
                 val provider = ProviderEntity(
                     id = userId,
                     name = doc.getString("nombre") ?: "",
+                    apellido = doc.getString("apellido"),
                     email = doc.getString("email") ?: "",
                     phone = doc.getString("telefono") ?: "",
                     imageUrl = doc.getString("imageUrl"),
@@ -150,12 +102,15 @@ class EditProfileViewModel @Inject constructor(
                     direccionLocal = doc.getString("direccionLocal"),
                     provinciaLocal = doc.getString("provinciaLocal"),
                     codigoPostalLocal = doc.getString("codigoPostalLocal"),
+                    horarioLocal = doc.getString("horarioLocal"),
                     tieneEmpresa = doc.getBoolean("tieneEmpresa") ?: false,
                     trabajaConOtros = doc.getBoolean("trabajaConOtros") ?: false,
                     nombreEmpresa = doc.getString("nombreEmpresa"),
                     cuitEmpresa = doc.getString("cuitEmpresa"),
                     direccionEmpresa = doc.getString("direccionEmpresa"),
-                    serviceType = doc.getString("serviceType") ?: "TECHNICAL"
+                    serviceType = doc.getString("serviceType") ?: "TECHNICAL",
+                    envios = doc.getBoolean("envios") ?: false,
+                    atiendeVirtual = doc.getBoolean("atiendeVirtual") ?: false
                 )
                 providerRepository.saveProvider(provider)
                 _profileState.value = ProfileState.Success(provider)
@@ -178,6 +133,7 @@ class EditProfileViewModel @Inject constructor(
                     
                     if (existingBusiness != null) {
                         _businessId.value = existingBusiness.id
+                        _bussinesEntity.value = existingBusiness
                     } else {
                         // Si tiene empresa pero no existe BusinessEntity, crearlo
                         if (!provider.nombreEmpresa.isNullOrBlank() &&
@@ -215,6 +171,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun updateProfile(
         name: String? = null,
+        apellido: String? = null,
         email: String? = null,
         phone: String? = null,
         description: String? = null,
@@ -234,10 +191,13 @@ class EditProfileViewModel @Inject constructor(
         codigoPostalLocal: String? = null,
         tieneEmpresa: Boolean? = null,
         trabajaConOtros: Boolean? = null,
+        envios: Boolean? = null,
         nombreEmpresa: String? = null,
         cuitEmpresa: String? = null,
         direccionEmpresa: String? = null,
-        serviceType: String? = null
+        serviceType: String? = null,
+        horarioLocal: String? = null,
+        atiendeVirtual: Boolean? = null
     ) {
         println("🟢 ViewModel.updateProfile llamado")
         println("🟢 name=$name, email=$email, phone=$phone")
@@ -257,6 +217,7 @@ class EditProfileViewModel @Inject constructor(
                 
                 val updatedProvider = currentProvider.copy(
                     name = name ?: currentProvider.name,
+                    apellido = apellido ?: currentProvider.apellido,
                     email = email ?: currentProvider.email,
                     phone = phone ?: currentProvider.phone,
                     description = description ?: currentProvider.description,
@@ -276,10 +237,13 @@ class EditProfileViewModel @Inject constructor(
                     codigoPostalLocal = codigoPostalLocal,
                     tieneEmpresa = tieneEmpresa ?: currentProvider.tieneEmpresa,
                     trabajaConOtros = trabajaConOtros ?: currentProvider.trabajaConOtros,
+                    envios = envios ?: currentProvider.envios,
                     nombreEmpresa = nombreEmpresa,
                     cuitEmpresa = cuitEmpresa,
                     direccionEmpresa = direccionEmpresa,
-                    serviceType = serviceType ?: currentProvider.serviceType
+                    serviceType = serviceType ?: currentProvider.serviceType,
+                    horarioLocal = horarioLocal,
+                    atiendeVirtual = atiendeVirtual ?: currentProvider.atiendeVirtual
                 )
                 
                 // Actualizar en Room
@@ -294,6 +258,7 @@ class EditProfileViewModel @Inject constructor(
                 
                 // Solo actualizar campos que fueron pasados
                 if (name != null) updateData["nombre"] = name
+                if (apellido != null) updateData["apellido"] = apellido
                 if (email != null) updateData["email"] = email
                 if (phone != null) updateData["telefono"] = phone
                 if (description != null) updateData["description"] = description
@@ -313,10 +278,13 @@ class EditProfileViewModel @Inject constructor(
                 if (codigoPostalLocal != null) updateData["codigoPostalLocal"] = codigoPostalLocal
                 if (tieneEmpresa != null) updateData["tieneEmpresa"] = tieneEmpresa
                 if (trabajaConOtros != null) updateData["trabajaConOtros"] = trabajaConOtros
+                if (envios != null) updateData["envios"] = envios
                 if (nombreEmpresa != null) updateData["nombreEmpresa"] = nombreEmpresa
                 if (cuitEmpresa != null) updateData["cuitEmpresa"] = cuitEmpresa
                 if (direccionEmpresa != null) updateData["direccionEmpresa"] = direccionEmpresa
                 if (serviceType != null) updateData["serviceType"] = serviceType
+                if (horarioLocal != null) updateData["horarioLocal"] = horarioLocal
+                if (atiendeVirtual != null) updateData["atiendeVirtual"] = atiendeVirtual
                 
                 firestore.collection("usuarios")
                     .document(userId)
@@ -326,12 +294,10 @@ class EditProfileViewModel @Inject constructor(
                 // Si tiene empresa, crear o actualizar BusinessEntity
                 if (updatedProvider.tieneEmpresa && 
                     !updatedProvider.nombreEmpresa.isNullOrBlank() &&
-                    !updatedProvider.cuitEmpresa.isNullOrBlank() &&
-                    !updatedProvider.direccionEmpresa.isNullOrBlank()) {
+                    !updatedProvider.cuitEmpresa.isNullOrBlank()) {
                     
                     val businesses = businessRepository.getBusinessesByProvider(userId).first()
                     val existingBusiness = businesses.firstOrNull()
-                    
                     if (existingBusiness != null) {
                         // Actualizar business existente
                         val updatedBusiness = existingBusiness.copy(
@@ -344,6 +310,7 @@ class EditProfileViewModel @Inject constructor(
                         )
                         businessRepository.updateBusiness(updatedBusiness)
                         _businessId.value = existingBusiness.id
+                        _bussinesEntity.value = existingBusiness
                     } else {
                         // Crear nuevo business
                         val newBusinessId = UUID.randomUUID().toString()
@@ -391,7 +358,34 @@ class EditProfileViewModel @Inject constructor(
             }
         }
     }
+
+    fun updateImagenesProductos(json: String) {
+        val business = _bussinesEntity.value ?: return
+        val updated = business.copy(imagenesProductos = json)
+        _bussinesEntity.value = updated
+        viewModelScope.launch {
+            businessRepository.updateBusiness(updated)
+        }
+    }
+
+    fun updateCategorias(json: String) {
+        val business = _bussinesEntity.value ?: return
+        val updated = business.copy(categorias = json)
+        _bussinesEntity.value = updated
+        viewModelScope.launch {
+            businessRepository.updateBusiness(updated)
+        }
+    }
+
+    fun updateHorarioCasaCentral(horario: String) {
+        val businees = _bussinesEntity.value?: return
+        val updated = businees.copy(horario = horario.ifBlank { null })
+        _bussinesEntity.value = updated
+        viewModelScope.launch { businessRepository.updateBusiness(updated) }
+    }
+
 }
+
 
 sealed class ProfileState {
     object Loading : ProfileState()

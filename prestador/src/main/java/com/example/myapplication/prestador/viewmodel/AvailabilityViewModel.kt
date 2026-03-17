@@ -3,6 +3,7 @@ package com.example.myapplication.prestador.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.prestador.data.local.entity.AvailabilityScheduleEntity
+import com.example.myapplication.prestador.data.repository.AvailabilityScheduleFirestoreSync
 import com.example.myapplication.prestador.data.repository.AvailabilityScheduleRepository
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,6 +15,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AvailabilityViewModel @Inject constructor(
     private val repository: AvailabilityScheduleRepository,
+    private val sync: AvailabilityScheduleFirestoreSync,
     private val auth: FirebaseAuth
 ) : ViewModel() {
 
@@ -30,6 +32,15 @@ class AvailabilityViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val id = providerId
+            if (id.isNotBlank()) {
+                sync.pullSchedulesToRoom(id)
+            }
+        }
+    }
 
     sealed class UiState {
         object Idle : UiState()
@@ -87,6 +98,15 @@ class AvailabilityViewModel @Inject constructor(
                 )
 
                 repository.saveSchedule(schedule)
+
+                val syncResult = sync.upsertSchedule(schedule)
+                if (syncResult.isFailure) {
+                    _uiState.value = UiState.Error(
+                        "Horario guardado localmente, pero falló la sincronización: ${syncResult.exceptionOrNull()?.message ?: "Error"}"
+                    )
+                    return@launch
+                }
+
                 _uiState.value = UiState.Success("Horario agregado correctamente")
             } catch (e: Exception) {
                 _uiState.value = UiState.Error(e.message ?: "Error al agregar horario")
@@ -109,7 +129,17 @@ class AvailabilityViewModel @Inject constructor(
                     return@launch
                 }
 
-                repository.updateSchedule(schedule.copy(updatedAt = System.currentTimeMillis()))
+                val updated = schedule.copy(updatedAt = System.currentTimeMillis())
+                repository.updateSchedule(updated)
+
+                val syncResult = sync.upsertSchedule(updated)
+                if (syncResult.isFailure) {
+                    _uiState.value = UiState.Error(
+                        "Horario actualizado localmente, pero falló la sincronización: ${syncResult.exceptionOrNull()?.message ?: "Error"}"
+                    )
+                    return@launch
+                }
+
                 _uiState.value = UiState.Success("Horario actualizado correctamente")
             } catch (e: Exception) {
                 _uiState.value = UiState.Error(e.message ?: "Error al actualizar horario")
@@ -123,6 +153,15 @@ class AvailabilityViewModel @Inject constructor(
 
             try {
                 repository.deleteScheduleById(scheduleId)
+
+                val syncResult = sync.deleteScheduleById(scheduleId)
+                if (syncResult.isFailure) {
+                    _uiState.value = UiState.Error(
+                        "Horario eliminado localmente, pero falló la sincronización: ${syncResult.exceptionOrNull()?.message ?: "Error"}"
+                    )
+                    return@launch
+                }
+
                 _uiState.value = UiState.Success("Horario eliminado correctamente")
             } catch (e: Exception) {
                 _uiState.value = UiState.Error(e.message ?: "Error al eliminar horario")

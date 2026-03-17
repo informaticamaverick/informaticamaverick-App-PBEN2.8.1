@@ -29,6 +29,10 @@ import com.example.myapplication.prestador.data.local.entity.ConversationEntity
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.myapplication.prestador.data.local.dao.PlantillaPresupuestoDao
 import com.example.myapplication.prestador.data.local.entity.PlantillaPresupuestoEntity
+import com.example.myapplication.prestador.data.local.dao.DireccionDao
+import com.example.myapplication.prestador.data.local.dao.ReferenteDao
+import com.example.myapplication.prestador.data.local.entity.DireccionEntity
+import com.example.myapplication.prestador.data.local.entity.ReferenteEntity
 
 
 /**
@@ -48,9 +52,12 @@ import com.example.myapplication.prestador.data.local.entity.PlantillaPresupuest
         EmpleadoEntity::class,
         AvailabilityScheduleEntity::class,
         RentalSpaceEntity::class,
-        PlantillaPresupuestoEntity::class
-    ],
-    version = 26,
+        PlantillaPresupuestoEntity::class,
+        DireccionEntity::class,
+        ReferenteEntity::class,
+
+   ],
+    version = 29,
     exportSchema = true
 )
 abstract class PrestadorDatabase : RoomDatabase() {
@@ -68,4 +75,7 @@ abstract class PrestadorDatabase : RoomDatabase() {
     abstract fun rentalSpaceDao(): RentalSpaceDao
 
     abstract fun plantillaPresupuestoDao(): PlantillaPresupuestoDao
+
+    abstract fun direccionDao(): DireccionDao
+    abstract fun referenteDao(): ReferenteDao
 }

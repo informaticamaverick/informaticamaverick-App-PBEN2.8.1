@@ -1,5 +1,6 @@
 package com.example.myapplication.prestador.data.local.entity
 
+import android.R
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -22,6 +23,30 @@ data class BusinessEntity(
     val email: String? = null,
     val descripcion: String? = null,
     val imageUrl: String? = null,
+
+    //Direcion casa central
+    val direccionId:String? = null,
+
+    //referente de casa central
+    val referenteId: String? = null,
+
+    //Categoria (JSON, hasta 5)
+    val categorias: String = "[]",
+
+    //Imagenes de productos/servicios
+    val imagenesProductos: String = "[]",
+    //Servicios que ofrece
+    val atencion24hs: Boolean = false,
+    val localComercial: Boolean = false,
+    val visitaDomicilio: Boolean = false,
+    val envios: Boolean = false,
+    val turnos: Boolean = false,
+    val horario: String? = null,
+
+    //Estado
+    val verificado: Boolean = false,
+    val rating: Float = 0f,
+
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

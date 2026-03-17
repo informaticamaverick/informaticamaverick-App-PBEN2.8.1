@@ -474,6 +474,120 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_26_27 = object : Migration(26, 27) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            //1. Nuevos campos en providers
+            database.execSQL("ALTER TABLE providers ADD COLUMN apellido TEXT DEFAULT NULL")
+            database.execSQL("ALTER TABLE providers ADD COLUMN titulo TEXT DEFAULT NULL")
+            database.execSQL("ALTER TABLE providers ADD COLUMN latitud REAL DEFAULT NULL")
+            database.execSQL("ALTER TABLE providers ADD COLUMN longitud REAL DEFAULT NULL")
+            database.execSQL("ALTER TABLE providers ADD COLUMN suscripto INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE providers ADD COLUMN verificado INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE providers ADD COLUMN favorito INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE providers ADD COLUMN envios INTEGER NOT NULL DEFAULT 0")
+
+            //2. Nuevos campos en business
+            database.execSQL("ALTER TABLE business ADD COLUMN direccionId TEXT DEFAULT NULL")
+            database.execSQL("ALTER TABLE business ADD COLUMN referenteId TEXT DEFAULT NULL")
+            database.execSQL("ALTER TABLE business ADD COLUMN categorias TEXT NOT NULL DEFAULT '[]'")
+            database.execSQL("ALTER TABLE business ADD COLUMN imagenesProductos TEXT NOT NULL DEFAULT '[]'")
+            database.execSQL("ALTER TABLE business ADD COLUMN atencion24hs INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE business ADD COLUMN localComercial INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE business ADD COLUMN visitaDomicilio INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE business ADD COLUMN envios INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE business ADD COLUMN turnos INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE business ADD COLUMN verificado INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE business ADD COLUMN rating REAL NOT NULL DEFAULT 0")
+
+            //3. Recrear tabla sucursales
+            // Se removieron: direccion, codigoPostal, latitude, longitude
+            // Se agregaron: direccionId, referenteId
+            // SQLite no permite DROP COLUMN, hay que recrear la tabla
+            database.execSQL("""
+                CREATE TABLE IF NOT EXISTS sucursales_new (
+                    id TEXT NOT NULL,
+                    businessId TEXT NOT NULL,
+                    nombre TEXT NOT NULL,
+                    telefono TEXT,
+                    email TEXT,
+                    horario TEXT,
+                    direccionId TEXT,
+                    referenteId TEXT,
+                    isActive INTEGER NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    PRIMARY KEY(id),
+                    FOREIGN KEY(businessId) REFERENCES business(id) ON DELETE CASCADE
+                )
+            """.trimIndent())
+
+            // Copiar datos conservando solo las columnas que siguen existiendo
+            database.execSQL("""
+                INSERT INTO sucursales_new
+                    (id, businessId, nombre, telefono, email, horario, isActive, createdAt, updatedAt)
+                SELECT id, businessId, nombre, telefono, email, horario, isActive, createdAt, updatedAt
+                FROM sucursales
+            """.trimIndent())
+
+            database.execSQL("DROP INDEX IF EXISTS index_sucursales_businessId")
+            database.execSQL("DROP TABLE sucursales")
+            database.execSQL("ALTER TABLE sucursales_new RENAME TO sucursales")
+            database.execSQL("CREATE INDEX IF NOT EXISTS index_sucursales_businessId ON sucursales(businessId)")
+
+            //4. Crear tabla direcciones
+            database.execSQL("""
+                CREATE TABLE IF NOT EXISTS direcciones (
+                    id TEXT NOT NULL,
+                    referenciaId TEXT NOT NULL,
+                    referenciaTipo TEXT NOT NULL,
+                    pais TEXT NOT NULL DEFAULT 'Argentina',
+                    provincia TEXT,
+                    localidad TEXT,
+                    codigoPostal TEXT,
+                    calle TEXT,
+                    numero TEXT,
+                    latitud REAL,
+                    longitud REAL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    PRIMARY KEY(id)
+                )
+            """.trimIndent())
+
+            //5. Crear tabla referentes
+            database.execSQL("""
+                CREATE TABLE IF NOT EXISTS referentes (
+                    id TEXT NOT NULL,
+                    providerId TEXT NOT NULL,
+                    nombre TEXT NOT NULL,
+                    apellido TEXT,
+                    cargo TEXT,
+                    imageUrl TEXT,
+                    empresaId TEXT,
+                    sucursalId TEXT,
+                    activo INTEGER NOT NULL DEFAULT 1,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    PRIMARY KEY(id)
+                )
+            """.trimIndent())
+        }
+    }
+
+    val MIGRATION_27_28 = object : Migration(27, 28) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE providers ADD COLUMN horarioLocal TEXT")
+            database.execSQL("ALTER TABLE business ADD COLUMN horario TEXT")
+        }
+    }
+
+
+    val MIGRATION_28_29 = object : Migration(28, 29) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE providers ADD COLUMN atiendeVirtual INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_6_7,
         MIGRATION_7_8,
@@ -491,6 +605,10 @@ object DatabaseMigrations {
         MIGRATION_22_23,
         MIGRATION_23_24,
         MIGRATION_24_25,
-        MIGRATION_25_26
+        MIGRATION_25_26,
+        MIGRATION_26_27,
+        MIGRATION_27_28,
+        MIGRATION_28_29
     )
 }
+

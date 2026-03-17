@@ -13,11 +13,13 @@ import javax.inject.Inject
 import kotlin.time.Duration
 import com.example.myapplication.prestador.data.model.ServiceType
 import com.example.myapplication.prestador.data.repository.ValidationResult
+import com.example.myapplication.prestador.data.repository.AvailabilityScheduleFirestoreSync
 
 @HiltViewModel
 class AppointmentViewModel @Inject constructor(
     private val repository: AppointmentRepository,
-    private val availabilityRepository: com.example.myapplication.prestador.data.repository.AppointmentAvailabilityRepository
+    private val availabilityRepository: com.example.myapplication.prestador.data.repository.AppointmentAvailabilityRepository,
+    private val scheduleSync: AvailabilityScheduleFirestoreSync
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
@@ -177,13 +179,35 @@ class AppointmentViewModel @Inject constructor(
 
     private val _availabilitySlots = MutableStateFlow<List<String>>(emptyList())
     val availabilitySlots: StateFlow<List<String>> = _availabilitySlots.asStateFlow()
-    fun loadAvailabilitySlots(providerId: String, date: String, duration: Int = 60) {
-        viewModelScope.launch { _availabilitySlots.value = availabilityRepository.getAvailableSlots(
-            providerId = providerId,
-            date = date,
-            duration = duration
-        )
 
+    private val _availabilityLoading = MutableStateFlow(false)
+    val availabilityLoading: StateFlow<Boolean> = _availabilityLoading.asStateFlow()
+
+    private val pulledProviders = mutableSetOf<String>()
+
+    fun loadAvailabilitySlots(providerId: String, date: String, duration: Int = 60) {
+        viewModelScope.launch {
+            _availabilityLoading.value = true
+            try {
+                if (providerId.isNotBlank() && pulledProviders.add(providerId)) {
+                    val pullResult = scheduleSync.pullSchedulesToRoom(providerId)
+                    if (pullResult.isSuccess) {
+                        println("🟪 ScheduleSync: pulled ${pullResult.getOrDefault(emptyList()).size} schedules for providerId=$providerId")
+                    } else {
+                        println("🟥 ScheduleSync: failed for providerId=$providerId -> ${pullResult.exceptionOrNull()?.message}")
+                    }
+                }
+
+                val slots = availabilityRepository.getAvailableSlots(
+                    providerId = providerId,
+                    date = date,
+                    duration = duration
+                )
+                println("🟦 AvailabilitySlots: providerId=$providerId date=$date duration=$duration -> ${slots.size} slots")
+                _availabilitySlots.value = slots
+            } finally {
+                _availabilityLoading.value = false
+            }
         }
     }
 
@@ -194,6 +218,15 @@ class AppointmentViewModel @Inject constructor(
         onError: (String) -> Unit
     ) {
         viewModelScope.launch {
+            if (serviceType == ServiceType.PROFESSIONAL && appointment.providerId.isNotBlank() && pulledProviders.add(appointment.providerId)) {
+                val pullResult = scheduleSync.pullSchedulesToRoom(appointment.providerId)
+                if (pullResult.isSuccess) {
+                    println("🟪 ScheduleSync: pulled ${pullResult.getOrDefault(emptyList()).size} schedules for providerId=${appointment.providerId}")
+                } else {
+                    println("🟥 ScheduleSync: failed for providerId=${appointment.providerId} -> ${pullResult.exceptionOrNull()?.message}")
+                }
+            }
+
             val result = availabilityRepository.isTimeSlotAvailable(
                 providerId = appointment.providerId,
                 serviceType = serviceType,

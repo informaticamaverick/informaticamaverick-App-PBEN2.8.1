@@ -1,7 +1,14 @@
 package com.example.myapplication.prestador.ui.profile
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,346 +20,938 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import com.example.myapplication.prestador.data.local.entity.DireccionEntity
+import com.example.myapplication.prestador.data.local.entity.ReferenteEntity
 import com.example.myapplication.prestador.data.local.entity.SucursalEntity
+import com.example.myapplication.prestador.ui.register.FloatingLabelTextField
 import com.example.myapplication.prestador.viewmodel.SucursalesViewModel
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
 @Composable
 fun SucursalesSection(
     colors: com.example.myapplication.prestador.ui.theme.PrestadorColors,
+    onUploadImage: suspend (Uri) -> String?,
+    onSucursalAgregada: () -> Unit = {},
+    refreshTrigger: Int = 0,
     viewModel: SucursalesViewModel = hiltViewModel()
 ) {
     val sucursales by viewModel.sucursales.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
-    val businessId by viewModel.businessId.collectAsState()
+    val direccionesPorSucursal by viewModel.direccionesPorSucursal.collectAsState()
+    val encargadosPorSucursal by viewModel.encargadosPorSucursal.collectAsState()
+    val equipoPorSucursal by viewModel.equipoPorSucursal.collectAsState()
 
-    var showAddDialog by remember { mutableStateOf(false) }
-    var sucursalToEdit by remember { mutableStateOf<SucursalEntity?>(null) }
-    var showDeleteDialog by remember { mutableStateOf<SucursalEntity?>(null) }
-    var showSuccessMessage by remember { mutableStateOf(false) }
-    var successMessage by remember { mutableStateOf("") }
-    var showErrorMessage by remember { mutableStateOf<String?>(null) }
-    
-    // Refrescar businessId cada vez que se muestra la sección
-    LaunchedEffect(Unit) {
-        viewModel.refreshBusinessId()
+    // Estado del formulario inline para agregar nueva sucursal
+    var agregando by remember { mutableStateOf(false) }
+    var nuevoNombre by remember { mutableStateOf("") }
+    var nuevaProvincia by remember { mutableStateOf("") }
+    var nuevaLocalidad by remember { mutableStateOf("") }
+    var mostrarSugerenciasProvincia by remember { mutableStateOf(false) }
+    var mostrarSugerenciasLocalidad by remember { mutableStateOf(false) }
+    val provinciasFiltradas: List<String> = if (nuevaProvincia.isBlank()) emptyList()
+    else PROVINCIAS_ARGENTINA.filter { p -> p.contains(nuevaProvincia.trim(), ignoreCase = true) }
+    val localidadesDeProvincia: List<Localidad> = LOCALIDADES_POR_PROVINCIA.entries
+        .firstOrNull { e -> e.key.equals(nuevaProvincia.trim(), ignoreCase = true) }?.value ?: emptyList()
+    val localidadesFiltradas: List<Localidad> = if (nuevaLocalidad.isBlank())
+        localidadesDeProvincia
+    else localidadesDeProvincia.filter { l -> l.nombre.contains(nuevaLocalidad.trim(), ignoreCase = true) }
+    var nuevaCalle by remember { mutableStateOf("") }
+    var nuevoNumero by remember { mutableStateOf("") }
+    var nuevoCp by remember { mutableStateOf("") }
+    var nuevoHorario by remember { mutableStateOf("") }
+    var nombreError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var geocodingLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scope.launch {
+                geocodingLoading = true
+                try {
+                    val fusedClient = com.google.android.gms.location.LocationServices
+                        .getFusedLocationProviderClient(context)
+                    @Suppress("MissingPermission")
+                    val location = fusedClient.lastLocation.await()
+                    if (location != null) {
+                        val geocoder = android.location.Geocoder(context,
+                        java.util.Locale.getDefault())
+                        @Suppress("DEPRECATION")
+                        val addresses = geocoder.getFromLocation(location.latitude, location.longitude,1)
+                        if (
+                            !addresses.isNullOrEmpty()) {
+                            val addr = addresses[0]
+                            if (!addr.thoroughfare.isNullOrBlank())
+                                nuevaCalle = addr.thoroughfare!!
+                            if (!addr.subThoroughfare.isNullOrBlank())
+                                nuevoNumero = addr.subThoroughfare!!
+                            if (!addr.locality.isNullOrBlank())
+                                nuevaLocalidad = addr.locality!!
+                            if (!addr.adminArea.isNullOrBlank())
+                                nuevaProvincia = addr.adminArea !!
+                            if (!addr.postalCode.isNullOrBlank()) nuevoCp = addr.postalCode!!
+                        }
+
+                    }
+                } catch (e: Exception) {
+                } finally { geocodingLoading = false }
+
+            }
+        }
     }
 
-    // Handle UI state
+    var showDeleteDialog by remember { mutableStateOf<SucursalEntity?>(null) }
+
+    LaunchedEffect(Unit) { viewModel.refreshBusinessId() }
+    LaunchedEffect(refreshTrigger) {
+        if (refreshTrigger > 0) viewModel.refreshBusinessId()
+    }
+
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Al guardar con éxito, cerrar el formulario inline
     LaunchedEffect(uiState) {
-        when (val state = uiState) {
+        when (uiState) {
             is SucursalesViewModel.UiState.Success -> {
-                showAddDialog = false
-                sucursalToEdit = null
-                showDeleteDialog = null
-                successMessage = state.message
-                showSuccessMessage = true
+                agregando = false
+                nuevoNombre = ""; nuevaProvincia = ""; nuevaLocalidad = ""
+                nuevaCalle = ""; nuevoNumero = ""; nuevoCp = ""; nuevoHorario = ""
+                nombreError = false
+                errorMessage = null
+                onSucursalAgregada()
                 viewModel.resetState()
-                kotlinx.coroutines.delay(3000)
-                showSuccessMessage = false
             }
             is SucursalesViewModel.UiState.Error -> {
-                showErrorMessage = state.message
+                errorMessage = (uiState as SucursalesViewModel.UiState.Error).message
                 viewModel.resetState()
-                kotlinx.coroutines.delay(3000)
-                showErrorMessage = null
             }
             else -> {}
         }
     }
 
-    Column {
-        // Header
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+        //Cabecera: contador + boton agregar
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Otras Sucursales",
-                    color = colors.textPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "${sucursales.size} registrada${if (sucursales.size != 1) "s" else ""}",
-                    color = colors.textSecondary,
-                    fontSize = 12.sp
-                )
+            if (sucursales.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = colors.primaryOrange.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = "${sucursales.size} sucursal${if (sucursales.size != 1) "es" else ""}",
+                        color = colors.primaryOrange,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
             }
-            
-            OutlinedButton(
-                onClick = {
-                    sucursalToEdit = null
-                    showAddDialog = true
-                },
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = colors.primaryOrange
-                ),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.primaryOrange),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+
+            Spacer(modifier = Modifier.weight(1f))
+            if (!agregando) {
+                OutlinedButton(
+                    onClick = { agregando = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primaryOrange),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.primaryOrange),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null, modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        "Agregar sucursal",
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+        //Formulario inline "Agregar sucursal
+        AnimatedVisibility(
+            visible = agregando,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = colors.primaryOrange.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.primaryOrange.copy(alpha = 0.3f))
             ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Agregar", fontSize = 13.sp)
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Nueva sucursal", color = colors.primaryOrange, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Box(
+                        modifier = if (nombreError)
+
+                        Modifier.border(1.5.dp, MaterialTheme.colorScheme.error,
+                            RoundedCornerShape(8.dp))
+                        else Modifier
+                    ){
+                        FloatingLabelTextField(
+                            value = nuevoNombre,
+                            onValueChange = { nuevoNombre = it; nombreError = false },
+                            label = "Nombre *",
+                            leadingIcon = Icons.Default.Business
+                        )
+                    }
+
+                    if (nombreError) {
+                        Text("El nombre es obligatorio", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                    }
+
+                    //Provincia con autocomplete
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = nuevaProvincia,
+                            onValueChange = { nuevaProvincia = it; mostrarSugerenciasProvincia = it.isNotEmpty() },
+                            label = { Text("Provincia") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Map, contentDescription = null, tint = colors.textSecondary) },
+                            trailingIcon = {
+                                if (nuevaProvincia.isNotEmpty())
+                                {
+                                    IconButton(onClick = { nuevaProvincia = "";
+                                    mostrarSugerenciasProvincia = false }) {
+                                        Icon(Icons.Default.Clear, contentDescription = null, tint = colors.textSecondary)
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colors.primaryOrange,
+                                unfocusedBorderColor = colors.border,
+                                focusedLabelColor = colors.primaryOrange,
+                                focusedTextColor = colors.textPrimary,
+                                unfocusedTextColor = colors.textPrimary
+                            )
+                        )
+                        AnimatedVisibility(
+                            visible = mostrarSugerenciasProvincia && provinciasFiltradas.isNotEmpty(),
+                            enter = fadeIn(tween(200)) + expandVertically(tween(250)),
+                            exit = fadeOut(tween(150)) + shrinkVertically(tween(200))
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                                color = colors.surfaceElevated,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+                                shadowElevation = 4.dp
+                            ){
+                                Column {
+                                    provinciasFiltradas.take(6).forEachIndexed { index, prov ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable{
+                                                    nuevaProvincia = prov
+                                                    nuevaLocalidad = ""
+                                                    nuevoCp = ""
+                                                    mostrarSugerenciasProvincia = false
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ){
+                                            Icon(Icons.Default.LocationOn,
+                                                contentDescription = null,
+                                                tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                                            Text(prov, fontSize = 14.sp, color = colors.textPrimary)
+                                        }
+                                        if (index < provinciasFiltradas.take(6).lastIndex) {
+                                            HorizontalDivider(color = colors.border)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    //Localidad con autcomplete
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        val localidadInteraction = remember {
+                            androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        val localidadFocused by localidadInteraction.collectIsFocusedAsState()
+                        LaunchedEffect(localidadFocused) {
+                            if (localidadFocused && localidadesDeProvincia.isNotEmpty())
+                                mostrarSugerenciasLocalidad = true
+                            if (!localidadFocused) mostrarSugerenciasLocalidad = false
+                        }
+                        OutlinedTextField(
+                            value = nuevaLocalidad,
+                            onValueChange =  { nuevaLocalidad = it; mostrarSugerenciasLocalidad = true },
+                            label = { Text("Localidad") },
+                            leadingIcon = { Icon(Icons.Default.LocationCity,
+                                contentDescription = null, tint = colors.textSecondary )},
+                            trailingIcon = {
+                                if (nuevaLocalidad.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        nuevaLocalidad = "";
+                                        mostrarSugerenciasLocalidad = false
+                                    }) {
+                                        Icon(
+                                            Icons.Default.Clear,
+                                            contentDescription = null,
+                                            tint = colors.textSecondary
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            interactionSource = localidadInteraction,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colors.primaryOrange,
+                                unfocusedBorderColor = colors.border,
+                                focusedLabelColor = colors.primaryOrange,
+                                focusedTextColor = colors.textPrimary,
+                                unfocusedTextColor = colors.textPrimary
+                            )
+                        )
+                        AnimatedVisibility(
+                            visible = mostrarSugerenciasLocalidad && localidadesFiltradas.isNotEmpty(),
+                            enter = fadeIn(tween(200)) + expandVertically(tween(250)),
+                            exit = fadeOut(tween(150)) + shrinkVertically(tween(200))
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
+                                color = colors.surfaceElevated,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+                                shadowElevation = 4.dp
+                            ) {
+                                Column {
+                                    localidadesFiltradas.take(6).forEachIndexed { index, loc ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    nuevaLocalidad = loc.nombre
+                                                    nuevoCp = loc.codigoPostal
+                                                    mostrarSugerenciasLocalidad = false
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Icon(Icons.Default.LocationCity, contentDescription = null,
+                                                tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(loc.nombre, fontSize = 14.sp, color = colors.textPrimary)
+                                            }
+                                            Text("CP ${loc.codigoPostal}", fontSize = 12.sp, color = colors.textSecondary)
+                                        }
+                                        if (index < localidadesFiltradas.take(6).lastIndex) {
+                                            HorizontalDivider(color = colors.border)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = nuevaCalle,
+                        onValueChange = { nuevaCalle = it },
+                        label = { Text("Calle") },
+                        leadingIcon = { Icon(Icons.Default.Home, contentDescription = null, tint = colors.textSecondary) },
+                        trailingIcon = {
+                            if (geocodingLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = colors.primaryOrange)
+                            } else {
+                                IconButton(onClick = {
+                                    locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                                }) {
+                                    Icon(Icons.Default.MyLocation, contentDescription = "Detectar ubicaci\u00f3n", tint = colors.primaryOrange)
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colors.primaryOrange,
+                            unfocusedBorderColor = colors.border,
+                            focusedLabelColor = colors.primaryOrange,
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary
+                        )
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            FloatingLabelTextField(value = nuevoNumero,
+                                onValueChange = { nuevoNumero = it }, label =
+                                    "Número", leadingIcon = Icons.Default.Tag,
+                                keyboardType = KeyboardType.Number)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            FloatingLabelTextField(value = nuevoCp,
+                                onValueChange = { nuevoCp = it }, label = "Cód.Postal", leadingIcon = Icons.Default.PinDrop,
+                                        keyboardType = KeyboardType.Number)
+                        }
+                    }
+
+                    HorarioSelectorField(horario = nuevoHorario, onHorarioChange = { nuevoHorario = it })
+
+                    if (errorMessage != null) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.errorContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.Warning, contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                Text(errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                            }
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                agregando = false
+                                nuevoNombre = ""; nuevaProvincia = ""; nuevaLocalidad = "";
+                                nuevaCalle = ""; nuevoNumero = ""; nuevoCp = ""; nuevoHorario = ""
+                                nombreError = false
+                                errorMessage = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) { Text("Cancelar", fontSize = 13.sp)}
+                        Button(
+                            onClick = {
+                                errorMessage = null
+                                if (nuevoNombre.isBlank()) {
+                                    nombreError = true; return@Button
+                                }
+                                viewModel.addSucursal(
+                                    nuevoNombre,
+                                    nuevaProvincia.takeIf { it.isNotBlank() },
+                                    nuevaLocalidad.takeIf { it.isNotBlank() },
+                                    nuevaCalle.takeIf { it.isNotBlank() },
+                                    nuevoNumero.takeIf { it.isNotBlank() },
+                                    nuevoCp.takeIf { it.isNotBlank() },
+                                    nuevoHorario.takeIf { it.isNotBlank() }
+                                )
+                            },
+                            enabled = uiState !is SucursalesViewModel.UiState.Loading,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            if (uiState is SucursalesViewModel.UiState.Loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Text("Guardar", fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // Lista de sucursales
-        if (sucursales.isEmpty()) {
+        //Lista de sucursales
+        if (sucursales.isEmpty() && !agregando) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = colors.surfaceColor.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        tint = colors.textSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info,
+                        contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "No hay sucursales adicionales",
-                        color = colors.textSecondary,
-                        fontSize = 13.sp
-                    )
+                    Text("No hay sucursales registradas", color = colors.textSecondary, fontSize = 13.sp)
                 }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                sucursales.forEach { sucursal ->
-                    SucursalCard(
-                        sucursal = sucursal,
-                        colors = colors,
-                        onEdit = {
-                            sucursalToEdit = sucursal
-                            showAddDialog = true
-                        },
-                        onDelete = { showDeleteDialog = sucursal }
-                    )
-                }
-            }
-        }
-
-        // Success message
-        AnimatedVisibility(
-            visible = showSuccessMessage,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                color = Color(0xFF4CAF50).copy(alpha = 0.1f),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = Color(0xFF4CAF50),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = successMessage,
-                        color = Color(0xFF4CAF50),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        }
-
-        // Error message
-        showErrorMessage?.let { errorMsg ->
-            AnimatedVisibility(
-                visible = true,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp),
-                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Error,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = errorMsg,
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp
-                        )
+            sucursales.forEach { sucursal ->
+                SucursalExpandableCard(
+                    sucursal = sucursal,
+                    direccion = direccionesPorSucursal[sucursal.id],
+                    encargado = encargadosPorSucursal[sucursal.id],
+                    equipo = equipoPorSucursal[sucursal.id] ?: emptyList(),
+                    colors = colors,
+                    onDelete = { showDeleteDialog = sucursal },
+                    onGuardar = { nombre, provincia, localidad, calle, numero, cp, horario ->
+                        viewModel.updateSucursal(sucursal.copy(nombre = nombre, horario = horario))
+                        viewModel.guardarDireccionSucursal(sucursal.id, "Argentina", provincia, localidad, cp ?: "", calle ?: "", numero ?: "")
+                    },
+                    onUploadImage = onUploadImage,
+                    onGuardarEncargado = { nombre, apellido, cargo, imageUrl ->
+                        viewModel.guardarEncargadoSucursal(sucursal.id, nombre, apellido, cargo, imageUrl)
+                    },
+                    onAgregarEquipo = { nombre, apellido, cargo ->
+                        viewModel.agregarMiembroEquipo(sucursal.id, nombre, apellido, cargo)
+                    },
+                    onDesactivarEquipo = { referente ->
+                        viewModel.desactivarMiembroEquipo(referente.id)
                     }
-                }
+                )
             }
         }
     }
 
-    // Add/Edit Dialog
-    if (showAddDialog) {
-        AddSucursalDialog(
-            sucursal = sucursalToEdit,
-            onDismiss = {
-                showAddDialog = false
-                sucursalToEdit = null
-            },
-            onConfirm = { nombre, direccion, codigoPostal, telefono ->
-                viewModel.addSucursal(nombre, direccion, codigoPostal, telefono)
-            },
-            onUpdate = { sucursal ->
-                viewModel.updateSucursal(sucursal)
-            }
-        )
-    }
 
-    // Delete Dialog
+
+    // ── Confirmar eliminación ────────────────────────────────────────────────
     showDeleteDialog?.let { sucursal ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
             icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Eliminar sucursal") },
-            text = { Text("¿Estás seguro de eliminar '${sucursal.nombre}'?") },
+            text = { Text("Seguro que queres eliminar '${sucursal.nombre}'?") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteSucursal(sucursal.id)
-                    }
-                ) {
+                TextButton(onClick = { viewModel.deleteSucursal(sucursal.id); showDeleteDialog = null }) {
                     Text("Eliminar", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { showDeleteDialog = null }) { Text("Cancelar") }
             }
         )
     }
 }
 
+// ─── Tarjeta expandible ────────────────────────────────────────────────────────
+
 @Composable
-private fun SucursalCard(
+private fun SucursalExpandableCard(
     sucursal: SucursalEntity,
+    direccion: DireccionEntity?,
+    encargado: ReferenteEntity?,
+    equipo: List<ReferenteEntity>,
     colors: com.example.myapplication.prestador.ui.theme.PrestadorColors,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onGuardar: (nombre: String, provincia: String, localidad: String, calle: String, numero: String, cp: String, horario: String?) -> Unit,
+    onUploadImage: suspend (Uri) -> String?,
+    onGuardarEncargado: (nombre: String, apellido: String?, cargo: String?, imageUrl: String?) -> Unit,
+    onAgregarEquipo: (nombre: String, apellido: String?, cargo: String?) -> Unit,
+    onDesactivarEquipo: (ReferenteEntity) -> Unit
 ) {
-    Surface(
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        color = colors.surfaceColor,
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Icono
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(colors.primaryOrange.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
+        Column {
+            // ── Cabecera ──────────────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(CircleShape).background(colors.primaryOrange.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Store, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(sucursal.nombre, color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    val localidad = direccion?.localidad
+                    if (!localidad.isNullOrBlank() || sucursal.horario != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (!localidad.isNullOrBlank()) {
+                                Text(localidad, color = colors.textSecondary, fontSize = 11.sp)
+                            }
+                            sucursal.horario?.let { horario ->
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = colors.primaryOrange.copy(alpha = 0.12f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Schedule, contentDescription = null,
+                                            tint = colors.primaryOrange, modifier = Modifier.size(10.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(horario, color = colors.primaryOrange, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (encargado != null) Text("Encargado/a: ${encargado.nombre}", color = colors.primaryOrange, fontSize = 11.sp)
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                }
                 Icon(
-                    Icons.Default.Store,
-                    contentDescription = null,
-                    tint = colors.primaryOrange,
-                    modifier = Modifier.size(18.dp)
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            // ── Contenido expandible ──────────────────────────────────────────
+            AnimatedVisibility(visible = expanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HorizontalDivider(color = colors.textSecondary.copy(alpha = 0.15f))
 
-            // Info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = sucursal.nombre,
-                    color = colors.textPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = colors.textSecondary,
-                        modifier = Modifier.size(12.dp)
+                    // — Datos (nombre, dirección, horario) —
+                    DatosSubseccion(
+                        sucursal = sucursal,
+                        direccion = direccion,
+                        colors = colors,
+                        onGuardar = onGuardar
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = "${sucursal.direccion} (CP: ${sucursal.codigoPostal})",
-                        color = colors.textSecondary,
-                        fontSize = 11.sp
+
+                    HorizontalDivider(color = colors.textSecondary.copy(alpha = 0.1f))
+
+                    // — Encargado —
+                    EncargadoSubseccion(
+                        encargado = encargado,
+                        colors = colors,
+                        onUploadImage = onUploadImage,
+                        onGuardar = onGuardarEncargado
+                    )
+
+                    HorizontalDivider(color = colors.textSecondary.copy(alpha = 0.1f))
+
+                    // — Equipo —
+                    EquipoSubseccion(
+                        equipo = equipo,
+                        colors = colors,
+                        onAgregar = onAgregarEquipo,
+                        onDesactivar = onDesactivarEquipo
                     )
                 }
-                if (sucursal.telefono != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Phone,
-                            contentDescription = null,
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
+            }
+        }
+    }
+}
+
+// ─── Subsección Datos unificados (nombre + dirección + horario) ───────────────
+
+@Composable
+private fun DatosSubseccion(
+    sucursal: SucursalEntity,
+    direccion: DireccionEntity?,
+    colors: com.example.myapplication.prestador.ui.theme.PrestadorColors,
+    onGuardar: (nombre: String, provincia: String, localidad: String, calle: String, numero: String, cp: String, horario: String?) -> Unit
+) {
+    var editando by remember(sucursal, direccion) { mutableStateOf(false) }
+    var editNombre by remember(sucursal) { mutableStateOf(sucursal.nombre) }
+    var editProvincia by remember(direccion) { mutableStateOf(direccion?.provincia ?: "") }
+    var editLocalidad by remember(direccion) { mutableStateOf(direccion?.localidad ?: "") }
+    var editCalle by remember(direccion) { mutableStateOf(direccion?.calle ?: "") }
+    var editNumero by remember(direccion) { mutableStateOf(direccion?.numero ?: "") }
+    var editCp by remember(direccion) { mutableStateOf(direccion?.codigoPostal ?: "") }
+    var editHorario by remember(sucursal) { mutableStateOf(sucursal.horario ?: "") }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Business, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Datos de la sucursal", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.weight(1f))
+        if (!editando) {
+            TextButton(onClick = { editando = true }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Editar", fontSize = 12.sp)
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(6.dp))
+
+    if (!editando) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            InfoRow(icon = Icons.Default.Business, value = sucursal.nombre, colors = colors)
+            if (direccion != null) {
+                val dir = listOfNotNull(direccion.calle, direccion.numero).joinToString(" ")
+                if (dir.isNotBlank()) InfoRow(icon = Icons.Default.Home, value = dir, colors = colors)
+                val loc = listOfNotNull(direccion.localidad, direccion.provincia).joinToString(", ")
+                if (loc.isNotBlank()) InfoRow(icon = Icons.Default.LocationCity, value = loc, colors = colors)
+                direccion.codigoPostal?.let { InfoRow(icon = Icons.Default.PinDrop, value = "CP $it", colors = colors) }
+            }
+            sucursal.horario?.let { InfoRow(icon = Icons.Default.Schedule, value = it, colors = colors) }
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FloatingLabelTextField(value = editNombre, onValueChange = { editNombre = it }, label = "Nombre *", leadingIcon = Icons.Default.Business)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(modifier = Modifier.weight(1f)) {
+                    FloatingLabelTextField(value = editProvincia, onValueChange = { editProvincia = it }, label = "Provincia", leadingIcon = Icons.Default.Map)
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    FloatingLabelTextField(value = editLocalidad, onValueChange = { editLocalidad = it }, label = "Localidad", leadingIcon = Icons.Default.LocationCity)
+                }
+            }
+            FloatingLabelTextField(value = editCalle, onValueChange = { editCalle = it }, label = "Calle", leadingIcon = Icons.Default.Home)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(modifier = Modifier.weight(1f)) {
+                    FloatingLabelTextField(value = editNumero, onValueChange = { editNumero = it }, label = "Número", leadingIcon = Icons.Default.Tag, keyboardType = KeyboardType.Number)
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    FloatingLabelTextField(value = editCp, onValueChange = { editCp = it }, label = "Cód. Postal", leadingIcon = Icons.Default.PinDrop, keyboardType = KeyboardType.Number)
+                }
+            }
+            HorarioSelectorField(horario = editHorario, onHorarioChange = { editHorario = it })
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    editNombre = sucursal.nombre; editProvincia = direccion?.provincia ?: ""
+                    editLocalidad = direccion?.localidad ?: ""; editCalle = direccion?.calle ?: ""
+                    editNumero = direccion?.numero ?: ""; editCp = direccion?.codigoPostal ?: ""
+                    editHorario = sucursal.horario ?: ""; editando = false
+                },
+                modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)
+            ) { Text("Cancelar", fontSize = 13.sp) }
+            Button(
+                onClick = {
+                    if (editNombre.isNotBlank()) {
+                        onGuardar(editNombre, editProvincia, editLocalidad, editCalle, editNumero, editCp, editHorario.takeIf { it.isNotBlank() })
+                        editando = false
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange),
+                contentPadding = PaddingValues(vertical = 6.dp)
+            ) { Text("Guardar", fontSize = 13.sp) }
+        }
+    }
+}
+
+// ─── Subsección Encargado ──────────────────────────────────────────────────────
+
+@Composable
+private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, colors: com.example.myapplication.prestador.ui.theme.PrestadorColors) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(value, color = colors.textPrimary, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun EncargadoSubseccion(
+    encargado: ReferenteEntity?,
+    colors: com.example.myapplication.prestador.ui.theme.PrestadorColors,
+    onUploadImage: suspend (Uri) -> String?,
+    onGuardar: (nombre: String, apellido: String?, cargo: String?, imageUrl: String?) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var editando by remember(encargado) { mutableStateOf(encargado == null) }
+    var nombre by remember(encargado) { mutableStateOf(encargado?.nombre ?: "") }
+    var apellido by remember(encargado) { mutableStateOf(encargado?.apellido ?: "") }
+    var cargo by remember(encargado) { mutableStateOf(encargado?.cargo ?: "") }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) imageUri = uri
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Person, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Encargado/a", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.weight(1f))
+        if (!editando) {
+            TextButton(onClick = { editando = true }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Editar", fontSize = 12.sp)
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(6.dp))
+
+    if (!editando && encargado != null) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(48.dp).clip(CircleShape).border(2.dp, colors.primaryOrange, CircleShape).background(colors.primaryOrange.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (encargado.imageUrl != null) {
+                    AsyncImage(model = encargado.imageUrl, contentDescription = encargado.nombre, modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
+                } else {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(26.dp))
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text("${encargado.nombre}${if (!encargado.apellido.isNullOrBlank()) " ${encargado.apellido}" else ""}", color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                if (!encargado.cargo.isNullOrBlank()) Text(encargado.cargo, color = colors.textSecondary, fontSize = 12.sp)
+            }
+        }
+    } else {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier.size(60.dp).clip(CircleShape).border(2.dp, colors.primaryOrange, CircleShape).background(colors.primaryOrange.copy(alpha = 0.08f)).clickable { imagePicker.launch("image/*") },
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+                    imageUri != null -> AsyncImage(model = imageUri, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
+                    encargado?.imageUrl != null -> AsyncImage(model = encargado.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
+                    else -> Icon(Icons.Default.AddAPhoto, contentDescription = "Foto", tint = colors.primaryOrange, modifier = Modifier.size(26.dp))
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FloatingLabelTextField(value = nombre, onValueChange = { nombre = it }, label = "Nombre *", leadingIcon = Icons.Default.Person)
+                FloatingLabelTextField(value = apellido, onValueChange = { apellido = it }, label = "Apellido", leadingIcon = Icons.Default.Person)
+                FloatingLabelTextField(value = cargo, onValueChange = { cargo = it }, label = "Cargo (ej: Gerente)", leadingIcon = Icons.Default.Work)
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (encargado != null) {
+                OutlinedButton(
+                    onClick = { nombre = encargado.nombre; apellido = encargado.apellido ?: ""; cargo = encargado.cargo ?: ""; imageUri = null; editando = false },
+                    modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)
+                ) { Text("Cancelar", fontSize = 13.sp) }
+            }
+            Button(
+                onClick = {
+                    if (nombre.isNotBlank()) {
+                        uploading = true
+                        scope.launch {
+                            val url = imageUri?.let { onUploadImage(it) } ?: encargado?.imageUrl
+                            onGuardar(nombre, apellido.takeIf { it.isNotBlank() }, cargo.takeIf { it.isNotBlank() }, url)
+                            uploading = false
+                            editando = false
+                        }
+                    }
+                },
+                enabled = !uploading,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange),
+                contentPadding = PaddingValues(vertical = 6.dp)
+            ) {
+                if (uploading) CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                else Text("Guardar", fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+// ─── Subsección Equipo ─────────────────────────────────────────────────────────
+
+@Composable
+private fun EquipoSubseccion(
+    equipo: List<ReferenteEntity>,
+    colors: com.example.myapplication.prestador.ui.theme.PrestadorColors,
+    onAgregar: (nombre: String, apellido: String?, cargo: String?) -> Unit,
+    onDesactivar: (ReferenteEntity) -> Unit
+) {
+    var agregando by remember { mutableStateOf(false) }
+    var nuevoNombre by remember { mutableStateOf("") }
+    var nuevoApellido by remember { mutableStateOf("") }
+    var nuevoCargo by remember { mutableStateOf("") }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Group, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Equipo de trabajo", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.weight(1f))
+        if (!agregando) {
+            TextButton(onClick = { agregando = true }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Agregar", fontSize = 12.sp)
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
+
+    if (equipo.isEmpty() && !agregando) {
+        Text("Sin miembros de equipo", color = colors.textSecondary, fontSize = 12.sp,
+            modifier = Modifier.padding(start = 22.dp))
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            equipo.forEach { miembro ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier.size(32.dp).clip(CircleShape).background(colors.primaryOrange.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = sucursal.telefono,
-                            color = colors.textSecondary,
-                            fontSize = 11.sp
+                            "${miembro.nombre}${if (!miembro.apellido.isNullOrBlank()) " ${miembro.apellido}" else ""}",
+                            color = colors.textPrimary, fontSize = 13.sp
                         )
+                        if (!miembro.cargo.isNullOrBlank())
+                            Text(miembro.cargo, color = colors.textSecondary, fontSize = 11.sp)
+                    }
+                    IconButton(onClick = { onDesactivar(miembro) }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Quitar", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
                     }
                 }
             }
+        }
+    }
 
-            // Acciones
-            IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Editar",
-                    tint = colors.textSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Eliminar",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(18.dp)
-                )
+    AnimatedVisibility(visible = agregando, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+        Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FloatingLabelTextField(value = nuevoNombre, onValueChange = { nuevoNombre = it }, label = "Nombre *", leadingIcon = Icons.Default.Person)
+            FloatingLabelTextField(value = nuevoApellido, onValueChange = { nuevoApellido = it }, label = "Apellido", leadingIcon = Icons.Default.Person)
+            FloatingLabelTextField(value = nuevoCargo, onValueChange = { nuevoCargo = it }, label = "Cargo", leadingIcon = Icons.Default.Work)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { agregando = false; nuevoNombre = ""; nuevoApellido = ""; nuevoCargo = "" },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) { Text("Cancelar", fontSize = 13.sp) }
+                Button(
+                    onClick = {
+                        if (nuevoNombre.isNotBlank()) {
+                            onAgregar(
+                                nuevoNombre,
+                                nuevoApellido.takeIf { it.isNotBlank() },
+                                nuevoCargo.takeIf { it.isNotBlank() }
+                            )
+                            agregando = false; nuevoNombre = ""; nuevoApellido = ""; nuevoCargo = ""
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) { Text("Guardar", fontSize = 13.sp) }
             }
         }
     }

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.prestador.data.local.entity.AvailabilityScheduleEntity
 import com.example.myapplication.prestador.data.local.entity.toDayName
+import com.example.myapplication.prestador.data.local.entity.toDayAbbr
 import com.example.myapplication.prestador.viewmodel.AvailabilityViewModel
 
 @Composable
@@ -33,7 +34,7 @@ fun AvailabilityScheduleSection(
     
     var showAddDialog by remember { mutableStateOf(false) }
     var scheduleToEdit by remember { mutableStateOf<AvailabilityScheduleEntity?>(null) }
-    var showDeleteDialog by remember { mutableStateOf<AvailabilityScheduleEntity?>(null) }
+    var showDeleteDialog by remember { mutableStateOf<List<AvailabilityScheduleEntity>?>(null) }
     var showSuccessMessage by remember { mutableStateOf(false) }
     var successMessage by remember { mutableStateOf("") }
     var showErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -198,20 +199,19 @@ fun AvailabilityScheduleSection(
                 }
             }
         } else {
-            // Group schedules by day
-            val schedulesGroupedByDay = schedules.groupBy { it.dayOfWeek }.toSortedMap()
-            
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                schedulesGroupedByDay.forEach { (day, daySchedules) ->
-                    DayScheduleCard(
-                        dayOfWeek = day,
-                        schedules = daySchedules,
-                        onEdit = { schedule ->
-                            scheduleToEdit = schedule
+            //Agrupa por franja hraria
+            val schedulesGroupedByTime = schedules
+                .groupBy { Triple(it.startTime, it.endTime, it.appointmentDuration) }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                schedulesGroupedByTime.forEach { (_, groupSchedules) ->
+                    ScheduleSumaryCard(
+                        schedules = groupSchedules,
+                        onEdit = {
+                            scheduleToEdit = groupSchedules.first()
                             showAddDialog = true
                         },
-                        onDelete = { schedule ->
-                            showDeleteDialog = schedule
+                        onDelete = {
+                            showDeleteDialog = groupSchedules
                         },
                         colors = colors
                     )
@@ -249,15 +249,16 @@ fun AvailabilityScheduleSection(
     }
     
     // Delete confirmation dialog
-    showDeleteDialog?.let { schedule ->
+    showDeleteDialog?.let { group ->
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Eliminar horario") },
-            text = { Text("¿Estás seguro que querés eliminar este horario?") },
+            onDismissRequest = {
+                showDeleteDialog = null },
+            title = { Text("Eliminar horario")},
+            text = { Text("¿Estás seguro que querés eñiminar este horario?") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.deleteSchedule(schedule.id)
+                        group.forEach {viewModel.deleteSchedule(it.id) }
                         showDeleteDialog = null
                     }
                 ) {
@@ -265,7 +266,8 @@ fun AvailabilityScheduleSection(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
+                TextButton(onClick = {
+                    showDeleteDialog = null }) {
                     Text("Cancelar")
                 }
             }
@@ -274,107 +276,69 @@ fun AvailabilityScheduleSection(
 }
 
 @Composable
-private fun DayScheduleCard(
-    dayOfWeek: Int,
-    schedules: List<AvailabilityScheduleEntity>,
-    onEdit: (AvailabilityScheduleEntity) -> Unit,
-    onDelete: (AvailabilityScheduleEntity) -> Unit,
-    colors: com.example.myapplication.prestador.ui.theme.PrestadorColors
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = colors.backgroundColor,
-        tonalElevation = 2.dp
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Day name
-            Text(
-                text = dayOfWeek.toDayName(),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.primaryOrange
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Time slots
-            schedules.forEach { schedule ->
-                ScheduleTimeSlot(
-                    schedule = schedule,
-                    onEdit = { onEdit(schedule) },
-                    onDelete = { onDelete(schedule) },
-                    colors = colors
-                )
-                
-                if (schedule != schedules.last()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleTimeSlot(
-    schedule: AvailabilityScheduleEntity,
+private fun ScheduleSumaryCard(
+    schedules:
+    List<AvailabilityScheduleEntity>,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     colors: com.example.myapplication.prestador.ui.theme.PrestadorColors
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(colors.textSecondary.copy(alpha = 0.05f))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val dias = schedules.sortedBy {
+        it.dayOfWeek
+    }.joinToString(" · ") {
+        it.dayOfWeek.toDayAbbr()
+    }
+    val first = schedules.first()
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = colors.surfaceColor,
+        tonalElevation = 2.dp
     ) {
-        Icon(
-            imageVector = Icons.Default.Schedule,
-            contentDescription = null,
-            tint = colors.textSecondary,
-            modifier = Modifier.size(20.dp)
-        )
-        
-        Spacer(modifier = Modifier.width(8.dp))
-        
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "${schedule.startTime} - ${schedule.endTime}",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textPrimary
-            )
-            Text(
-                text = "Turnos de ${schedule.appointmentDuration} min",
-                fontSize = 12.sp,
-                color = colors.textSecondary
-            )
-        }
-        
-        IconButton(
-            onClick = onEdit,
-            modifier = Modifier.size(36.dp)
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.Edit,
-                contentDescription = "Editar",
+                imageVector = Icons.Default.Schedule,
+                contentDescription = null,
                 tint = colors.primaryOrange,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(20.dp)
             )
-        }
-        
-        IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = "Eliminar",
-                tint = Color(0xFFFF5252),
-                modifier = Modifier.size(18.dp)
-            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = dias,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primaryOrange
+                )
+                Text(
+                    text = "${first.startTime} - ${first.endTime}  ·  Turnos ${first.appointmentDuration} min",
+                    fontSize = 13.sp,
+                    color = colors.textPrimary
+                )
+            }
+            IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Default.Edit,
+                    "Editar",
+                    tint = colors.primaryOrange,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    "Eliminar",
+                    tint = Color(0xFFFF5252),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

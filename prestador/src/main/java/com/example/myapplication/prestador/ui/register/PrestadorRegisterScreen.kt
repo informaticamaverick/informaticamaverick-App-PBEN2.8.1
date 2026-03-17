@@ -38,112 +38,115 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.prestador.ui.theme.*
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
+import com.example.myapplication.prestador.data.model.ServiceType
 import kotlinx.coroutines.delay
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import com.google.firebase.auth.FirebaseAuth
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PrestadorRegisterScreen(
     onRegisterSuccess: () -> Unit,
     onBackToLogin: () -> Unit,
+    isGoogleUser: Boolean = false,
     viewModel: PrestadorRegisterViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
-    
+    // Email de la cuenta de Google (solo presente cuando isGoogleUser = true)
+    val googleEmail = remember {
+        if (isGoogleUser) FirebaseAuth.getInstance().currentUser?.email ?: "" else ""
+    }
+
     // Estados del formulario
     var nombre by remember { mutableStateOf("") }
+    var apellido by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var dniCuit by remember { mutableStateOf("") }
-    var telefono by remember { mutableStateOf("") }
-    var profesion by remember { mutableStateOf("") }
-    var matricula by remember { mutableStateOf("") }
-    var pais by remember { mutableStateOf("Argentina") }
-    var provincia by remember { mutableStateOf("") }
-    var codigoPostal by remember { mutableStateOf("") }
-    var direccion by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var mensaje by remember { mutableStateOf("") }
+    var categoriaSeleccionada by remember { mutableStateOf("") }
+    var serviceType by remember { mutableStateOf(ServiceType.TECHNICAL) }
+    var expandedTipoServicio by remember { mutableStateOf(false) }
+    var expandedCategoria by remember { mutableStateOf(false) }
     var profileImageUri by remember { mutableStateOf<Uri?>(null) }
-    
-    // Servicios
+
+    // Categorías organizadas por tipo de servicio
+    val categoriasPorTipo = mapOf(
+        ServiceType.TECHNICAL to listOf(
+            "Aire Acondicionado", "Albañilería", "Antenas y Cableado",
+            "Carpintería", "Cerrajería", "Computación / IT",
+            "Electricidad", "Electrónica", "Fumigación",
+            "Gasista", "Herrería", "Impermeabilización",
+            "Instalaciones Sanitarias", "Jardinería", "Limpieza",
+            "Mecánica Ligera", "Mudanzas / Fletes", "Pintura",
+            "Plomería", "Refrigeración", "Soldadura",
+            "Techos y Cubiertas", "Vidriería", "Zinguería"
+        ),
+        ServiceType.PROFESSIONAL to listOf(
+            "Abogacía", "Arquitectura", "Asesoría Contable",
+            "Asesoría Impositiva", "Coaching", "Diseño Gráfico",
+            "Diseño Web", "Fonoaudiología", "Kinesiología",
+            "Marketing Digital", "Medicina General", "Nutrición",
+            "Odontología", "Psicología", "Psicopedagogía",
+            "Recursos Humanos", "Terapia Ocupacional", "Veterinaria"
+        ),
+        ServiceType.RENTAL to listOf(
+            "Cancha de Fútbol", "Cancha de Pádel", "Cancha de Tenis",
+            "Cochera / Estacionamiento", "Estudio de Música",
+            "Estudio Fotográfico", "Oficina Compartida",
+            "Quincho / Salón de Eventos", "Sala de Reuniones",
+            "Sala de Yoga / Pilates", "SUM / Salón Múltiple"
+        ),
+        ServiceType.OTHER to listOf(
+            "Clases Particulares", "Cuidado de Mascotas", "Cuidado de Personas Mayores",
+            "Delivery / Mensajería", "Estética y Belleza", "Fotografía / Video",
+            "Gastronomía / Catering", "Hotelería / Alojamiento",
+            "Música / Entretenimiento", "Organización de Eventos",
+            "Peluquería", "Seguridad Privada", "Tatuajes y Piercings",
+            "Turismo / Excursiones"
+        )
+    )
+
+    // Categorías filtradas según el tipo de servicio seleccionado
+    val categoriasDisponibles = categoriasPorTipo[serviceType] ?: emptyList()
+
+    // Variables requeridas por componentes reusables (no usadas en registro inicial)
     var serviciosSeleccionados by remember { mutableStateOf(listOf<String>()) }
     var searchQuery by remember { mutableStateOf("") }
     var showServiceModal by remember { mutableStateOf(false) }
     var tempSelectedServices by remember { mutableStateOf(setOf<String>()) }
     var showSuggestions by remember { mutableStateOf(false) }
-    
-    // Lista de servicios disponibles
-    val serviciosDisponibles = listOf(
-        "Aire Acondicionado", "Albañilería", "Carpintería", "Cerrajería",
-        "Computación", "Decoración", "Electricidad", "Electrónica",
-        "Fletes", "Gasista", "Herrería", "Jardinería", "Limpieza",
-        "Mecánica Ligera", "Pintura", "Plomería", "Refrigeración", "Soldadura"
-    )
-    
-    // Servicios filtrados según búsqueda
-    val serviciosFiltrados = remember(searchQuery, serviciosSeleccionados) {
-        if (searchQuery.isBlank()) {
-            emptyList()
-        } else {
-            serviciosDisponibles.filter { servicio ->
-                servicio.contains(searchQuery, ignoreCase = true) && 
-                !serviciosSeleccionados.contains(servicio)
-            }
-        }
-    }
-    
-    // Toggles
     var atencionUrgencias by remember { mutableStateOf(false) }
     var vaDomicilio by remember { mutableStateOf(false) }
     var turnosEnLocal by remember { mutableStateOf(false) }
     var tieneEmpresa by remember { mutableStateOf(false) }
-    
-    // Datos empresa
     var nombreEmpresa by remember { mutableStateOf("") }
     var razonSocial by remember { mutableStateOf("") }
     var cuit by remember { mutableStateOf("") }
     var sucursales by remember { mutableStateOf(listOf(Sucursal("", ""))) }
-    
-    // UI States
-    var personalSectionExpanded by remember { mutableStateOf(false) }
     var showMatriculaTooltip by remember { mutableStateOf(false) }
-    
+
+    // Sección expandida (acordeón: solo una a la vez)
+    // Google users: arranca en "personal" (no necesitan datos de acceso)
+    var expandedSection by remember { mutableStateOf<String?>(if (isGoogleUser) "personal" else "acceso") }
+
     val registerState by viewModel.registerState.collectAsState()
-    
-    // Image picker
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        profileImageUri = uri
-    }
-    
-    // Manejar estado de registro
+    ) { uri: Uri? -> profileImageUri = uri }
+
     LaunchedEffect(registerState) {
         when (registerState) {
             is RegisterState.Success -> onRegisterSuccess()
-            is RegisterState.Error -> {
-                // Mostrar error
-            }
             else -> {}
         }
     }
-    
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Crear perfil", color = Color.White) },
-                navigationIcon = {
-                    IconButton(onClick = onBackToLogin) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "Volver",
-                            tint = Color.White
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.primaryOrange
-                )
-            )
-        },
+        containerColor = colors.backgroundColor,
         bottomBar = {
             Surface(
                 shadowElevation = 8.dp,
@@ -155,48 +158,24 @@ fun PrestadorRegisterScreen(
                             email = email,
                             password = password,
                             nombre = nombre,
-                            dniCuit = dniCuit,
-                            telefono = telefono,
-                            matricula = matricula,
-                            profesion = profesion,
-                            direccion = direccion,
-                            codigoPostal = codigoPostal,
-                            provincia = provincia,
-                            servicios = serviciosSeleccionados,
-                            tieneNegocio = tieneEmpresa,
-                            nombreNegocio = nombreEmpresa,
-                            razonSocial = razonSocial,
-                            cuitNegocio = cuit,
-                            direccionNegocio = "",
-                            codigoPostalNegocio = "",
-                            sucursales = sucursales.map { mapOf("direccion" to it.direccion, "codigoPostal" to it.codigoPostal) },
-                            isHomeService = vaDomicilio,
-                            is24Hours = atencionUrgencias,
-                            hasPhysicalStore = turnosEnLocal,
-                            hasStoreAppointments = turnosEnLocal
+                            apellido = apellido,
+                            categoria = categoriaSeleccionada,
+                            mensaje = mensaje,
+                            serviceType = serviceType.name,
+                            isGoogleUser = isGoogleUser
                         )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp)
                         .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.primaryOrange
-                    ),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     if (registerState is RegisterState.Loading) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                     } else {
-                        Text(
-                            "Guardar Perfil",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("Crear cuenta", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -205,343 +184,465 @@ fun PrestadorRegisterScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .background(colors.backgroundColor),
+                .padding(padding),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
-            // Foto de perfil
+            // ── HERO HEADER ──────────────────────────────────────────────
             item {
-                ProfilePhotoSection(
-                    imageUri = profileImageUri,
-                    onCameraClick = { imagePickerLauncher.launch("image/*") }
-                )
-            }
-            
-            // Sección Datos Personales
-            item {
-                CollapsibleSection(
-                    title = "DATOS PERSONALES",
-                    isExpanded = personalSectionExpanded,
-                    onToggle = { personalSectionExpanded = !personalSectionExpanded }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(260.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    colors.primaryOrange.copy(alpha = 0.25f),
+                                    colors.backgroundColor
+                                )
+                            )
+                        )
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // SIEMPRE VISIBLE: Nombre
-                        FloatingLabelTextField(
-                            value = nombre,
-                            onValueChange = { nombre = it },
-                            label = "Nombre Completo",
-                            leadingIcon = Icons.Default.Person,
-                            enabled = true
+                        // Barra superior con botón volver
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onBackToLogin) {
+                                Icon(
+                                    Icons.Default.ArrowBack,
+                                    contentDescription = "Volver",
+                                    tint = colors.primaryOrange
+                                )
+                            }
+                            Text(
+                                text = "Crear perfil",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.textPrimary,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Foto de perfil circular
+                        Box(
+                            modifier = Modifier
+                                .size(110.dp)
+                                .clip(CircleShape)
+                                .border(3.dp, colors.primaryOrange, CircleShape)
+                                .clickable { imagePickerLauncher.launch("image/*") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (profileImageUri != null) {
+                                AsyncImage(
+                                    model = profileImageUri,
+                                    contentDescription = "Foto de perfil",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(colors.primaryOrange.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(56.dp),
+                                        tint = colors.primaryOrange.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                            // Botón cámara
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(32.dp),
+                                shape = CircleShape,
+                                color = colors.primaryOrange,
+                                shadowElevation = 4.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = "Cambiar foto",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "$nombre $apellido".trim().ifEmpty { "Nuevo prestador" },
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
                         )
-                        
-                        Spacer(modifier = Modifier.height(20.dp))
-                        
-                        // SIEMPRE VISIBLE: Email
+                        Text(
+                            text = if (categoriaSeleccionada.isNotEmpty()) categoriaSeleccionada else serviceType.displayName,
+                            fontSize = 13.sp,
+                            color = colors.textSecondary
+                        )
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+
+            // ── SECCIÓN: Datos de acceso (solo para registro manual, no Google) ──
+            if (!isGoogleUser) {
+                item {
+                    RegisterSectionCard(
+                        title = "Datos de acceso",
+                        icon = Icons.Default.Lock,
+                        color = colors.primaryOrange,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        expanded = expandedSection == "acceso",
+                        onExpandChange = {
+                            expandedSection = if (expandedSection == "acceso") null else "acceso"
+                        }
+                    ) {
                         FloatingLabelTextField(
                             value = email,
                             onValueChange = { email = it },
-                            label = "Email",
+                            label = "Correo electrónico",
                             leadingIcon = Icons.Default.Email,
-                            keyboardType = KeyboardType.Email,
-                            enabled = true
+                            keyboardType = KeyboardType.Email
                         )
-                        
-                        Spacer(modifier = Modifier.height(20.dp))
-                        
-                        // RESTO DE CAMPOS - Solo visibles cuando se expande
-                        AnimatedVisibility(visible = personalSectionExpanded) {
-                            Column {
-                                FloatingLabelTextField(
-                                    value = password,
-                                    onValueChange = { password = it },
-                                    label = "Contraseña",
-                                    leadingIcon = Icons.Default.Lock,
-                                    visualTransformation = PasswordVisualTransformation()
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = dniCuit,
-                                    onValueChange = { dniCuit = it },
-                                    label = "DNI / CUIT",
-                                    leadingIcon = Icons.Default.Badge,
-                                    keyboardType = KeyboardType.Number
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = telefono,
-                                    onValueChange = { telefono = it },
-                                    label = "Teléfono",
-                                    leadingIcon = Icons.Default.Phone,
-                                    keyboardType = KeyboardType.Phone
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = profesion,
-                                    onValueChange = { profesion = it },
-                                    label = "Profesión / Oficio",
-                                    leadingIcon = Icons.Default.Work
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = matricula,
-                                    onValueChange = { matricula = it },
-                                    label = "N° de Matrícula",
-                                    leadingIcon = Icons.Default.CardMembership,
-                                    trailingIcon = Icons.Default.Info,
-                                    onTrailingIconClick = {
-                                        showMatriculaTooltip = !showMatriculaTooltip
-                                    }
-                                )
-                                
-                                // Tooltip
-                                if (showMatriculaTooltip) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 8.dp),
-                                        contentAlignment = Alignment.TopEnd
-                                    ) {
-                                        TooltipBubble(
-                                            text = "Este campo es opcional si aún no tienes matrícula.",
-                                            onDismiss = { showMatriculaTooltip = false }
-                                        )
-                                    }
-                                }
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = pais,
-                                    onValueChange = { pais = it },
-                                    label = "País",
-                                    leadingIcon = Icons.Default.Public
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = provincia,
-                                    onValueChange = { provincia = it },
-                                    label = "Provincia / Estado",
-                                    leadingIcon = Icons.Default.LocationOn
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = codigoPostal,
-                                    onValueChange = { codigoPostal = it },
-                                    label = "Código Postal",
-                                    leadingIcon = Icons.Default.Email,
-                                    keyboardType = KeyboardType.Number
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                FloatingLabelTextField(
-                                    value = direccion,
-                                    onValueChange = { direccion = it },
-                                    label = "Dirección (Calle y N°)",
-                                    leadingIcon = Icons.Default.Home
-                                )
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        FloatingLabelTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = "Contraseña",
+                            leadingIcon = Icons.Default.Lock,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            onTrailingIconClick = { passwordVisible = !passwordVisible }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
                     }
                 }
+                item { Spacer(modifier = Modifier.height(12.dp)) }
             }
-            
-            // DividerLight
+
+            // ── SECCIÓN: Información personal ─────────────────────────────
             item {
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .background(colors.divider)
-                )
-            }
-            
-            // Sección Servicios
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                RegisterSectionCard(
+                    title = "Información personal",
+                    icon = Icons.Default.Person,
+                    color = Color(0xFF1976D2),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    expanded = expandedSection == "personal",
+                    onExpandChange = {
+                        expandedSection = if (expandedSection == "personal") null else "personal"
+                    }
                 ) {
-                    Text(
-                        "¿QUÉ SERVICIO PRESTAS?",
-                        color = colors.primaryOrange,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Buscador con icono de lista
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        FloatingLabelTextField(
-                            value = searchQuery,
-                            onValueChange = { query ->
-                                searchQuery = query
-                                showSuggestions = query.isNotEmpty()
-                            },
-                            label = "Buscar o seleccionar de lista",
-                            leadingIcon = Icons.Default.Search,
-                            trailingIcon = Icons.Default.List,
-                            onTrailingIconClick = {
-                                tempSelectedServices = serviciosSeleccionados.toSet()
-                                showServiceModal = true
-                                showSuggestions = false
-                            }
-                        )
-                        
-                        // Lista de sugerencias
-                        AnimatedVisibility(
-                            visible = showSuggestions && serviciosFiltrados.isNotEmpty()
+                    // Banner cuenta de Google (solo si vino de Google)
+                    if (isGoogleUser && googleEmail.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF1976D2).copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, Color(0xFF1976D2).copy(alpha = 0.3f))
                         ) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(
-                                    bottomStart = 8.dp,
-                                    bottomEnd = 8.dp
-                                ),
-                                shadowElevation = 4.dp,
-                                color = colors.surfaceColor
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 200.dp)
-                                ) {
-                                    items(serviciosFiltrados) { servicio ->
-                                        SuggestionItem(
-                                            text = servicio,
-                                            onClick = {
-                                                if (serviciosSeleccionados.size < 5) {
-                                                    serviciosSeleccionados = serviciosSeleccionados + servicio
-                                                    searchQuery = ""
-                                                    showSuggestions = false
-                                                }
-                                            }
-                                        )
-                                    }
+                                Icon(
+                                    Icons.Default.AccountCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF1976D2),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Cuenta de Google vinculada",
+                                        color = Color(0xFF1976D2),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = googleEmail,
+                                        color = colors.textPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Text(
-                        "Servicios seleccionados:",
-                        color = colors.textSecondary,
-                        fontSize = 12.sp
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Chips de servicios
-                    ServiceChipsList(
-                        services = serviciosSeleccionados,
-                        onRemove = { service ->
-                            serviciosSeleccionados = serviciosSeleccionados - service
-                        }
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Switches
-                    SwitchRow(
-                        title = "Atención urgencias",
-                        subtitle = "Disponible las 24 horas",
-                        checked = atencionUrgencias,
-                        onCheckedChange = { atencionUrgencias = it }
-                    )
-                    
-                    SwitchRow(
-                        title = "¿Vas a domicilio?",
-                        subtitle = "Realizas trabajos en el hogar del cliente",
-                        checked = vaDomicilio,
-                        onCheckedChange = { vaDomicilio = it }
-                    )
-                    
-                    SwitchRow(
-                        title = "¿Turnos en local?",
-                        subtitle = "Se requiere agendar cita previa",
-                        checked = turnosEnLocal,
-                        onCheckedChange = { turnosEnLocal = it }
-                    )
-                    
-                    SwitchRow(
-                        title = "¿Tienes empresa?",
-                        subtitle = "Registrar datos de tu negocio",
-                        checked = tieneEmpresa,
-                        onCheckedChange = { tieneEmpresa = it }
-                    )
-                    
-                    // Formulario de empresa
-                    AnimatedVisibility(
-                        visible = tieneEmpresa,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
+                    // Banner informativo
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = colors.primaryOrange.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, colors.primaryOrange.copy(alpha = 0.25f))
                     ) {
-                        BusinessDetailsForm(
-                            nombreEmpresa = nombreEmpresa,
-                            onNombreEmpresaChange = { nombreEmpresa = it },
-                            razonSocial = razonSocial,
-                            onRazonSocialChange = { razonSocial = it },
-                            cuit = cuit,
-                            onCuitChange = { cuit = it },
-                            sucursales = sucursales,
-                            onSucursalesChange = { sucursales = it }
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = "Completá lo esencial ahora. Podés agregar más datos desde Editar perfil.",
+                                color = colors.textPrimary,
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FloatingLabelTextField(
+                        value = nombre,
+                        onValueChange = { nombre = it },
+                        label = "Nombre",
+                        leadingIcon = Icons.Default.Person
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FloatingLabelTextField(
+                        value = apellido,
+                        onValueChange = { apellido = it },
+                        label = "Apellido",
+                        leadingIcon = Icons.Default.Person
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(12.dp)) }
+
+            // ── SECCIÓN: Tu servicio ───────────────────────────────────────
+            item {
+                RegisterSectionCard(
+                    title = "Tu servicio",
+                    icon = Icons.Default.Build,
+                    color = Color(0xFF00897B),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    expanded = expandedSection == "servicio",
+                    onExpandChange = {
+                        expandedSection = if (expandedSection == "servicio") null else "servicio"
+                    }
+                ) {
+                    // Dropdown Tipo de servicio
+                    ExposedDropdownMenuBox(
+                        expanded = expandedTipoServicio,
+                        onExpandedChange = { expandedTipoServicio = !expandedTipoServicio }
+                    ) {
+                        OutlinedTextField(
+                            value = serviceType.displayName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Tipo de servicio", color = colors.textSecondary) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedTipoServicio) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF00897B),
+                                unfocusedBorderColor = colors.border,
+                                focusedTextColor = colors.textPrimary,
+                                unfocusedTextColor = colors.textPrimary
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedTipoServicio,
+                            onDismissRequest = { expandedTipoServicio = false }
+                        ) {
+                            ServiceType.values().forEach { type ->
+                                DropdownMenuItem(
+                                    text = { Text(type.displayName) },
+                                    onClick = {
+                                        serviceType = type
+                                        categoriaSeleccionada = "" // resetear al cambiar tipo
+                                        expandedTipoServicio = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = serviceType.description,
+                        color = colors.textSecondary,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Dropdown Categoría
+                    ExposedDropdownMenuBox(
+                        expanded = expandedCategoria,
+                        onExpandedChange = { expandedCategoria = !expandedCategoria }
+                    ) {
+                        OutlinedTextField(
+                            value = categoriaSeleccionada,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Categoría", color = colors.textSecondary) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategoria) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF00897B),
+                                unfocusedBorderColor = colors.border,
+                                focusedTextColor = colors.textPrimary,
+                                unfocusedTextColor = colors.textPrimary
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedCategoria,
+                            onDismissRequest = { expandedCategoria = false }
+                        ) {
+                            categoriasDisponibles.forEach { categoria ->
+                                DropdownMenuItem(
+                                    text = { Text(categoria) },
+                                    onClick = { categoriaSeleccionada = categoria; expandedCategoria = false }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = mensaje,
+                        onValueChange = { mensaje = it },
+                        label = { Text("Mensaje de presentación", color = colors.textSecondary) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp),
+                        maxLines = 5,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF00897B),
+                            unfocusedBorderColor = colors.border,
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Más adelante podés completar teléfono, dirección, empresa y horarios desde Editar perfil.",
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
+    }
+
+    // Mostrar error si lo hay
+    if (registerState is RegisterState.Error) {
+        val errorMsg = (registerState as RegisterState.Error).message
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Error al registrar") },
+            text = { Text(errorMsg) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.resetState() }) { Text("OK") }
+            }
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Tarjeta de sección estilo Archivero (igual que EditProfileScreenUnified)
+// ─────────────────────────────────────────────────────────────────
+@Composable
+fun RegisterSectionCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier,
+    expanded: Boolean = false,
+    onExpandChange: () -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val colors = getPrestadorColors()
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surfaceColor,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Borde izquierdo de color
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(color)
+            )
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(16.dp)
+            ) {
+                // Cabecera clickeable
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onExpandChange() }
+                        .padding(bottom = if (expanded) 16.dp else 0.dp)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = title,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Colapsar" else "Expandir",
+                        tint = color
+                    )
+                }
+
+                // Contenido animado
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column { content() }
                 }
             }
         }
-    }
-    
-    // Modal de servicios
-    if (showServiceModal) {
-        ServiceSelectionModal(
-            availableServices = listOf(
-                "Aire Acondicionado", "Albañilería", "Carpintería", "Cerrajería",
-                "Computación", "Decoración", "Electricidad", "Electrónica",
-                "Fletes", "Gasista", "Herrería", "Jardinería", "Limpieza",
-                "Mecánica Ligera", "Pintura", "Plomería", "Refrigeración", "Soldadura"
-            ),
-            selectedServices = tempSelectedServices,
-            onServiceToggle = { service ->
-                tempSelectedServices = if (tempSelectedServices.contains(service)) {
-                    tempSelectedServices - service
-                } else {
-                    if (tempSelectedServices.size < 5) {
-                        tempSelectedServices + service
-                    } else {
-                        tempSelectedServices
-                    }
-                }
-            },
-            onDismiss = { showServiceModal = false },
-            onConfirm = {
-                serviciosSeleccionados = tempSelectedServices.toList()
-                showServiceModal = false
-            }
-        )
     }
 }
 
@@ -658,41 +759,47 @@ fun FloatingLabelTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    leadingIcon: ImageVector,
+    leadingIcon: ImageVector?,
+    leadingContent: (@Composable () -> Unit)? = null,
     trailingIcon: ImageVector? = null,
     onTrailingIconClick: (() -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
     keyboardType: KeyboardType = KeyboardType.Text,
-    visualTransformation: VisualTransformation = VisualTransformation.None
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    prefixText: String? = null,
+    modifier: Modifier = Modifier,
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
 ) {
     val colors = getPrestadorColors()
-    val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val hasText = value.isNotEmpty()
     
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
             enabled = enabled,
             leadingIcon = {
-                Icon(
-                    leadingIcon,
-                    contentDescription = null,
-                    tint = colors.textSecondary
-                )
-            },
-            trailingIcon = trailingIcon?.let {
-                {
-                    IconButton(onClick = { onTrailingIconClick?.invoke() }) {
-                        Icon(
-                            it,
-                            contentDescription = null,
-                            tint = colors.textSecondary
-                        )
-                    }
+                if (leadingContent != null) {
+                    leadingContent()
+                } else if (leadingIcon != null) {
+                    Icon(
+                        leadingIcon,
+                        contentDescription = null,
+                        tint = colors.textSecondary
+                    )
                 }
+            },
+            trailingIcon = when {
+                trailingContent != null -> trailingContent
+                trailingIcon != null -> ({
+                    IconButton(onClick = { onTrailingIconClick?.invoke() }) {
+                        Icon(trailingIcon, contentDescription = null, tint = colors.textSecondary)
+                    }
+                })
+                else -> null
             },
             label = {
                 Text(
@@ -715,7 +822,8 @@ fun FloatingLabelTextField(
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             visualTransformation = visualTransformation,
             interactionSource = interactionSource,
-            singleLine = true
+            singleLine = true,
+            prefix = prefixText?.let { { Text(it, color = colors.textSecondary)}},
         )
     }
 }

@@ -1,4 +1,4 @@
-package com.example.myapplication.prestador.ui.calendar
+﻿package com.example.myapplication.prestador.ui.calendar
 
 import android.R
 import android.app.DatePickerDialog
@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -116,11 +117,14 @@ fun PrestadorCalendarScreen(
     onNavigateToChat: (clientId: String, clientName: String, newDate: String, newTime: String, appointmentId: String) -> Unit,
     onNavigateToPresupuesto: (appointmentId: String) -> Unit = {},
     onBack: () -> Unit = {},
+    triggerCreateDialog: Boolean = false,
+    onCreateDialogHandled: () -> Unit = {},
     appointmentViewModel: com.example.myapplication.prestador.viewmodel.AppointmentViewModel = hiltViewModel(),
     editProfileViewModel: com.example.myapplication.prestador.viewmodel.EditProfileViewModel = hiltViewModel(),
     rentalSpacesViewModel: RentalSpacesViewModel = hiltViewModel(),
     empleadosViewModel: com.example.myapplication.prestador.viewmodel.EmpleadosViewModel = hiltViewModel()
 ) {
+    val colors = getPrestadorColors()
     val context = LocalContext.current
     // Obtener estado del perfil
     val profileState by editProfileViewModel.profileState.collectAsState()
@@ -192,6 +196,14 @@ fun PrestadorCalendarScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScopeSnackbar = rememberCoroutineScope()
 
+    // Recibir trigger externo del FAB del dashboard
+    LaunchedEffect(triggerCreateDialog) {
+        if (triggerCreateDialog) {
+            showCreateDialog = true
+            onCreateDialogHandled()
+        }
+    }
+
     // Obtener providerId del perfil
     val providerId = remember(profileState) {
         when (profileState) {
@@ -251,15 +263,9 @@ fun PrestadorCalendarScreen(
         rentalSpaces.filter { it.isActive }.map { it.id to it.name }
     }
 
-    //Cargar slots cuando se abre el dialogo y es professional
+    // Slots disponibles (solo PROFESSIONAL)
     val availableSlots by appointmentViewModel.availabilitySlots.collectAsState()
-    LaunchedEffect(showCreateDialog,
-        currentServiceType, selectedDateStr) {
-        if (showCreateDialog && currentServiceType == ServiceType.PROFESSIONAL && providerId.isNotBlank()){
-            appointmentViewModel.loadAvailabilitySlots(providerId, selectedDateStr)
-
-    }
-    }
+    val slotsLoading by appointmentViewModel.availabilityLoading.collectAsState()
 
     //Cargar empleados para TECHNICAL
     val empleadosState by empleadosViewModel.uiState.collectAsState()
@@ -271,64 +277,87 @@ fun PrestadorCalendarScreen(
         }
     }
     
+    // Stats para el header
+    val today = dateFormat.format(Calendar.getInstance().time)
+    val citasHoy = appointments.filter { it.date == today && it.status != AppointmentStatus.CANCELLED }.size
+    val citasEsteMes = appointments.filter {
+        val cal = Calendar.getInstance()
+        it.date.startsWith("${cal.get(Calendar.YEAR)}-${String.format("%02d", cal.get(Calendar.MONTH) + 1)}")
+            && it.status != AppointmentStatus.CANCELLED
+    }.size
+
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = Color(0xFFFF6B35),
-                contentColor = Color.White
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = serviceTypeConfig.createAction
-                )
-            }
-        },
-        topBar = {
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(colors.backgroundColor)
+        ) {
+            // ── HEADER estilo Inicio ──────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFFFF6B35),
-                                Color(0xFFFF9F66)
+                                colors.primaryOrange,
+                                colors.primaryOrange.copy(alpha = 0.85f)
                             )
-                        )
+                        ),
+                        shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
                     )
+                    .statusBarsPadding()
+                    .padding(start = 4.dp, end = 16.dp, bottom = 14.dp)
             ) {
-                TopAppBar(
-                    title = {
+                Column {
+                    // Fila: back + título
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Volver", tint = Color.White)
+                        }
                         Text(
-                            serviceTypeConfig.calendarTitle,
+                            text = serviceTypeConfig.calendarTitle,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
                             color = Color.White
                         )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowBack,
-                                contentDescription = "Volver",
-                                tint = Color.White
-                            )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Stats chips compactas
+                    Row(
+                        modifier = Modifier.padding(start = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(Icons.Default.Today, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                            Text("Hoy: $citasHoy", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
-                    )
-                )
+                        Row(
+                            modifier = Modifier
+                                .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(Icons.Default.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                            Text("Este mes: $citasEsteMes", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        }
+                    }
+                }
             }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(Color(0xFFFFF8F3))
-        ) {
+
+            Spacer(Modifier.height(8.dp))
             // Header del calendario con navegación por flechas y mes/año
             CalendarHeader(
                 currentDate = currentDate,
@@ -472,6 +501,13 @@ fun PrestadorCalendarScreen(
         CreateAppointmentDialog(
             serviceType = currentServiceType,
             onDismiss = { showEditDialog = false; appointmentEntityToEdit = null },
+            onRequestSlots = { date, duration ->
+                if (providerId.isNotBlank()) {
+                    appointmentViewModel.loadAvailabilitySlots(providerId, date, duration)
+                }
+            },
+            slotsRequestKey = providerId,
+            isSlotsLoading = slotsLoading,
             onConfirm = { clientName, service, date, time, duration, rentalSpaceId, scheduleId, notes, assignedEmployeeIds, peopleCount ->
                 val updated = entity.copy(
                     clientName = clientName,
@@ -527,6 +563,13 @@ fun PrestadorCalendarScreen(
         CreateAppointmentDialog(
             serviceType = currentServiceType,
             onDismiss = { showCreateDialog = false },
+            onRequestSlots = { date, duration ->
+                if (providerId.isNotBlank()) {
+                    appointmentViewModel.loadAvailabilitySlots(providerId, date, duration)
+                }
+            },
+            slotsRequestKey = providerId,
+            isSlotsLoading = slotsLoading,
             onConfirm = { clientName, service, date, time, duration, rentalSpaceId, scheduleId, notes, assignedEmployeeIds, peopleCount ->
                 val newAppointment = AppointmentEntity(
                     id = java.util.UUID.randomUUID().toString(),
@@ -559,6 +602,7 @@ fun PrestadorCalendarScreen(
             colors = getPrestadorColors(),
             availableSpaces = availableSpaces,
             availableSlots = availableSlots,
+            initialDate = selectedDateStr,
             availableEmployees = if (currentServiceType == ServiceType.TECHNICAL)
             availableEmployees else emptyList()
         )
@@ -573,6 +617,7 @@ fun CalendarHeader(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
+    val colors = getPrestadorColors()
     val monthFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
 
     Row(
@@ -594,7 +639,7 @@ fun CalendarHeader(
             text = monthFormat.format(currentDate.time).capitalize(Locale.getDefault()),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF1F2937)
+            color = colors.textPrimary
         )
         
         IconButton(onClick = onNextMonth) {
@@ -614,6 +659,7 @@ fun CalendarGrid(
     daysWithAppointments: Set<String>,
     onDateSelected: (Calendar) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     //DIAS DE LA SEMANA
@@ -636,7 +682,7 @@ fun CalendarGrid(
                     textAlign = TextAlign.Center,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
-                    color = Color(0xFF6B7280)
+                    color = colors.textSecondary
                 )
             }
         }
@@ -734,6 +780,7 @@ fun RowScope.DayCell(
     dateFormat: SimpleDateFormat,
     onDateSelected: (Calendar) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val isSelected = dateFormat.format(dayInfo.date.time) == dateFormat.format(selectedDate.time)
     val hasAppointments = daysWithAppointments.contains(dateFormat.format(dayInfo.date.time))
     val isToday = dateFormat.format(dayInfo.date.time) == dateFormat.format(Calendar.getInstance().time)
@@ -747,7 +794,7 @@ fun RowScope.DayCell(
             .background(
                 when {
                     isSelected -> Color(0xFFFF6B35)
-                    isToday -> Color(0xFFFFE4DB)
+                    isToday -> colors.primaryOrangeLight
                     else -> Color.Transparent
                 }
             )
@@ -765,9 +812,9 @@ fun RowScope.DayCell(
                 fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
                 color = when {
                     isSelected -> Color.White
-                    !dayInfo.isCurrentMonth -> Color(0xFFD1D5DB)
+                    !dayInfo.isCurrentMonth -> colors.textSecondary.copy(alpha = 0.4f)
                     isToday -> Color(0xFFFF6B35)
-                    else -> Color(0xFF1F2937)
+                    else -> colors.textPrimary
                 }
             )
             
@@ -798,6 +845,7 @@ fun AppointmentsList(
     onComplete: (String) -> Unit = {},
     onGenerarPresupuesto: (appointmentId: String, clientName: String) -> Unit = { _, _ -> }
 ) {
+    val colors = getPrestadorColors()
     val dateFormat = SimpleDateFormat("d 'de' MMMM", Locale.getDefault())
     val monthNames = listOf(
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -840,7 +888,7 @@ fun AppointmentsList(
                     text = "${selectedDate.get(Calendar.DAY_OF_MONTH)} de ${monthNames[selectedDate.get(Calendar.MONTH)]}",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1F2937)
+                    color = colors.textPrimary
                 )
                 Text(
                     text = if (appointments.isEmpty()) {
@@ -850,7 +898,7 @@ fun AppointmentsList(
                     },
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF6B7280)
+                    color = colors.textSecondary
                 )
             }
             Text(
@@ -876,7 +924,7 @@ fun AppointmentsList(
                         .weight(1f)
                         .clickable { selectedTab = index; expandedAppointmentId = null },
                     shape = RoundedCornerShape(10.dp),
-                    color = if (isSelected) Color(0xFFFF6B35) else Color(0xFFF3F4F6)
+                    color = if (isSelected) Color(0xFFFF6B35) else colors.surfaceElevated
                 ) {
                     Row(
                         modifier = Modifier.padding(vertical = 8.dp),
@@ -887,18 +935,18 @@ fun AppointmentsList(
                             text = label,
                             fontSize = 13.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) Color.White else Color(0xFF6B7280)
+                            color = if (isSelected) Color.White else colors.textSecondary
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
                             shape = CircleShape,
-                            color = if (isSelected) Color.White.copy(alpha = 0.3f) else Color(0xFFE5E7EB)
+                            color = if (isSelected) Color.White.copy(alpha = 0.3f) else colors.border
                         ) {
                             Text(
                                 text = count.toString(),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.White else Color(0xFF9CA3AF),
+                                color = if (isSelected) Color.White else colors.textSecondary,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -929,7 +977,7 @@ fun AppointmentsList(
                         Box(
                             modifier = Modifier
                                 .size(64.dp)
-                                .border(2.dp, Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
+                                .border(2.dp, colors.border, RoundedCornerShape(8.dp))
                                 .padding(8.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -942,7 +990,7 @@ fun AppointmentsList(
                             else
                                 "Sin historial de ${serviceTypeConfig.appointmentsName}",
                             fontSize = 14.sp,
-                            color = Color(0xFF9CA3AF),
+                            color = colors.textSecondary,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -985,12 +1033,13 @@ fun AppointmentCard(
     onComplete: (String) -> Unit = {},
     onGenerarPresupuesto: (appointmentId: String, clientName: String) -> Unit = { _, _ -> }
 ) {
+    val colors = getPrestadorColors()
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onToggleExpand() },
         shape = RoundedCornerShape(12.dp),
-        color = Color.White,
+        color = colors.surfaceColor,
         shadowElevation = 2.dp
     ) {
         Column {
@@ -1022,13 +1071,13 @@ fun AppointmentCard(
                         text = appointment.clientName,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1F2937)
+                        color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = appointment.service,
                         fontSize = 14.sp,
-                        color = Color(0xFF6B7280)
+                        color = colors.textSecondary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1040,7 +1089,7 @@ fun AppointmentCard(
                         Text(
                             text = appointment.time,
                             fontSize = 13.sp,
-                            color = Color(0xFF9CA3AF)
+                            color = colors.textSecondary
                         )
                     }
                 }
@@ -1088,7 +1137,7 @@ fun AppointmentCard(
                 ) + fadeOut(animationSpec = tween(300))
             ) {
                 Column {
-                    HorizontalDivider(color = Color(0xFFF3F4F6))
+                    HorizontalDivider(color = colors.surfaceElevated)
                     
                     Row(
                         modifier = Modifier
@@ -1190,6 +1239,7 @@ fun CancelAppointmentDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = getPrestadorColors()
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
@@ -1201,7 +1251,7 @@ fun CancelAppointmentDialog(
                     interactionSource = remember { MutableInteractionSource() }
                 ),
             shape = RoundedCornerShape(24.dp),
-            color = Color.White,
+            color = colors.surfaceColor,
             shadowElevation = 8.dp
         ) {
             Column(
@@ -1231,7 +1281,7 @@ fun CancelAppointmentDialog(
                     text = "¿${serviceTypeConfig.cancelAction}?",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1F2937),
+                    color = colors.textPrimary,
                     textAlign = TextAlign.Center
                 )
 
@@ -1241,7 +1291,7 @@ fun CancelAppointmentDialog(
                 Text(
                     text = "Esta acción eliminará la ${serviceTypeConfig.appointmentName} programada. ¿Estás seguro de que quieres continuar?",
                     fontSize = 14.sp,
-                    color = Color(0xFF6B7280),
+                    color = colors.textSecondary,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
@@ -1275,8 +1325,8 @@ fun CancelAppointmentDialog(
                         onClick = onDismiss,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFF3F4F6),
-                            contentColor = Color(0xFF6B7280)
+                            containerColor = colors.surfaceElevated,
+                            contentColor = colors.textSecondary
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -1309,6 +1359,7 @@ val Green600 = Color(0xFF16A34A)
 fun PropuestaEnviadaView(
     onDismiss: () -> Unit
 ) {
+    val colors = getPrestadorColors()
     // Temporizador de 2 segundos
     LaunchedEffect(Unit) {
         delay(2000)
@@ -1332,7 +1383,7 @@ fun PropuestaEnviadaView(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White.copy(alpha = 0.95f))
+            .background(colors.surfaceColor.copy(alpha = 0.95f))
             .clickable(enabled = false) {},
         contentAlignment = Alignment.Center
     ) {
@@ -1362,7 +1413,7 @@ fun PropuestaEnviadaView(
             // Título
             Text(
                 text = "Cita Reprogramada",
-                color = Gray800,
+                color = colors.textPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -1373,7 +1424,7 @@ fun PropuestaEnviadaView(
             // Subtítulo
             Text(
                 text = "La cita ha sido actualizada correctamente.\nVolviendo al calendario...",
-                color = Gray500,
+                color = colors.textSecondary,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
@@ -1390,6 +1441,7 @@ fun RescheduleAppointmentDialog(
     onDismiss: () -> Unit,
     onConfirm: (date: String, time: String) -> Unit
 ) {
+    val colors = getPrestadorColors()
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
     
@@ -1421,7 +1473,7 @@ fun RescheduleAppointmentDialog(
                     .fillMaxWidth()
                     .padding(16.dp),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = colors.surfaceColor),
                 elevation = CardDefaults.cardElevation(8.dp)
             ) {
             Column(
@@ -1439,10 +1491,10 @@ fun RescheduleAppointmentDialog(
                         text = "Reprogramar Cita",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Gray800
+                        color = colors.textPrimary
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Gray500)
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = colors.textSecondary)
                     }
                 }
                 
@@ -1452,12 +1504,12 @@ fun RescheduleAppointmentDialog(
                 Text(
                     text = "Cliente: ${appointment.clientName}",
                     fontSize = 14.sp,
-                    color = Gray500
+                    color = colors.textSecondary
                 )
                 Text(
                     text = "Servicio: ${appointment.service}",
                     fontSize = 14.sp,
-                    color = Gray500
+                    color = colors.textSecondary
                 )
                 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -1467,7 +1519,7 @@ fun RescheduleAppointmentDialog(
                     text = "NUEVA FECHA",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Gray500
+                    color = colors.textSecondary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -1483,7 +1535,7 @@ fun RescheduleAppointmentDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         disabledTextColor = Color.Black,
                         disabledBorderColor = Color(0xFFE2E8F0),
-                        disabledContainerColor = OrangeBackground
+                        disabledContainerColor = colors.surfaceElevated
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -1505,7 +1557,7 @@ fun RescheduleAppointmentDialog(
                     text = "NUEVA HORA",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Gray500
+                    color = colors.textSecondary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -1521,7 +1573,7 @@ fun RescheduleAppointmentDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         disabledTextColor = Color.Black,
                         disabledBorderColor = Color(0xFFE2E8F0),
-                        disabledContainerColor = OrangeBackground
+                        disabledContainerColor = colors.surfaceElevated
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -1600,6 +1652,7 @@ fun CustomDatePickerDialog(
     onDateSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = getPrestadorColors()
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = try {
             val parts = initialDate.split("-")
@@ -1635,11 +1688,11 @@ fun CustomDatePickerDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = Gray500)
+                Text("Cancelar", color = colors.textSecondary)
             }
         },
         colors = DatePickerDefaults.colors(
-            containerColor = Color.White,
+            containerColor = colors.surfaceColor,
             selectedDayContainerColor = OrangePrimary,
             todayDateBorderColor = OrangePrimary,
             todayContentColor = OrangePrimary
@@ -1665,6 +1718,7 @@ fun CustomTimePickerDialog(
     onTimeSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val colors = getPrestadorColors()
     val timeParts = initialTime.split(":")
     val initialHour = if (timeParts.isNotEmpty()) timeParts[0].toIntOrNull() ?: 9 else 9
     val initialMinute = if (timeParts.size > 1) timeParts[1].toIntOrNull() ?: 0 else 0
@@ -1681,7 +1735,7 @@ fun CustomTimePickerDialog(
                 .fillMaxWidth()
                 .padding(16.dp),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = colors.surfaceColor),
             elevation = CardDefaults.cardElevation(8.dp)
         ) {
             Column(
@@ -1694,7 +1748,7 @@ fun CustomTimePickerDialog(
                     text = "Seleccionar Hora",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Gray800
+                    color = colors.textPrimary
                 )
                 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -1702,14 +1756,14 @@ fun CustomTimePickerDialog(
                 TimePicker(
                     state = timePickerState,
                     colors = TimePickerDefaults.colors(
-                        clockDialColor = OrangeBackground,
+                        clockDialColor = colors.surfaceElevated,
                         selectorColor = OrangePrimary,
                         clockDialSelectedContentColor = Color.White,
-                        clockDialUnselectedContentColor = Gray800,
+                        clockDialUnselectedContentColor = colors.textPrimary,
                         timeSelectorSelectedContainerColor = OrangePrimary,
-                        timeSelectorUnselectedContainerColor = OrangeBackground,
+                        timeSelectorUnselectedContainerColor = colors.surfaceElevated,
                         timeSelectorSelectedContentColor = Color.White,
-                        timeSelectorUnselectedContentColor = Gray800
+                        timeSelectorUnselectedContentColor = colors.textPrimary
                     )
                 )
                 
@@ -1724,7 +1778,7 @@ fun CustomTimePickerDialog(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Cancelar", color = Gray500)
+                        Text("Cancelar", color = colors.textSecondary)
                     }
                     
                     Button(

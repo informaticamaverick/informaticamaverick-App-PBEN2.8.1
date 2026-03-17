@@ -224,6 +224,30 @@ class NotificationHelper(private val context: Context) {
         }
     }
 
+    fun showSolicitudFastNotification(titulo: String, clienteNombre: String, distanciaKm: Double) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) return
+        }
+        val texto = "Cliente: $clienteNombre · %.1f km".format(distanciaKm)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("⚡ Nueva urgencia Fast: $titulo")
+            .setContentText(texto)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setVibrate(longArrayOf(0, 400, 200, 400))
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_BASE + 9000 + titulo.hashCode(), notification)
+        } catch (e: Exception) {
+            println("❌ Error notif fast: ${e.message}")
+        }
+    }
+
     fun showPresupuestoAceptadoNotification(clientName: String, total: Double) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(
@@ -245,3 +269,4 @@ class NotificationHelper(private val context: Context) {
         }
     }
 }
+

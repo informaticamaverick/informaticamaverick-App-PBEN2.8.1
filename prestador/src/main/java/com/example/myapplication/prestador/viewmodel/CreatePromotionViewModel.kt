@@ -116,6 +116,17 @@ class CreatePromotionViewModel @Inject constructor(
         _successMessage.value = null
         _errorMessage.value = null
     }
+
+    fun deletePromotion(promotionId: String) {
+        viewModelScope.launch {
+            try {
+                promotionRepository.deletePromotion(promotionId)
+                _successMessage.value = "Promoción eliminada"
+            } catch (e: Exception) {
+                _errorMessage.value = "Error al eliminar: ${e.message}"
+            }
+        }
+    }
     
     /**
      * OBTENER todas las promociones del prestador (para pruebas)

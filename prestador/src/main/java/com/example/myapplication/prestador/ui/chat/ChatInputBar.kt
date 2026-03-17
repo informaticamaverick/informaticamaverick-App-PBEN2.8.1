@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
+import com.example.myapplication.prestador.data.model.ServiceType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
@@ -215,11 +217,12 @@ fun MessageInputBar(
         color = colors.surfaceColor,
         shadowElevation = 8.dp
     ) {
-        // Box con espacio extra arriba para la animación del micrófono
+        // graphicsLayer clip=false permite que el micrófono anime hacia arriba
+        // sin necesitar padding extra que cortaría la conversación
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 200.dp) // Espacio para que el micrófono sea visible cuando sube
+                .graphicsLayer { clip = false }
         ) {
             // Crossfade entre UI normal y UI de grabación
             Crossfade(
@@ -550,6 +553,7 @@ fun MessageInputBar(
 // Menú flotante de adjuntos con burbujas
 @Composable
 fun AttachmentOptionsMenu(
+    serviceType: ServiceType,
     onDismiss: () -> Unit,
     onImageClick: () -> Unit,
     onCameraClick: () -> Unit,
@@ -562,10 +566,10 @@ fun AttachmentOptionsMenu(
         modifier = Modifier.padding(start = 16.dp, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Presupuesto
+        // Presupuesto / Consulta (según tipo)
         AttachmentBubble(
             icon = Icons.Default.Description,
-            label = "Presupuesto",
+            label = if (serviceType == ServiceType.PROFESSIONAL) "Consulta" else "Presupuesto",
             color = Color(0xFFF97316),
             onClick = onDocumentClick
         )

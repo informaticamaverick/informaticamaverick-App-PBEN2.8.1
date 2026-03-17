@@ -1,5 +1,6 @@
-package com.example.myapplication.prestador.ui.presupuesto
+﻿package com.example.myapplication.prestador.ui.presupuesto
 
+import android.accessibilityservice.GestureDescription
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -126,25 +128,51 @@ fun BudgetItemRow(item: BudgetItem, suggestionItems: List<BudgetItem> = emptyLis
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            CompactTextField(
-                value = item.code,
-                onValueChange = { onUpdate(item.copy(code = it)) },
-                label = { Text("Cód.") },
-                modifier = Modifier.weight(0.25f),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-            )
-            CompactTextField(
-                value = item.description,
-                onValueChange = {
-                    onUpdate(item.copy(description = it))
-                    showSuggestions = it.isNotBlank()
-                },
-                label = {
-                    Text(if (suggestionItems.isNotEmpty()) "Descripción (${suggestionItems.size} sugerencias)" else "Descripción")
-                },
-                modifier = Modifier.weight(0.75f),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-            )
+            Column(modifier = Modifier.weight(0.25f)) {
+                Text("CÓDIGO", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = item.code,
+                    onValueChange = { onUpdate(item.copy(code = it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("...", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
+            Column(modifier = Modifier.weight(0.75f)) {
+                Text("DESCRIPCIÓN", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = item.description,
+                    onValueChange = {
+                        onUpdate(item.copy(description = it))
+                        showSuggestions = it.isNotBlank()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(if (suggestionItems.isNotEmpty()) "Descripción (${suggestionItems.size} sugerencias)" else "Descripción", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
         }
 
         // Sugerencias inline
@@ -197,20 +225,48 @@ fun BudgetItemRow(item: BudgetItem, suggestionItems: List<BudgetItem> = emptyLis
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactTextField(
-                value = if (item.quantity == 0) "" else item.quantity.toString(),
-                onValueChange = { onUpdate(item.copy(quantity = it.toIntOrNull() ?: 0)) },
-                label = { Text("Cant.") },
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
-            )
-            CompactTextField(
-                value = if (item.unitPrice == 0.0) "" else item.unitPrice.toString(),
-                onValueChange = { onUpdate(item.copy(unitPrice = it.toDoubleOrNull() ?: 0.0)) },
-                label = { Text("P. Unit.") },
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text("CANT.", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = if (item.quantity == 0) "" else item.quantity.toString(),
+                    onValueChange = { onUpdate(item.copy(quantity = it.toIntOrNull() ?: 0)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("0", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("P. UNIT.", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = if (item.unitPrice == 0.0) "" else item.unitPrice.toString(),
+                    onValueChange = { onUpdate(item.copy(unitPrice = it.toDoubleOrNull() ?: 0.0)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("0.00", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
             Text(
                 "Total: \$${"%.2f".format(total)}",
                 modifier = Modifier.weight(1f),
@@ -225,32 +281,157 @@ fun BudgetItemRow(item: BudgetItem, suggestionItems: List<BudgetItem> = emptyLis
 
 @Composable
 fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) {
+    val colors = getPrestadorColors()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            CompactTextField(value = service.code, onValueChange = { onUpdate(service.copy(code = it)) }, label = { Text("Cód.") }, modifier = Modifier.weight(0.25f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-            CompactTextField(value = service.description, onValueChange = { onUpdate(service.copy(description = it)) }, label = { Text("Descripción") }, modifier = Modifier.weight(0.75f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.weight(0.25f)) {
+                Text("CÓDIGO", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = service.code,
+                    onValueChange = { onUpdate(service.copy(code = it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("...", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
+            Column(modifier = Modifier.weight(0.75f)) {
+                Text("DESCRIPCIÓN", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = service.description,
+                    onValueChange = { onUpdate(service.copy(description = it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Descripción", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactTextField(value = if (service.total == 0.0) "" else service.total.toString(), onValueChange = { onUpdate(service.copy(total = it.toDoubleOrNull() ?: 0.0)) }, label = { Text("Total") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("TOTAL ($)", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = if (service.total == 0.0) "" else service.total.toString(),
+                    onValueChange = { onUpdate(service.copy(total = it.toDoubleOrNull() ?: 0.0)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("0.00", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
         }
     }
 }
 
 @Composable
 fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, onUpdate: (BudgetProfessionalFee) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            CompactTextField(value = fee.code, onValueChange = { onUpdate(fee.copy(code = it)) }, label = { Text("Cód.") }, modifier = Modifier.weight(0.25f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-            CompactTextField(value = fee.description, onValueChange = { onUpdate(fee.copy(description = it)) }, label = { Text("Descripción") }, modifier = Modifier.weight(0.75f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
+    val colors = getPrestadorColors()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.weight(0.35f)) {
+                Text("CÓDIGO", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = fee.code,
+                    onValueChange = { onUpdate(fee.copy(code = it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("011", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
+            Column(modifier = Modifier.weight(0.65f)) {
+                Text("TOTAL ($)", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp))
+                OutlinedTextField(
+                    value = if (fee.total == 0.0) "" else fee.total.toString(),
+                    onValueChange = { onUpdate(fee.copy(total = it.toDoubleOrNull() ?: 0.0)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Ej. 25000", style = MaterialTheme.typography.bodySmall) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactTextField(value = if (fee.total == 0.0) "" else fee.total.toString(), onValueChange = { onUpdate(fee.copy(total = it.toDoubleOrNull() ?: 0.0)) }, label = { Text("Total") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done))
+        Column {
+            Text("DESCRIPCIÓN", style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold, color = colors.textSecondary,
+                modifier = Modifier.padding(bottom = 4.dp))
+            OutlinedTextField(
+                value = fee.description,
+                onValueChange = { onUpdate(fee.copy(description = it)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Ej. Consulta Especialista", style = MaterialTheme.typography.bodySmall) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                shape = RoundedCornerShape(8.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.primaryOrange,
+                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary,
+                    cursorColor = colors.primaryOrange
+                )
+            )
         }
     }
 }
 
 @Composable
-fun ArticleSummaryRow(modifier: Modifier = Modifier, item: BudgetItem) {
+fun ArticleSummaryRow(
+    modifier: Modifier = Modifier,
+    item: BudgetItem,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null
+) {
     val colors = getPrestadorColors()
     val base = item.unitPrice * item.quantity
     val taxAmount = base * (item.taxPercentage / 100)
@@ -261,77 +442,119 @@ fun ArticleSummaryRow(modifier: Modifier = Modifier, item: BudgetItem) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF8FAFC))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .shadow(2.dp, RoundedCornerShape(10.dp))
+            .background(colors.surfaceColor),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(colors.primaryOrange)
-        )
+        Box(modifier = Modifier.width(4.dp).height(56.dp).background(colors.primaryOrange))
         Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(item.description.ifBlank { "(Sin descripción)" }, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
+        Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(item.description.ifBlank { "(Sin descripción)" }, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary, maxLines = 1)
             Text("${item.quantity} × \$${"%.2f".format(item.unitPrice)}", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
         }
         Text("\$${"%.2f".format(total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = colors.primaryOrange)
+        if (onEdit != null || onDelete != null) {
+            IconButton(onClick = { onEdit?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+            }
+            IconButton(onClick = { onDelete?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Spacer(Modifier.width(12.dp))
+        }
     }
 }
 
 @Composable
-fun ServiceSummaryRow(modifier: Modifier = Modifier, item: BudgetService) {
+fun ServiceSummaryRow(modifier: Modifier = Modifier, item: BudgetService, onEdit: (() -> Unit)? = null, onDelete: (() -> Unit)? = null) {
     val colors = getPrestadorColors()
+    val accentColor = Color(0xFF3B82F6)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF8FAFC))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .shadow(2.dp, RoundedCornerShape(10.dp))
+            .background(colors.surfaceColor),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF3B82F6)))
+        Box(modifier = Modifier.width(4.dp).height(52.dp).background(accentColor))
         Spacer(modifier = Modifier.width(10.dp))
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-        Text("\$${"%.2f".format(item.total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = colors.primaryOrange)
+        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f).padding(vertical = 8.dp), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary, maxLines = 1)
+        Text("\$${"%.2f".format(item.total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = accentColor)
+        if (onEdit != null || onDelete != null) {
+            IconButton(onClick = { onEdit?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+            }
+            IconButton(onClick = { onDelete?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Spacer(Modifier.width(12.dp))
+        }
     }
 }
 
 @Composable
-fun ProfessionalFeeSummaryRow(modifier: Modifier = Modifier, item: BudgetProfessionalFee) {
+fun ProfessionalFeeSummaryRow(modifier: Modifier = Modifier, item: BudgetProfessionalFee, onEdit: (() -> Unit)? = null, onDelete: (() -> Unit)? = null) {
     val colors = getPrestadorColors()
+    val accentColor = Color(0xFF8B5CF6)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF8FAFC))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .shadow(2.dp, RoundedCornerShape(10.dp))
+            .background(colors.surfaceColor),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF8B5CF6)))
+        Box(modifier = Modifier.width(4.dp).height(52.dp).background(accentColor))
         Spacer(modifier = Modifier.width(10.dp))
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-        Text("\$${"%.2f".format(item.total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = colors.primaryOrange)
+        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f).padding(vertical = 8.dp), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary, maxLines = 1)
+        Text("\$${"%.2f".format(item.total)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = accentColor)
+        if (onEdit != null || onDelete != null) {
+            IconButton(onClick = { onEdit?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+            }
+            IconButton(onClick = { onDelete?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Spacer(Modifier.width(12.dp))
+        }
     }
 }
 
 @Composable
-fun TaxSummaryRow(modifier: Modifier = Modifier, item: BudgetTax) {
+fun TaxSummaryRow(modifier: Modifier = Modifier, item: BudgetTax, onEdit: (() -> Unit)? = null, onDelete: (() -> Unit)? = null) {
     val colors = getPrestadorColors()
+    val accentColor = Color(0xFFEF4444)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF8FAFC))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .shadow(2.dp, RoundedCornerShape(10.dp))
+            .background(colors.surfaceColor),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFEF4444)))
+        Box(modifier = Modifier.width(4.dp).height(52.dp).background(accentColor))
         Spacer(modifier = Modifier.width(10.dp))
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-        Text("\$${"%.2f".format(item.amount)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = colors.primaryOrange)
+        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f).padding(vertical = 8.dp), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary, maxLines = 1)
+        Text("\$${"%.2f".format(item.amount)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = accentColor)
+        if (onEdit != null || onDelete != null) {
+            IconButton(onClick = { onEdit?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+            }
+            IconButton(onClick = { onDelete?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Spacer(Modifier.width(12.dp))
+        }
     }
 }
 
@@ -365,20 +588,32 @@ fun AttachmentSummaryRow(modifier: Modifier = Modifier, item: BudgetAttachment) 
 }
 
 @Composable
-fun MiscExpenseSummaryRow(modifier: Modifier = Modifier, item: BudgetMiscExpense) {
+fun MiscExpenseSummaryRow(modifier: Modifier = Modifier, item: BudgetMiscExpense, onEdit: (() -> Unit)? = null, onDelete: (() -> Unit)? = null) {
     val colors = getPrestadorColors()
+    val accentColor = Color(0xFF10B981)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF8FAFC))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .shadow(2.dp, RoundedCornerShape(10.dp))
+            .background(colors.surfaceColor),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
+        Box(modifier = Modifier.width(4.dp).height(52.dp).background(accentColor))
         Spacer(modifier = Modifier.width(10.dp))
-        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
-        Text("\$${"%.2f".format(item.amount)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = colors.primaryOrange)
+        Text(item.description.ifBlank { "(Sin descripción)" }, modifier = Modifier.weight(1f).padding(vertical = 8.dp), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary, maxLines = 1)
+        Text("\$${"%.2f".format(item.amount)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = accentColor)
+        if (onEdit != null || onDelete != null) {
+            IconButton(onClick = { onEdit?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Editar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+            }
+            IconButton(onClick = { onDelete?.invoke() }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Spacer(Modifier.width(12.dp))
+        }
     }
 }
 
@@ -427,11 +662,17 @@ fun TotalsSummary(modifier: Modifier = Modifier, isExpanded: Boolean, grandTotal
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun PrestadorHeader(prestador: PPrestadorProfileFalso, onFilterClick: () -> Unit) {
-    val currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+fun PrestadorHeader(prestador: PPrestadorProfileFalso, numeroPresupuesto: String, onFilterClick: () -> Unit) {
+    val currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy", java.util.Locale("es")))
     val gradient = Brush.linearGradient(
         colors = listOf(Color(0xFFFF6B35), Color(0xFFE64A19))
     )
+    val nombreCompleto = prestador.companyName ?: "${prestador.name} ${prestador.lastName}"
+    val iniciales = nombreCompleto.split(" ")
+        .filter { it.isNotBlank() }.take(2)
+        .joinToString("") {
+            it.first().uppercaseChar().toString()
+        }
 
     Box(
         modifier = Modifier
@@ -441,64 +682,63 @@ fun PrestadorHeader(prestador: PPrestadorProfileFalso, onFilterClick: () -> Unit
             .background(gradient)
             .padding(16.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center
             ) {
-                // Avatar con borde blanco
-                Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
-                        .padding(2.dp)
-                        .clip(CircleShape)
-                ) {
-                    AsyncImage(
-                        model = prestador.profileImageUrl,
-                        contentDescription = "Foto de perfil",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        prestador.companyName ?: "${prestador.name} ${prestador.lastName}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        prestador.address,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                    Text(
-                        prestador.email,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-                IconButton(onClick = onFilterClick) {
-                    Icon(
-                        Icons.Filled.FilterList,
-                        contentDescription = "Filtrar Secciones",
-                        tint = Color.White
-                    )
-                }
+                Text(
+                    iniciales,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
-            HorizontalDivider(color = Color.White.copy(alpha = 0.3f))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.Start
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.Description, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(14.dp))
-                    Text("Nº: 0001", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.White)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.CalendarToday, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(14.dp))
-                    Text(currentDate, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(
+                    nombreCompleto,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    prestador.email,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.85f)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        "# $numeroPresupuesto",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                    Text("•", color = Color.White.copy(alpha = .6f),
+                        style = MaterialTheme.typography.bodySmall)
+                    Icon(
+                        Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        currentDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
                 }
             }
         }
@@ -670,7 +910,7 @@ fun <T> CollapsibleSection(
                     .align(Alignment.BottomEnd)
                     .offset(x = 4.dp, y = 12.dp),
                 shape = RoundedCornerShape(8.dp),
-                color = Color(0xFFFFF3E0),
+                color = colors.primaryOrangeLight,
                 border = BorderStroke(1.dp, colors.primaryOrange.copy(alpha = 0.3f))
             ) {
                 Text(
@@ -855,16 +1095,10 @@ fun ArticleAutoCompleteFields(
             ) {
                 codeFiltered.take(5).forEach { item ->
                     DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(item.code, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                Text(item.description, style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
-                            }
-                        },
+                        text = { SuggestionsCodeRow(code = item.code, description = item.description, icon = Icons.Default.Inventory2) },
                         onClick = {
-                            codeText = item.code
-                            nameText = item.description
-                            selected = item
+                            onAdd(item.copy(id = System.currentTimeMillis()))
+                            codeText = ""; nameText = ""; selected = null
                             codeExpanded = false
                         }
                     )
@@ -885,16 +1119,7 @@ fun ArticleAutoCompleteFields(
                 label = { Text("Nombre", style = MaterialTheme.typography.labelSmall) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall,
-                trailingIcon = if (selected != null) {
-                    {
-                        IconButton(onClick = {
-                            onAdd(selected!!.copy(id = System.currentTimeMillis()))
-                            codeText = ""; nameText = ""; selected = null
-                        }) {
-                            Icon(Icons.Default.AddCircle, contentDescription = "Agregar", tint = colors.primaryOrange)
-                        }
-                    }
-                } else null,
+
                 colors = fieldColors,
                 shape = RoundedCornerShape(8.dp)
             )
@@ -905,15 +1130,11 @@ fun ArticleAutoCompleteFields(
                 nameFiltered.take(5).forEach { item ->
                     DropdownMenuItem(
                         text = {
-                            Column {
-                                Text(item.description, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                if (item.unitPrice > 0) Text("$ ${"%.2f".format(item.unitPrice)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
-                            }
+                            SuggetionRow(description = item.description, code = item.code, price = item.unitPrice, icon = Icons.Default.Inventory2)
                         },
                         onClick = {
-                            codeText = item.code
-                            nameText = item.description
-                            selected = item
+                            onAdd(item.copy(id = System.currentTimeMillis()))
+                            codeText = ""; nameText = ""; selected = null
                             nameExpanded = false
                         }
                     )
@@ -982,14 +1203,12 @@ fun ServiceAutoCompleteFields(
                 codeFiltered.take(5).forEach { item ->
                     DropdownMenuItem(
                         text = {
-                            Column {
-                                Text(item.code, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                Text(item.description, style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
-                            }
+                            SuggestionsCodeRow(code = item.code, description = item.description, icon = Icons.Default.Build)
                         },
                         onClick = {
-                            codeText = item.code; nameText = item.description
-                            selected = item; codeExpanded = false
+                            onAdd(item.copy(id = System.currentTimeMillis()))
+                            codeText = ""; nameText = ""; selected = null
+                            codeExpanded = false
                         }
                     )
                 }
@@ -1008,16 +1227,7 @@ fun ServiceAutoCompleteFields(
                 label = { Text("Descripción", style = MaterialTheme.typography.labelSmall) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall,
-                trailingIcon = if (selected != null) {
-                    {
-                        IconButton(onClick = {
-                            onAdd(selected!!.copy(id = System.currentTimeMillis()))
-                            codeText = ""; nameText = ""; selected = null
-                        }) {
-                            Icon(Icons.Default.AddCircle, contentDescription = "Agregar", tint = colors.primaryOrange)
-                        }
-                    }
-                } else null,
+
                 colors = fieldColors,
                 shape = RoundedCornerShape(8.dp)
             )
@@ -1028,14 +1238,14 @@ fun ServiceAutoCompleteFields(
                 nameFiltered.take(5).forEach { item ->
                     DropdownMenuItem(
                         text = {
-                            Column {
-                                Text(item.description, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                if (item.total > 0) Text("$ ${"%.2f".format(item.total)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
-                            }
+                            SuggetionRow(description = item.description, code = item.code, price = item.total, icon = Icons.Default.Build)
                         },
                         onClick = {
-                            codeText = item.code; nameText = item.description
-                            selected = item; nameExpanded = false
+                            onAdd(item.copy(id = System.currentTimeMillis()))
+                            codeText = "";
+                            nameText = "";
+                            selected = null
+                            nameExpanded = false
                         }
                     )
                 }
@@ -1076,8 +1286,13 @@ fun FeeAutoCompleteFields(
                 textStyle = MaterialTheme.typography.bodySmall, colors = fieldColors, shape = RoundedCornerShape(8.dp))
             ExposedDropdownMenu(expanded = codeExpanded && codeFiltered.isNotEmpty(), onDismissRequest = { codeExpanded = false }) {
                 codeFiltered.take(5).forEach { item ->
-                    DropdownMenuItem(text = { Column { Text(item.code, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary); Text(item.description, style = MaterialTheme.typography.labelSmall, color = colors.textSecondary) } },
-                        onClick = { codeText = item.code; nameText = item.description; selected = item; codeExpanded = false })
+                    DropdownMenuItem(
+                        text = { SuggestionsCodeRow(code = item.code, description = item.description, icon = Icons.Default.Person) },
+                        onClick = {
+                            onAdd(item.copy(id = System.currentTimeMillis()))
+                            codeText = ""; nameText = ""; selected = null
+                            codeExpanded = false
+                        })
                 }
             }
         }
@@ -1086,12 +1301,15 @@ fun FeeAutoCompleteFields(
                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
                 label = { Text("Descripción", style = MaterialTheme.typography.labelSmall) }, singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall,
-                trailingIcon = if (selected != null) { { IconButton(onClick = { onAdd(selected!!.copy(id = System.currentTimeMillis())); codeText = ""; nameText = ""; selected = null }) { Icon(Icons.Default.AddCircle, null, tint = colors.primaryOrange) } } } else null,
                 colors = fieldColors, shape = RoundedCornerShape(8.dp))
             ExposedDropdownMenu(expanded = nameExpanded && nameFiltered.isNotEmpty(), onDismissRequest = { nameExpanded = false }) {
                 nameFiltered.take(5).forEach { item ->
-                    DropdownMenuItem(text = { Column { Text(item.description, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary); if (item.total > 0) Text("$ ${"%.2f".format(item.total)}", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary) } },
-                        onClick = { codeText = item.code; nameText = item.description; selected = item; nameExpanded = false })
+                    DropdownMenuItem(text = { SuggetionRow(description = item.description, code = item.code, price = item.total, icon = Icons.Default.Person) },
+                        onClick = {
+                            onAdd(item.copy(id = System.currentTimeMillis()))
+                            codeText = ""; nameText = ""; selected = null
+                            nameExpanded = false
+                        })
                 }
             }
         }
@@ -1125,6 +1343,70 @@ fun DescriptionAutoCompleteField(
                 DropdownMenuItem(text = { Text(desc, style = MaterialTheme.typography.bodySmall, color = colors.textPrimary) },
                     onClick = { onSelect(desc); text = ""; expanded = false })
             }
+        }
+    }
+}
+
+@Composable
+private fun SuggetionRow(
+    description: String,
+    code: String = "",
+    price: Double = 0.0,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.CheckCircle
+) {
+    val colors = getPrestadorColors()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.padding(vertical = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.primaryOrange.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+        }
+
+        Column {
+            Text(description, fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (code.isNotBlank()) Text("#$code", fontSize = 11.sp, color = colors.textSecondary)
+                if (price > 0) Text("$${"%.2f".format(price)}", fontSize = 11.sp,
+                    color = colors.primaryOrange, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionsCodeRow(
+    code: String,
+    description: String = "",
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Tag
+) {
+    val colors = getPrestadorColors()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.padding(vertical = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.primaryOrange.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = colors.primaryOrange, modifier = Modifier.size(18.dp))
+        }
+        Column {
+            Text(code, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            if (description.isNotEmpty())
+                Text(description, fontSize = 11.sp, color = colors.textSecondary, maxLines = 1)
         }
     }
 }

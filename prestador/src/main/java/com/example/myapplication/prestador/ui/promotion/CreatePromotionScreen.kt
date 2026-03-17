@@ -35,6 +35,8 @@ import com.example.myapplication.prestador.data.model.ProviderPromotion
 import com.example.myapplication.prestador.ui.theme.PrestadorColors
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import com.example.myapplication.prestador.viewmodel.CreatePromotionViewModel
+import com.example.myapplication.prestador.viewmodel.EditProfileViewModel
+import com.example.myapplication.prestador.viewmodel.ProfileState
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,10 +44,20 @@ import com.example.myapplication.prestador.viewmodel.CreatePromotionViewModel
 fun CreatePromotionScreen(
     onBack: () -> Unit,
     onPublish: (ProviderPromotion) -> Unit,
-    viewModel: CreatePromotionViewModel = hiltViewModel()
+    viewModel: CreatePromotionViewModel = hiltViewModel(),
+    editProfileViewModel: EditProfileViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
     val context = LocalContext.current
+
+    val profileState by editProfileViewModel.profileState.collectAsState()
+    val provider = (profileState as? ProfileState.Success)?.provider
+    val providerId = provider?.id.orEmpty()
+    val providerName = when {
+        provider?.tieneEmpresa == true && !provider.nombreEmpresa.isNullOrBlank() -> provider.nombreEmpresa!!
+        else -> "${provider?.name.orEmpty()} ${provider?.apellido.orEmpty()}".trim().ifBlank { "Prestador" }
+    }
+    val providerImageUrl = provider?.imageUrl
 
     // Estados del formulario
     var selectedType by remember { mutableStateOf(PromotionType.PROMOTION) }
@@ -209,10 +221,15 @@ fun CreatePromotionScreen(
             Button(
                 onClick = {
                     // Llamar al ViewModel para guardar en la BD
+                    if (providerId.isBlank()) {
+                        errorMessage = "No se pudo cargar tu perfil (providerId vacío)"
+                        return@Button
+                    }
+
                     viewModel.createPromotion(
-                        providerId = "test_provider_123", // TODO: Obtener del usuario actual
-                        providerName = "Prestador de Prueba",
-                        providerImageUrl = null,
+                        providerId = providerId,
+                        providerName = providerName,
+                        providerImageUrl = providerImageUrl,
                         type = selectedType,
                         title = title,
                         description = description,

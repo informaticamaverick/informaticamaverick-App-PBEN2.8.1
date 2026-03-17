@@ -4,24 +4,21 @@ import com.example.myapplication.prestador.data.local.dao.PromotionDao
 import com.example.myapplication.prestador.data.local.entity.PromotionEntity
 import com.example.myapplication.prestador.data.model.PromotionType
 import com.example.myapplication.prestador.data.model.ProviderPromotion
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * REPOSITORY para Promotions
- * 
- * Incluye métodos de conversión entre PromotionEntity (BD) 
- * y ProviderPromotion (modelo de UI)
- */
 @Singleton
 class PromotionRepository @Inject constructor(
     private val promotionDao: PromotionDao
 ) {
-    
+    private val firestore = FirebaseFirestore.getInstance()
+    private val coleccion = firestore.collection("promociones")
     /**
      * GUARDAR nueva promoción
      */
@@ -48,6 +45,7 @@ class PromotionRepository @Inject constructor(
      */
     suspend fun deletePromotion(promotionId: String) {
         promotionDao.deletePromotionById(promotionId)
+        try { coleccion.document(promotionId).delete().await() } catch (_: Exception) { }
     }
     
     /**
@@ -126,9 +124,7 @@ class PromotionRepository @Inject constructor(
      * CREAR y GUARDAR promoción desde ProviderPromotion
      * Convierte el modelo de UI a Entity y lo guarda
      */
-    suspend fun createPromotionFromModel(
-        promotion: ProviderPromotion
-    ): String {
+    suspend fun createPromotionFromModel(promotion: ProviderPromotion): String {
         val promotionId = UUID.randomUUID().toString()
         val entity = PromotionEntity(
             id = promotionId,
@@ -149,6 +145,29 @@ class PromotionRepository @Inject constructor(
             rating = promotion.rating
         )
         promotionDao.insertPromotion(entity)
+        // Sincronizar con Firestore para que el cliente pueda verlo
+        try {
+            coleccion.document(promotionId).set(
+                mapOf(
+                    "id" to promotionId,
+                    "providerId" to promotion.providerId,
+                    "providerName" to promotion.providerName,
+                    "providerImageUrl" to (promotion.providerImageUrl ?: ""),
+                    "type" to promotion.type.name,
+                    "title" to promotion.title,
+                    "description" to promotion.description,
+                    "imageUrls" to promotion.imageUrls,
+                    "discount" to promotion.discount,
+                    "categories" to promotion.categories,
+                    "createdAt" to promotion.createdAt,
+                    "expiresAt" to promotion.expiresAt,
+                    "status" to promotion.status.name,
+                    "likes" to promotion.likes,
+                    "views" to promotion.views,
+                    "rating" to promotion.rating
+                )
+            ).await()
+        } catch (_: Exception) { }
         return promotionId
     }
     

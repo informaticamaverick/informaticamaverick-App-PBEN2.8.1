@@ -107,10 +107,10 @@ interface  SucursalDao {
     fun searchSucursalesByName(name: String): Flow<List<SucursalEntity>>
 
     /**
-     * ACTUALIZAR ubicacion de sucursal
+     * ACTUALIZAR direccion de sucursal (via DireccionEntity)
      */
-    @Query("UPDATE sucursales SET latitude = :latitude, longitude = :longitude, updatedAt = :updatedAt WHERE id = :sucursalId")
-    suspend fun updateSucursalLocation(sucursalId: String, latitude: Double, longitude: Double, updatedAt: Long)
+    @Query("UPDATE sucursales SET direccionId = :direccionId, updatedAt = :updatedAt WHERE id = :sucursalId")
+    suspend fun updateSucursalDireccion(sucursalId: String, direccionId: String, updatedAt: Long)
 
     /**
      * VERIFICAR si existe una sucursal

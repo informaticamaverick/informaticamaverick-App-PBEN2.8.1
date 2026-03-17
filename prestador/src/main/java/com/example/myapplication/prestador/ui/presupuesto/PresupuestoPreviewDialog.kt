@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.focusModifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.modifier.modifierLocalConsumer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,10 @@ import com.example.myapplication.prestador.data.PPrestadorProfileFalso
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import okhttp3.Address
+import java.io.File
+import java.io.FileOutputStream
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -53,10 +59,22 @@ fun BudgetPreviewPDFDialog(
     onDismiss: () -> Unit,
     onEnviar: () -> Unit,
     onEnviarBudget: (() -> Unit)? = null,
-    onCapturePng: ((android.graphics.Bitmap) -> Unit)? = null
-) {
+    onCapturePng: ((android.graphics.Bitmap) -> Unit)? = null,
+    onEnviarBudgetConImagen: ((String) -> Unit)? = null,
+    showSendButton: Boolean = true,
+    showTaxDetail: Boolean = false,
+    clientName: String = "",
+    clientCompany: String? = null,
+    clientAddress: String? = null,
+    clienteCompany: String? = null,
+    providerName: String = "",
+    providerAddress: String = "",
+    isProfessional: Boolean = false,
+    presupuestoNumero: String = ""
+){
     val coroutineScope = rememberCoroutineScope()
     val captureLayer = rememberGraphicsLayer()
+    val context = LocalContext.current
     //CONVERTIR ITEMS A FORMATO DE DISPLAY
 
     val displayItems = mutableListOf<PresupuestoItemDisplay>()
@@ -177,11 +195,11 @@ fun BudgetPreviewPDFDialog(
                         )
 
                         // Encabezado
-                        A4HeaderSection(prestador)
+                        A4HeaderSection(prestador, providerName, presupuestoNumero, isProfessional)
                         HorizontalDivider(color = Slate200)
 
                         // Datos Cliente
-                        A4ClientInfoSection(prestador)
+                        A4ClientInfoSection(prestador, clientName, clientCompany, clientAddress, providerName, providerAddress, isProfessional)
 
                         // Tabla de items
                         A4ItemsTable(displayItems)
@@ -190,7 +208,8 @@ fun BudgetPreviewPDFDialog(
                             subtotal = subtotal,
                             taxAmount = taxAmount,
                             discountAmount = discountAmount,
-                            total = grandTotal
+                            total = grandTotal,
+                            taxes = if (showTaxDetail) taxes else emptyList()
                         )
                     }
                 }
@@ -209,34 +228,36 @@ fun BudgetPreviewPDFDialog(
                 }
 
                 //Boton enviar
-                Button(
-                    onClick = {
-                        when {
-                            onEnviarBudget != null -> onEnviarBudget()
-                            onCapturePng != null -> {
-                                coroutineScope.launch {
-                                    val bitmap = captureLayer.toImageBitmap().asAndroidBitmap()
-                                    onCapturePng(bitmap)
+                if (showSendButton) {
+                    Button(
+                        onClick = {
+                            when {
+                                onEnviarBudget != null -> onEnviarBudget()
+                                onCapturePng != null -> {
+                                    coroutineScope.launch {
+                                        val bitmap = captureLayer.toImageBitmap().asAndroidBitmap()
+                                        onCapturePng(bitmap)
+                                    }
                                 }
+                                else -> onEnviar()
                             }
-                            else -> onEnviar()
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                        .zIndex(10f),
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF6B35)
-                    )
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text("Enviar", fontWeight = FontWeight.Bold)
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .zIndex(10f),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF6B35)
+                        )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Enviar", fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 //Controles de zoom
@@ -291,7 +312,12 @@ fun BudgetPreviewPDFDialog(
 
 
 @Composable
-fun A4HeaderSection(prestador: PPrestadorProfileFalso) {
+fun A4HeaderSection(
+    prestador: PPrestadorProfileFalso,
+    providerName: String = "",
+    presupuestoNumero: String = "",
+    isProfessional: Boolean = false
+) {
     val currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
     
     Row(
@@ -316,7 +342,7 @@ fun A4HeaderSection(prestador: PPrestadorProfileFalso) {
             Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Text(
-                    "${prestador.name} ${prestador.lastName}".uppercase(),
+                    providerName.ifBlank { "${prestador.name} ${prestador.lastName}" }.uppercase(),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Black,
                     color = Slate800,
@@ -348,7 +374,7 @@ fun A4HeaderSection(prestador: PPrestadorProfileFalso) {
                 Text("X", fontSize = 26.sp, fontWeight = FontWeight.Black, color = Slate800)
             }
             Spacer(modifier = Modifier.height(4.dp))
-            Text("PRESUPUESTO", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Slate600, letterSpacing = 0.5.sp)
+            Text(if (isProfessional) "CONSULTA" else "PRESUPUESTO", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Slate600, letterSpacing = 0.5.sp)
         }
 
         // Datos
@@ -360,7 +386,7 @@ fun A4HeaderSection(prestador: PPrestadorProfileFalso) {
                     .border(1.dp, Slate300, RoundedCornerShape(4.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
-                Text("N° ${prestador.id.takeLast(8)}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Slate800)
+                Text("N° ${presupuestoNumero.ifBlank { prestador.id.takeLast(8) }}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Slate800)
             }
             Text(currentDate, fontSize = 10.sp, color = Slate600, fontWeight = FontWeight.Medium)
         }
@@ -368,7 +394,13 @@ fun A4HeaderSection(prestador: PPrestadorProfileFalso) {
 }
 
 @Composable
-fun A4ClientInfoSection(prestador: PPrestadorProfileFalso) {
+fun A4ClientInfoSection(prestador: PPrestadorProfileFalso,
+                        clientName: String = "",
+                        clientCompany: String? = null,
+                        clientAddress: String? = null,
+                        providerName: String = "",
+                        providerAddress: String = "",
+                        isProfessional: Boolean = false) {
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
         // Emisor
         Row(
@@ -378,7 +410,7 @@ fun A4ClientInfoSection(prestador: PPrestadorProfileFalso) {
             Text("DE:", fontSize = 10.sp,
                 fontWeight = FontWeight.Bold, color = Slate400)
             Text(
-                prestador.companyName ?: "${prestador.name} ${prestador.lastName}",
+                providerName.ifBlank { prestador.companyName ?: "${prestador.name} ${prestador.lastName}" },
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Normal,
                 color = Slate600
@@ -402,7 +434,7 @@ fun A4ClientInfoSection(prestador: PPrestadorProfileFalso) {
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Cliente", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800, lineHeight = 13.sp)
+                    Text(clientName.ifBlank { "Cliente" }, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800, lineHeight = 13.sp)
                     Spacer(modifier = Modifier.weight(1f))
                     Box(
                         modifier = Modifier
@@ -418,19 +450,20 @@ fun A4ClientInfoSection(prestador: PPrestadorProfileFalso) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("DIRECCIÓN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
-                    Text("A definir", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                    Text(providerAddress.ifBlank { "Sin dirección" }, fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
                     HorizontalDivider(color = Slate300, thickness = 1.dp)
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text("MÉTODO DE PAGO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
-                    Text("A definir", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                    Text(clientAddress ?: "A definirr", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
                     HorizontalDivider(color = Slate300, thickness = 1.dp)
                 }
+                Spacer(modifier = Modifier.width(16.dp))
             }
             Column {
-                Text("TRABAJO / PROYECTO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
-                Text("Proyecto de servicio", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
+                Text(if (isProfessional) "CONSULTA / SERVICIO" else "TRABAJO / PROYECTO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Slate400)
+                Text(if (isProfessional) "Servicio profesional" else "Proyecto de servicio", fontSize = 11.sp, color = Slate800, lineHeight = 14.sp)
                 HorizontalDivider(color = Slate300, thickness = 1.dp)
             }
         }
@@ -505,7 +538,8 @@ fun A4FooterSection(
     subtotal: Double,
     taxAmount: Double,
     discountAmount: Double,
-    total: Double
+    total: Double,
+    taxes: List<BudgetTax> = emptyList()
 ) {
     Column(
         modifier = Modifier
@@ -546,12 +580,35 @@ fun A4FooterSection(
                 }
 
                 if (taxAmount > 0) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Impuestos:", fontSize = 11.sp, color = Slate600)
-                        Text("$ ${String.format("%,.2f", taxAmount)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                    if (taxes.isNotEmpty()) {
+                        taxes.forEach { tax ->
+                            val pct = if (subtotal > 0) tax.amount / subtotal * 100 else 0.0
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "${tax.description} (${String.format("%.1f", pct)}%)",
+                                    fontSize = 10.sp,
+                                    color = Slate600,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    "+ $ ${String.format("%,.2f", tax.amount)}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Slate800
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Impuestos:", fontSize = 11.sp, color = Slate600)
+                            Text("$ ${String.format("%,.2f", taxAmount)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate800)
+                        }
                     }
                 }
 

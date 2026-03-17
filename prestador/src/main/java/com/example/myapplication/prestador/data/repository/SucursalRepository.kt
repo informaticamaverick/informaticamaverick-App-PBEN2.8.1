@@ -54,8 +54,8 @@ class SucursalRepository @Inject constructor(
         sucursalDao.updateSucursalStatus(sucursalId, isActive, System.currentTimeMillis())
     }
 
-    suspend fun updateSucursalLocation(sucursalId: String, latitude: Double, longitude: Double) {
-        sucursalDao.updateSucursalLocation(sucursalId, latitude, longitude, System.currentTimeMillis())
+    suspend fun updateSucursalDireccion(sucursalId: String, direccionId: String) {
+        sucursalDao.updateSucursalDireccion(sucursalId, direccionId, System.currentTimeMillis())
     }
 
     suspend fun sucursalExists(sucursalId: String): Boolean {

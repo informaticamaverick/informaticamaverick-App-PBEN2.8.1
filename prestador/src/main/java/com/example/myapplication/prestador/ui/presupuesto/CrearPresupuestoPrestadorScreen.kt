@@ -1,5 +1,6 @@
 package com.example.myapplication.prestador.ui.presupuesto
 
+import android.R
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
@@ -8,6 +9,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -33,8 +35,23 @@ import com.example.myapplication.prestador.data.PPrestadorProfileFalso
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import com.example.myapplication.prestador.viewmodel.PresupuestoViewModel
 import androidx.compose.runtime.collectAsState
+import com.example.myapplication.prestador.viewmodel.EditProfileViewModel
+import com.example.myapplication.prestador.viewmodel.ProfileState
+import com.example.myapplication.prestador.viewmodel.DireccionViewModel
+import com.example.myapplication.prestador.viewmodel.DireccionUiState
+import com.example.myapplication.prestador.utils.formatInline
+import com.example.myapplication.prestador.utils.toPrestadorProfileFalso
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clip
+import com.example.myapplication.prestador.data.ChatData
+import com.example.myapplication.prestador.data.local.entity.ClienteEntity
+import kotlinx.coroutines.launch
 
-enum class SheetType { Article, Service, ProfessionalFee, Misc, Tax, Attachment, Sections, Client }
+enum class SheetType { Article, Service, ProfessionalFee, Misc, Tax, Attachment, Sections, ClientPicker }
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,30 +59,62 @@ enum class SheetType { Article, Service, ProfessionalFee, Misc, Tax, Attachment,
 fun CrearPresupuestoPrestadorScreen(
     appointmentId: String = "",
     onBack: () -> Unit = {},
-    viewModel: PresupuestoViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    viewModel: PresupuestoViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
+    editProfileViewModel: EditProfileViewModel = hiltViewModel(),
+    direccionViewModel: DireccionViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
+    val profileState by editProfileViewModel.profileState.collectAsState()
+    val businessEntity by editProfileViewModel.businessEntity.collectAsState()
+    val consultorioUiState by direccionViewModel.consultorioState.collectAsState()
+
+    val isProviderProfessional: Boolean = (profileState as? ProfileState.Success)?.provider?.serviceType
+        .equals("PROFESSIONAL", ignoreCase = true)
+    val provider = (profileState as? ProfileState.Success)?.provider
+
+    LaunchedEffect(isProviderProfessional, provider?.id) {
+        if (isProviderProfessional && !provider?.id.isNullOrBlank()) {
+            direccionViewModel.loadConsultorioDireccion(provider!!.id)
+        }
+    }
+
+    val consultorioDireccion = (consultorioUiState as? DireccionUiState.Success)?.direccion
+    val consultorioDisplayAddress = consultorioDireccion?.formatInline().orEmpty()
+
+    val providerDisplayName = when {
+        provider?.tieneEmpresa == true && !provider.nombreEmpresa.isNullOrBlank() -> provider.nombreEmpresa!!
+        provider?.tieneEmpresa == true && !businessEntity?.nombreNegocio.isNullOrBlank() -> businessEntity!!.nombreNegocio
+        else -> "${provider?.name.orEmpty()} ${provider?.apellido.orEmpty()}".trim()
+    }
+    val providerDisplayAnddress = when {
+        isProviderProfessional && consultorioDisplayAddress.isNotBlank() -> consultorioDisplayAddress
+        provider?.tieneEmpresa == true && !businessEntity?.direccion.isNullOrBlank() -> businessEntity!!.direccion
+        provider?.tieneEmpresa == true && !provider.direccionEmpresa.isNullOrBlank() -> provider.direccionEmpresa!!
+        provider?.turnosEnLocal == true && !provider.direccionLocal.isNullOrBlank() -> provider.direccionLocal!!
+        !provider?.address.isNullOrBlank() -> provider.address!!
+        else -> ""
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
-    val prestador = remember {
-        PPrestadorProfileFalso(
-            id = "demo_1",
-            name = "Maxi",
-            lastName = "Nanterne",
-            profileImageUrl = "https://example.com/demo.png",
+    val prestador = remember(provider?.id, providerDisplayName, providerDisplayAnddress, businessEntity?.id) {
+        provider?.toPrestadorProfileFalso(businessEntity) ?: PPrestadorProfileFalso(
+            id = provider?.id ?: "demo",
+            name = providerDisplayName.ifBlank { "Prestador" },
+            lastName = provider?.apellido.orEmpty(),
+            profileImageUrl = provider?.imageUrl.orEmpty(),
             bannerImageUrl = null,
-            rating = 5.0f,
-            isVerified = true,
-            isOnline = true,
-            services = listOf("Informatica"),
-            companyName = "Maverick Informatica (DEMO)",
-            address = "B. Matienzo 1339",
-            email = "demo@maverick.com",
-            doesHomeVisits = true,
-            hasPhysicalLocation = true,
+            rating = provider?.rating ?: 0f,
+            isVerified = provider?.verificado ?: false,
+            isOnline = false,
+            services = emptyList(),
+            companyName = provider?.nombreEmpresa?.takeIf { it.isNotBlank() } ?: businessEntity?.nombreNegocio,
+            address = providerDisplayAnddress,
+            email = provider?.email.orEmpty(),
+            doesHomeVisits = provider?.vaDomicilio ?: false,
+            hasPhysicalLocation = provider?.turnosEnLocal ?: false,
             works24h = false,
             galleryImages = emptyList(),
-            isFavorite = true,
-            isSubscribed = true
+            isFavorite = provider?.favorito ?: false,
+            isSubscribed = provider?.suscripto ?: false
         )
     }
 
@@ -82,6 +131,40 @@ fun CrearPresupuestoPrestadorScreen(
     var showSaveCatalogDialog by remember { mutableStateOf(false) }
     var pendingPresupuesto by remember { mutableStateOf<com.example.myapplication.prestador.data.local.entity.PresupuestoEntity?>(null) }
     val presupuestos by viewModel.presupuestos.collectAsState()
+    val clientes by viewModel.clientes.collectAsState()
+    val savedArticleItems = remember(presupuestos) {
+        presupuestos.flatMap { p ->
+            if (p.itemsJson.isBlank()) emptyList()
+            else p.itemsJson.split("|").mapNotNull { s ->
+                val parts = s.split(";")
+                if (parts.size >= 4) BudgetItem(
+                    id = 0L, code = parts[0], description = parts[1],
+                    quantity = parts[2].toIntOrNull() ?: 1,
+                    unitPrice = parts[3].toDoubleOrNull() ?: 0.0,
+                    taxPercentage = parts.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
+                    discountPercentage = parts.getOrNull(5)?.toDoubleOrNull() ?: 0.0
+                ) else null
+            }
+        }.distinctBy { it.description }
+    }
+    val savedServiceItems = remember(presupuestos) {
+        presupuestos.flatMap { p ->
+            if (p.serviciosJson.isBlank()) emptyList()
+            else p.serviciosJson.split("|").mapNotNull { s ->
+                val parts = s.split(";")
+                if (parts.size >= 2) BudgetService(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
+            }
+        }.distinctBy { it.description }
+    }
+    val savedFeeItems = remember(presupuestos) {
+        presupuestos.flatMap { p ->
+            if (p.honorariosJson.isBlank()) emptyList()
+            else p.honorariosJson.split("|").mapNotNull { s ->
+                val parts = s.split(";")
+                if (parts.size >= 2) BudgetProfessionalFee(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
+            }
+        }.distinctBy { it.description }
+    }
     var pendingSimPresupuestoId by remember { mutableStateOf("") }
     var pendingSimClienteName by remember { mutableStateOf("") }
     var pendingSimTotal by remember { mutableStateOf(0.0) }
@@ -98,6 +181,8 @@ fun CrearPresupuestoPrestadorScreen(
     var isMiscExpanded by remember { mutableStateOf(true) }
     var isTaxesExpanded by remember { mutableStateOf(true) }
     var isAttachmentsExpanded by remember { mutableStateOf(true) }
+    var showIIBBDialog by remember { mutableStateOf(false) }
+    var showTaxDetail by remember { mutableStateOf(false) }
 
     // --- SECTION VISIBILITY STATES ---
     var showArticlesSection by remember { mutableStateOf(true) }
@@ -111,12 +196,45 @@ fun CrearPresupuestoPrestadorScreen(
     // --- NEW FIELDS STATE ---
     var validity by remember { mutableStateOf("7") }
     var notes by remember { mutableStateOf("") }
-    
+
+    LaunchedEffect(isProviderProfessional) {
+        if (isProviderProfessional) {
+            showArticlesSection = false
+            showServicesSection = false
+            showMiscSection = false
+            showTaxesSection = false
+        }
+    }
+
     // --- CLIENTE STATE ---
     var clienteNombre by remember { mutableStateOf("") }
     var clienteEmail by remember { mutableStateOf("") }
     var clienteTelefono by remember { mutableStateOf("") }
     var clienteDireccion by remember { mutableStateOf("") }
+    var selectedClienteId by remember { mutableStateOf<String?>(null) }
+    //BUSCADOR INLINE (clientes del chat)
+    var clienteQuery by remember { mutableStateOf("")}
+    var clienteFieldFocused by remember { mutableStateOf(false) }
+    var attemptedSend by remember { mutableStateOf(false) }
+
+    val clientFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val coroutineScope= rememberCoroutineScope()
+
+    val serviceTypeForChat = provider?.serviceType ?: if (isProviderProfessional) "PROFESSIONAL"
+    else "TECHNICAL"
+    val chatClients = remember(serviceTypeForChat)
+    {
+        ChatData.getConversationsByServiceType(serviceTypeForChat) //clientes que ven en chat
+    }
+
+    val filteredChatClients = remember(chatClients, clienteQuery) {
+        val q = clienteQuery.trim()
+        if (q.isBlank()) emptyList()
+        else chatClients.filter { c ->
+            c.userName.contains(q, ignoreCase = true)
+        }.take(8)
+    }
 
     // --- CALCULATED TOTALS ---
     // Calcular subtotal base (sin impuestos ni descuentos)
@@ -166,12 +284,12 @@ fun CrearPresupuestoPrestadorScreen(
         containerColor = colors.backgroundColor,
         topBar = {
             TopAppBar(
-                title = { 
+                title = {
                     Text(
-                        "Crear Presupuesto",
+                        if (isProviderProfessional) "Crear Consulta" else "Crear Presupuesto",
                         color = Color.White,
                         fontWeight = FontWeight.Bold
-                    ) 
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -188,100 +306,68 @@ fun CrearPresupuestoPrestadorScreen(
             )
         },
         floatingActionButton = {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            FloatingActionButton(
+                onClick = {
+                    val clienteId = selectedClienteId
+                    if (clienteId.isNullOrBlank()) {
+                        attemptedSend = true
+                        clientFocusRequester.requestFocus()
+                        return@FloatingActionButton
+                    }
+                    attemptedSend = false
+
+                    // Usar el ID del prestador actual (o crear uno demo si no existe)
+                    val prestadorId = "prestador_${System.currentTimeMillis()}"
+
+                    // Convertir items a JSON
+                    val itemsJson = items.joinToString("|") { item ->
+                        "${item.code};${item.description};${item.quantity};${item.unitPrice};${item.taxPercentage};${item.discountPercentage}"
+                    }
+                    val serviciosJson = services.joinToString("|") { service ->
+                        "${service.code};${service.description};${service.total}"
+                    }
+                    val honorariosJson = professionalFees.joinToString("|") { fee ->
+                        "${fee.code};${fee.description};${fee.total}"
+                    }
+                    val gastosJson = miscExpenses.joinToString("|") { misc ->
+                        "${misc.description};${misc.amount}"
+                    }
+                    val impuestosJsonStr = taxes.joinToString("|") { tax ->
+                        "${tax.description};${tax.amount}"
+                    }
+
+                    val nuevoPresupuesto = com.example.myapplication.prestador.data.local.entity.PresupuestoEntity(
+                        id = "pres_${System.currentTimeMillis()}",
+                        numeroPresupuesto = (if (isProviderProfessional) "C-%03d" else "P-%03d").format(presupuestos.size + 1),
+                        clienteId = clienteId,
+                        prestadorId = prestadorId,
+                        fecha = java.time.LocalDate.now().toString(),
+                        validezDias = validity.toIntOrNull() ?: 7,
+                        subtotal = subtotal,
+                        impuestos = itemsTaxTotal + taxesSubtotal,
+                        total = grandTotal,
+                        estado = "Enviado",
+                        notas = notes,
+                        itemsJson = itemsJson,
+                        serviciosJson = serviciosJson,
+                        honorariosJson = honorariosJson,
+                        gastosJson = gastosJson,
+                        impuestosJson = impuestosJsonStr,
+                        appointmentId = appointmentId.ifBlank { null }
+                    )
+
+                    pendingSimPresupuestoId = nuevoPresupuesto.id
+                    pendingSimClienteName = clienteNombre.ifBlank { "Cliente" }
+                    pendingSimTotal = grandTotal
+                    pendingPresupuesto = nuevoPresupuesto
+                    val hasNewItems = items.isNotEmpty() || services.isNotEmpty() ||
+                        professionalFees.isNotEmpty() || miscExpenses.isNotEmpty() || taxes.isNotEmpty()
+                    if (hasNewItems) showSaveCatalogDialog = true else showPreviewDialog = true
+                },
+                containerColor = colors.primaryOrange,
+                contentColor = Color.White
             ) {
-                FloatingActionButton(
-                    onClick = { sheetType = SheetType.Client },
-                    containerColor = Color(0xFFFF6B35),
-                    contentColor = Color.White
-                ) {
-                    Icon(Icons.Default.Person, contentDescription = "Cliente")
-                }
-                FloatingActionButton(
-                    onClick = { 
-                        // Guardar presupuesto en la BD
-                        val clienteId = if (clienteNombre.isNotBlank()) {
-                            val nuevoClienteId = "cliente_${System.currentTimeMillis()}"
-                            viewModel.insertCliente(
-                                com.example.myapplication.prestador.data.local.entity.ClienteEntity(
-                                    id = nuevoClienteId,
-                                    nombre = clienteNombre,
-                                    email = clienteEmail,
-                                    telefono = clienteTelefono,
-                                    direccion = clienteDireccion
-                                )
-                            )
-                            nuevoClienteId
-                        } else {
-                            // Cliente por defecto si no se ingresó información
-                            val defaultClienteId = "cliente_default_${System.currentTimeMillis()}"
-                            viewModel.insertCliente(
-                                com.example.myapplication.prestador.data.local.entity.ClienteEntity(
-                                    id = defaultClienteId,
-                                    nombre = "Cliente Sin Nombre",
-                                    email = "",
-                                    telefono = "",
-                                    direccion = ""
-                                )
-                            )
-                            defaultClienteId
-                        }
-                        
-                        // Usar el ID del prestador actual (o crear uno demo si no existe)
-                        val prestadorId = "prestador_${System.currentTimeMillis()}"
-                        
-                        // Convertir items a JSON
-                        val itemsJson = items.joinToString("|") { item ->
-                            "${item.code};${item.description};${item.quantity};${item.unitPrice};${item.taxPercentage};${item.discountPercentage}"
-                        }
-                        val serviciosJson = services.joinToString("|") { service ->
-                            "${service.code};${service.description};${service.total}"
-                        }
-                        val honorariosJson = professionalFees.joinToString("|") { fee ->
-                            "${fee.code};${fee.description};${fee.total}"
-                        }
-                        val gastosJson = miscExpenses.joinToString("|") { misc ->
-                            "${misc.description};${misc.amount}"
-                        }
-                        val impuestosJsonStr = taxes.joinToString("|") { tax ->
-                            "${tax.description};${tax.amount}"
-                        }
-
-                        val nuevoPresupuesto = com.example.myapplication.prestador.data.local.entity.PresupuestoEntity(
-                            id = "pres_${System.currentTimeMillis()}",
-                            numeroPresupuesto = "P-${(1000..9999).random()}",
-                            clienteId = clienteId,
-                            prestadorId = prestadorId,
-                            fecha = java.time.LocalDate.now().toString(),
-                            validezDias = validity.toIntOrNull() ?: 7,
-                            subtotal = subtotal,
-                            impuestos = itemsTaxTotal + taxesSubtotal,
-                            total = grandTotal,
-                            estado = "Enviado",
-                            notas = notes,
-                            itemsJson = itemsJson,
-                            serviciosJson = serviciosJson,
-                            honorariosJson = honorariosJson,
-                            gastosJson = gastosJson,
-                            impuestosJson = impuestosJsonStr,
-                            appointmentId = appointmentId.ifBlank { null }
-                        )
-
-                        pendingSimPresupuestoId = nuevoPresupuesto.id
-                        pendingSimClienteName = clienteNombre.ifBlank { "Cliente" }
-                        pendingSimTotal = grandTotal
-                        pendingPresupuesto = nuevoPresupuesto
-                        val hasNewItems = items.isNotEmpty() || services.isNotEmpty() ||
-                            professionalFees.isNotEmpty() || miscExpenses.isNotEmpty() || taxes.isNotEmpty()
-                        if (hasNewItems) showSaveCatalogDialog = true else showPreviewDialog = true
-                    },
-                    containerColor = colors.primaryOrange,
-                    contentColor = Color.White
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar")
-                }
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar")
             }
         }
     ) { paddingValues ->
@@ -296,10 +382,180 @@ fun CrearPresupuestoPrestadorScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
-                item { PrestadorHeader(prestador, onFilterClick = { sheetType = SheetType.Sections }) }
+                val numeroPreview = (if (isProviderProfessional) "C-%03d" else "P-%03d").format(presupuestos.size + 1)
+                item { PrestadorHeader(prestador, numeroPresupuesto = numeroPreview,
+                    onFilterClick = { sheetType = SheetType.Sections}) }
+
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = colors.surfaceColor),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "Cliente",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.textPrimary
+                            )
+
+                           val hasSelectedCliente = !selectedClienteId.isNullOrBlank()
+
+                            OutlinedTextField(
+                                value = if (hasSelectedCliente)
+                                clienteNombre else clienteQuery,
+                                onValueChange = { value ->
+                                    if (!hasSelectedCliente) {
+                                        clienteQuery = value
+                                        attemptedSend = false
+                                    }
+                                },
+                                readOnly = hasSelectedCliente,
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall,
+                                label = { Text("Cliente", style = MaterialTheme.typography.labelSmall) },
+                                placeholder = {
+                                    if (!hasSelectedCliente) Text("Escribí nombre, email o telefono", style = MaterialTheme.typography.labelSmall)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        if ( hasSelectedCliente)
+                                        Icons.Default.Person else Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = colors.textSecondary
+                                    )
+                                },
+                                isError = attemptedSend && !hasSelectedCliente,
+                                trailingIcon = {
+                                    if (hasSelectedCliente || clienteQuery.isNotBlank()) {
+                                        IconButton(onClick = {
+                                            attemptedSend = false
+
+                                            selectedClienteId = null
+                                            clienteNombre = ""
+                                            clienteEmail = ""
+                                            clienteTelefono = ""
+                                            clienteDireccion = ""
+                                            clienteQuery = ""
+
+                                            //vuelve a modo Busqueda
+                                            clientFocusRequester.requestFocus()
+                                        }) {
+                                            Icon(Icons.Default.Close, contentDescription = "Cambiar cliente")
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.75f)
+                                    .height(52.dp)
+                                    .focusRequester(clientFocusRequester)
+                                    .onFocusChanged { clienteFieldFocused = it.isFocused },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.primaryOrange,
+                                    unfocusedBorderColor = if (hasSelectedCliente)
+                                    colors.primaryOrange.copy(alpha = 0.65f) else colors.border,
+                                    focusedLabelColor = colors.primaryOrange,
+                                    unfocusedLabelColor = colors.textSecondary,
+                                    cursorColor = colors.primaryOrange,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary,
+                                    focusedContainerColor = if (hasSelectedCliente)
+                                    colors.primaryOrange.copy(alpha = 0.06f) else Color.Transparent,
+                                    unfocusedContainerColor = if (hasSelectedCliente)
+                                    colors.primaryOrange.copy(alpha = 0.06f) else Color.Transparent,
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+
+                            )
+
+                            if (hasSelectedCliente) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = colors.primaryOrange,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        "Seleccionado",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
+
+                            if (attemptedSend && selectedClienteId.isNullOrBlank()) {
+                                Text(
+                                    "Seleccioná un cliente para continuar.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textSecondary
+                                )
+                            }
+
+                            val showSuggetions = clienteFieldFocused && selectedClienteId.isNullOrBlank() && clienteQuery.isNotBlank()
+                            if (showSuggetions) {
+                                Spacer(Modifier.height(8.dp))
+
+                                if (filteredChatClients.isEmpty()) {
+                                    Text("No se encontraron clientes.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.textSecondary)
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        filteredChatClients.forEach { conv ->
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(containerColor = colors.backgroundColor),
+                                                shape = RoundedCornerShape(12.dp),
+                                                onClick = {
+                                                    //Seleción
+                                                    selectedClienteId = conv.userId
+                                                    clienteNombre = conv.userName
+                                                    clienteQuery = conv.userName
+
+                                                    //Asegurar que exista en room (como un Budgetchatsheet)
+
+                                                    viewModel.insertCliente(
+                                                        ClienteEntity(
+                                                            id = conv.userId,
+                                                            nombre = conv.userName
+                                                        )
+                                                    )
+
+                                                    focusManager.clearFocus()
+                                                }
+                                            ) {
+                                                Column(Modifier.padding(12.dp)) {
+                                                    Text(conv.userName,
+                                                        fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (selectedClienteId.isNullOrBlank()) {
+                                Text(
+                                    "Obligatorio",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // --- SECTIONS ---
-                if (showArticlesSection) {
+                if (showArticlesSection && !isProviderProfessional) {
                     item {
                         CollapsibleSection(
                             title = "Artículos",
@@ -333,26 +589,16 @@ fun CrearPresupuestoPrestadorScreen(
                                 )
                             }
                         ) { item, index ->
-                            var showMenu by remember { mutableStateOf(false) }
-                            Box {
                                 ArticleSummaryRow(
-                                    modifier = Modifier.pointerInput(Unit) {
-                                        detectTapGestures(onLongPress = { showMenu = true })
-                                    },
                                     item = item,
+                                    onEdit = { itemToEdit = item; sheetType = SheetType.Article },
+                                    onDelete = { items.removeAt(index) }
                                 )
-                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                    DropdownMenuItem(text = { Text("Editar") }, onClick = {
-                                        itemToEdit = item; sheetType = SheetType.Article; showMenu = false
-                                    })
-                                    DropdownMenuItem(text = { Text("Eliminar") }, onClick = { items.removeAt(index); showMenu = false })
-                                }
-                            }
                         }
                     }
                 }
 
-                if (showServicesSection) {
+                if (showServicesSection && !isProviderProfessional) {
                     item {
                         CollapsibleSection(
                             title = "Mano de Obra / Servicios",
@@ -365,36 +611,17 @@ fun CrearPresupuestoPrestadorScreen(
                                 sheetType = SheetType.Service
                             },
                             quickAddSlot = {
-                                val suggServices = remember(presupuestos) {
-                                    presupuestos.flatMap { p ->
-                                        if (p.serviciosJson.isBlank()) emptyList()
-                                        else p.serviciosJson.split("|").mapNotNull { s ->
-                                            val parts = s.split(";")
-                                            if (parts.size >= 2) BudgetService(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
-                                        }
-                                    }.distinctBy { it.description }
-                                }
                                 ServiceAutoCompleteFields(
-                                    suggestions = suggServices,
+                                    suggestions = savedServiceItems,
                                     onAdd = { services.add(it.copy(id = System.currentTimeMillis())); isServicesExpanded = true }
                                 )
                             }
                         ) { item, index ->
-                            var showMenu by remember { mutableStateOf(false) }
-                            Box {
-                                ServiceSummaryRow(
-                                    modifier = Modifier.pointerInput(Unit) {
-                                        detectTapGestures(onLongPress = { showMenu = true })
-                                    },
-                                    item = item,
-                                )
-                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                    DropdownMenuItem(text = { Text("Editar") }, onClick = {
-                                        itemToEdit = item; sheetType = SheetType.Service; showMenu = false
-                                    })
-                                    DropdownMenuItem(text = { Text("Eliminar") }, onClick = { services.removeAt(index); showMenu = false })
-                                }
-                            }
+                            ServiceSummaryRow(
+                                item = item,
+                                onEdit = { itemToEdit = item; sheetType = SheetType.Service },
+                                onDelete = { services.removeAt(index) }
+                            )
                         }
                     }
                 }
@@ -409,31 +636,19 @@ fun CrearPresupuestoPrestadorScreen(
                             onToggleExpand = { isProfessionalFeesExpanded = !isProfessionalFeesExpanded },
                             onAddClick = { itemToEdit = null; sheetType = SheetType.ProfessionalFee },
                             quickAddSlot = {
-                                val suggFees = remember(presupuestos) {
-                                    presupuestos.flatMap { p ->
-                                        if (p.honorariosJson.isBlank()) emptyList()
-                                        else p.honorariosJson.split("|").mapNotNull { s ->
-                                            val parts = s.split(";")
-                                            if (parts.size >= 2) BudgetProfessionalFee(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
-                                        }
-                                    }.distinctBy { it.description }
-                                }
-                                FeeAutoCompleteFields(suggestions = suggFees, onAdd = { professionalFees.add(it.copy(id = System.currentTimeMillis())); isProfessionalFeesExpanded = true })
+                                FeeAutoCompleteFields(suggestions = savedFeeItems, onAdd = { professionalFees.add(it.copy(id = System.currentTimeMillis())); isProfessionalFeesExpanded = true })
                             }
                         ) { item, index ->
-                            var showMenu by remember { mutableStateOf(false) }
-                            Box {
-                                ProfessionalFeeSummaryRow(modifier = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { showMenu = true }) }, item = item)
-                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                    DropdownMenuItem(text = { Text("Editar") }, onClick = { itemToEdit = item; sheetType = SheetType.ProfessionalFee; showMenu = false })
-                                    DropdownMenuItem(text = { Text("Eliminar") }, onClick = { professionalFees.removeAt(index); showMenu = false })
-                                }
-                            }
+                            ProfessionalFeeSummaryRow(
+                                item = item,
+                                onEdit = { itemToEdit = item; sheetType = SheetType.ProfessionalFee },
+                                onDelete = { professionalFees.removeAt(index) }
+                            )
                         }
                     }
                 }
 
-                if (showMiscSection) {
+                if (showMiscSection && !isProviderProfessional) {
                     item {
                         CollapsibleSection(
                             title = "Gastos Varios",
@@ -458,19 +673,16 @@ fun CrearPresupuestoPrestadorScreen(
                                 })
                             }
                         ) { item, index ->
-                            var showMenu by remember { mutableStateOf(false) }
-                            Box {
-                                MiscExpenseSummaryRow(modifier = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { showMenu = true }) }, item = item)
-                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                    DropdownMenuItem(text = { Text("Editar") }, onClick = { itemToEdit = item; sheetType = SheetType.Misc; showMenu = false })
-                                    DropdownMenuItem(text = { Text("Eliminar") }, onClick = { miscExpenses.removeAt(index); showMenu = false })
-                                }
-                            }
+                            MiscExpenseSummaryRow(
+                                item = item,
+                                onEdit = { itemToEdit = item; sheetType = SheetType.Misc },
+                                onDelete = { miscExpenses.removeAt(index) }
+                            )
                         }
                     }
                 }
 
-                if (showTaxesSection) {
+                if (showTaxesSection && !isProviderProfessional) {
                     item {
                         CollapsibleSection(
                             title = "Impuestos",
@@ -480,29 +692,90 @@ fun CrearPresupuestoPrestadorScreen(
                             onToggleExpand = { isTaxesExpanded = !isTaxesExpanded },
                             onAddClick = { itemToEdit = null; sheetType = SheetType.Tax },
                             quickAddSlot = {
-                                val suggTaxes = remember(presupuestos) {
+                                val predefinedLabels = setOf("IVA 21%", "IVA 10.5%", "IVA 27%")
+                                val predefinedTaxes = listOf("IVA 21%" to 21.0, "IVA 10.5%" to 10.5, "IVA 27%" to 27.0)
+                                val savedCustomTaxes = remember(presupuestos) {
                                     presupuestos.flatMap { p ->
                                         if (p.impuestosJson.isBlank()) emptyList()
                                         else p.impuestosJson.split("|").mapNotNull { s ->
                                             val parts = s.split(";")
-                                            if (parts.size >= 1 && parts[0].isNotBlank()) parts[0] else null
+                                            val desc = parts.getOrNull(0) ?: return@mapNotNull null
+                                            val amt = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+                                            if (desc !in predefinedLabels && !desc.startsWith("IIBB")) desc to amt else null
                                         }
-                                    }.distinct()
+                                    }.distinctBy { it.first }
                                 }
-                                DescriptionAutoCompleteField(label = "Buscar impuesto...", suggestions = suggTaxes, onSelect = { desc ->
-                                    val prev = presupuestos.flatMap { p -> if (p.impuestosJson.isBlank()) emptyList() else p.impuestosJson.split("|").mapNotNull { s -> val parts = s.split(";"); if (parts[0] == desc) parts.getOrNull(1)?.toDoubleOrNull() else null } }.firstOrNull() ?: 0.0
-                                    taxes.add(BudgetTax(description = desc, amount = prev)); isTaxesExpanded = true
-                                })
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    predefinedTaxes.forEach { (label, pct) ->
+                                        val alreadyAdded = taxes.any { it.description == label }
+                                        FilterChip(
+                                            selected = alreadyAdded,
+                                            onClick = {
+                                                if (!alreadyAdded) { taxes.add(BudgetTax(id = System.currentTimeMillis(), description = label, amount = subtotal * pct / 100)); isTaxesExpanded = true }
+                                                else taxes.removeAll { it.description == label }
+                                            },
+                                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colors.primaryOrange, selectedLabelColor = Color.White, containerColor = colors.primaryOrange.copy(alpha = 0.08f), labelColor = colors.textPrimary),
+                                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = alreadyAdded, borderColor = colors.border, selectedBorderColor = colors.primaryOrange)
+                                        )
+                                    }
+                                    val iibbAdded = taxes.any { it.description.startsWith("IIBB") }
+                                    FilterChip(
+                                        selected = iibbAdded,
+                                        onClick = { if (!iibbAdded) showIIBBDialog = true else taxes.removeAll { it.description.startsWith("IIBB") } },
+                                        label = { Text("IIBB", style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colors.primaryOrange, selectedLabelColor = Color.White, containerColor = colors.primaryOrange.copy(alpha = 0.08f), labelColor = colors.textPrimary),
+                                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = iibbAdded, borderColor = colors.border, selectedBorderColor = colors.primaryOrange)
+                                    )
+                                    savedCustomTaxes.forEach { (desc, savedAmt) ->
+                                        val alreadyAdded = taxes.any { it.description == desc }
+                                        val pctFromDesc = Regex("(\\d+(?:\\.\\d+)?)%").find(desc)?.groupValues?.get(1)?.toDoubleOrNull()
+                                        FilterChip(
+                                            selected = alreadyAdded,
+                                            onClick = {
+                                                if (!alreadyAdded) { val amount = if (pctFromDesc != null) subtotal * pctFromDesc / 100.0 else savedAmt; taxes.add(BudgetTax(id = System.currentTimeMillis(), description = desc, amount = amount)); isTaxesExpanded = true }
+                                                else taxes.removeAll { it.description == desc }
+                                            },
+                                            label = { Text(desc, style = MaterialTheme.typography.labelSmall) },
+                                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colors.primaryOrange, selectedLabelColor = Color.White, containerColor = colors.primaryOrange.copy(alpha = 0.08f), labelColor = colors.textPrimary),
+                                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = alreadyAdded, borderColor = colors.border, selectedBorderColor = colors.primaryOrange)
+                                        )
+                                    }
+                                    AssistChip(
+                                        onClick = { itemToEdit = null; sheetType = SheetType.Tax },
+                                        label = { Text("+ Otro", style = MaterialTheme.typography.labelSmall) },
+                                        colors = AssistChipDefaults.assistChipColors(labelColor = colors.primaryOrange),
+                                        border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = colors.primaryOrange.copy(alpha = 0.4f))
+                                    )
+                                }
+                                // Toggle: detallar impuestos en el presupuesto
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Detallar en el presupuesto", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+                                    Switch(
+                                        checked = showTaxDetail,
+                                        onCheckedChange = { showTaxDetail = it },
+                                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = colors.primaryOrange)
+                                    )
+                                }
                             }
                         ) { item, index ->
-                            var showMenu by remember { mutableStateOf(false) }
-                            Box {
-                                TaxSummaryRow(modifier = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { showMenu = true }) }, item = item)
-                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                    DropdownMenuItem(text = { Text("Editar") }, onClick = { itemToEdit = item; sheetType = SheetType.Tax; showMenu = false })
-                                    DropdownMenuItem(text = { Text("Eliminar") }, onClick = { taxes.removeAt(index); showMenu = false })
-                                }
-                            }
+                            TaxSummaryRow(
+                                item = item,
+                                onEdit = { itemToEdit = item; sheetType = SheetType.Tax },
+                                onDelete = { taxes.removeAt(index) }
+                            )
                         }
                     }
                 }
@@ -583,7 +856,7 @@ fun CrearPresupuestoPrestadorScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    "Presupuesto válido por", 
+                                    if (isProviderProfessional) "Consulta válida por" else "Presupuesto válido por",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = colors.textPrimary
                                 )
@@ -618,8 +891,8 @@ fun CrearPresupuestoPrestadorScreen(
             if (showSaveCatalogDialog) {
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { showSaveCatalogDialog = false; showPreviewDialog = true },
-                    title = { Text("¿Guardar en catálogo?", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-                    text = { Text("¿Querés guardar estos ítems para autocompletar futuros presupuestos?") },
+                    title = { Text("¿Guardar en lista?", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                    text = { Text(if (isProviderProfessional) "¿Querés guardar estos ítems para autocompletar futuras consultas?" else "¿Querés guardar estos ítems para autocompletar futuros presupuestos?") },
                     confirmButton = {
                         androidx.compose.material3.TextButton(onClick = {
                             pendingPresupuesto?.let { viewModel.insertPresupuesto(it) }
@@ -652,6 +925,7 @@ fun CrearPresupuestoPrestadorScreen(
                     subtotal = subtotal,
                     taxAmount = itemsTaxTotal + taxesSubtotal,
                     discountAmount = itemsDiscountTotal,
+                    showTaxDetail = showTaxDetail,
                     onDismiss = {
                         showPreviewDialog = false
                     },
@@ -666,7 +940,12 @@ fun CrearPresupuestoPrestadorScreen(
                             )
                         }
                         onBack()
-                    }
+                    },
+                    clientName = "",
+                    providerName = providerDisplayName,
+                    providerAddress = providerDisplayAnddress,
+                    isProfessional = isProviderProfessional,
+                    presupuestoNumero = pendingPresupuesto?.numeroPresupuesto ?: ""
                 )
             }
 
@@ -674,54 +953,93 @@ fun CrearPresupuestoPrestadorScreen(
             if (sheetType != null) {
                 ModalBottomSheet(
                     onDismissRequest = { sheetType = null },
-                    containerColor = colors.backgroundColor
+                    containerColor = colors.backgroundColor,
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
                 ) {
                     when (sheetType) {
                         SheetType.Article -> AddArticleSheetContent(
                             itemToEdit = itemToEdit as? BudgetItem,
-                            onAddItem = { newItem -> items.add(newItem); sheetType = null; isArticlesExpanded = true },
+                            suggestionItems = savedArticleItems,
+                            onAddItem = { newItem -> items.add(newItem); isArticlesExpanded = true },
                             onUpdateItem = { updatedItem ->
                                 val index = items.indexOfFirst { it.id == updatedItem.id }
                                 if (index != -1) items[index] = updatedItem
                                 sheetType = null
-                            }
+                            },
+                            onDeleteSaved = { saved -> viewModel.deleteArticleFromSuggestions(saved.description) },
+                            onSaveToSuggestions = { viewModel.saveArticleToSuggestions(it) }
                         )
                         SheetType.Service -> AddServiceSheetContent(
                             itemToEdit = itemToEdit as? BudgetService,
-                            onAddItem = { newItem -> services.add(newItem); sheetType = null; isServicesExpanded = true },
+                            suggestionItems = savedServiceItems,
+                            onAddItem = { newItem -> services.add(newItem); isServicesExpanded = true },
                             onUpdateItem = { updatedItem ->
                                 val index = services.indexOfFirst { it.id == updatedItem.id }
                                 if (index != -1) services[index] = updatedItem
                                 sheetType = null
-                            }
+                            },
+                            onDeleteSaved = { saved -> viewModel.deleteServiceFromSuggestions(saved.description) },
+                            onSaveToSuggestions = { viewModel.saveServiceToSuggestions(it) }
                         )
                         SheetType.ProfessionalFee -> AddProfessionalFeeSheetContent(
                             itemToEdit = itemToEdit as? BudgetProfessionalFee,
-                            onAddItem = { newItem -> professionalFees.add(newItem); sheetType = null; isProfessionalFeesExpanded = true },
+                            suggestionItems = savedFeeItems,
+                            onAddItem = { newItem -> professionalFees.add(newItem); isProfessionalFeesExpanded = true },
                             onUpdateItem = { updatedItem ->
                                 val index = professionalFees.indexOfFirst { it.id == updatedItem.id }
                                 if (index != -1) professionalFees[index] = updatedItem
                                 sheetType = null
-                            }
+                            },
+                            onDeleteSaved = { saved -> viewModel.deleteProfessionalFeeFromSuggestions(saved.description) },
+                            onSaveToSuggestions = { viewModel.saveProfessionalFeeToSuggestions(it) }
                         )
                         SheetType.Misc -> AddMiscExpenseSheetContent(
                             itemToEdit = itemToEdit as? BudgetMiscExpense,
-                            onAddItem = { newItems -> miscExpenses.addAll(newItems); sheetType = null; isMiscExpanded = true },
+                            existingItems = miscExpenses.toList(),
+                            savedGastos = presupuestos.flatMap { p ->
+                                if (p.gastosJson.isBlank()) emptyList()
+                                else p.gastosJson.split("|").mapNotNull { s ->
+                                    val parts = s.split(";")
+                                    val desc = parts.getOrNull(0) ?: return@mapNotNull null
+                                    val amt = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+                                    desc to amt
+                                }
+                            }.distinctBy { it.first },
+                            onAddItem = { newItems -> miscExpenses.addAll(newItems); isMiscExpanded = true },
                             onUpdateItem = { updatedItem ->
                                 val index = miscExpenses.indexOfFirst { it.id == updatedItem.id }
                                 if (index != -1) miscExpenses[index] = updatedItem
                                 sheetType = null
-                            }
+                            },
+                            onDeleteItem = { item -> miscExpenses.removeAll { it.id == item.id } },
+                            onDeleteSaved = { desc -> viewModel.deleteMiscExpenseFromSuggestions(desc) },
+                            onUpdateSaved = { oldDesc, newDesc, newAmt -> viewModel.updateMiscExpenseInSuggestions(oldDesc, newDesc, newAmt) }
                         )
-                        SheetType.Tax -> AddTaxSheetContent(
-                            itemToEdit = itemToEdit as? BudgetTax,
-                            onAddItem = { newItems -> taxes.addAll(newItems); sheetType = null; isTaxesExpanded = true },
-                            onUpdateItem = { updatedItem ->
-                                val index = taxes.indexOfFirst { it.id == updatedItem.id }
-                                if (index != -1) taxes[index] = updatedItem
-                                sheetType = null
-                            }
-                        )
+                        SheetType.Tax -> {
+                            val predefinedLabels = setOf("IVA 21%", "IVA 10.5%", "IVA 27%")
+                            val customForSheet = presupuestos.flatMap { p ->
+                                if (p.impuestosJson.isBlank()) emptyList()
+                                else p.impuestosJson.split("|").mapNotNull { s ->
+                                    val parts = s.split(";")
+                                    val desc = parts.getOrNull(0) ?: return@mapNotNull null
+                                    val amt = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+                                    if (desc !in predefinedLabels && !desc.startsWith("IIBB")) desc to amt else null
+                                }
+                            }.distinctBy { it.first }
+                            AddTaxSheetContent(
+                                itemToEdit = itemToEdit as? BudgetTax,
+                                subtotal = subtotal,
+                                savedCustomTaxes = customForSheet,
+                                onDeleteSaved = { desc -> viewModel.deleteCustomTaxFromSuggestions(desc) },
+                                onUpdateSaved = { desc, newAmt -> viewModel.updateCustomTaxInSuggestions(desc, newAmt) },
+                                onAddItem = { newItems -> taxes.addAll(newItems); sheetType = null; isTaxesExpanded = true },
+                                onUpdateItem = { updatedItem ->
+                                    val index = taxes.indexOfFirst { it.id == updatedItem.id }
+                                    if (index != -1) taxes[index] = updatedItem
+                                    sheetType = null
+                                }
+                            )
+                        }
                         SheetType.Attachment -> AddAttachmentSheetContent(
                             itemToEdit = itemToEdit as? BudgetAttachment,
                             onAddItem = { newItem -> attachments.add(newItem); sheetType = null; isAttachmentsExpanded = true },
@@ -732,12 +1050,13 @@ fun CrearPresupuestoPrestadorScreen(
                             }
                         )
                         SheetType.Sections -> SectionsSheetContent(
+                            isProfessional = isProviderProfessional,
                             showArticles = showArticlesSection,
                             showServices = showServicesSection,
+                            showProfessionalFees = showProfessionalFeesSection,
                             showMisc = showMiscSection,
                             showTaxes = showTaxesSection,
                             showAttachments = showAttachmentsSection,
-                            showProfessionalFees = showProfessionalFeesSection,
                             onShowArticlesChange = { showArticlesSection = it },
                             onShowServicesChange = { showServicesSection = it },
                             onShowProfessionalFeesChange = { showProfessionalFeesSection = it },
@@ -745,12 +1064,61 @@ fun CrearPresupuestoPrestadorScreen(
                             onShowTaxesChange = { showTaxesSection = it },
                             onShowAttachmentsChange = { showAttachmentsSection = it }
                         )
-                        SheetType.Client -> ClientDetailsSheetContent()
+                        SheetType.ClientPicker -> ClientPickerSheetContent(
+                            clientes = clientes,
+                            selectedClienteId = selectedClienteId,
+                            onSelectCliente = { c ->
+                                selectedClienteId = c.id
+                                clienteNombre = c.nombre
+                                clienteEmail = c.email.orEmpty()
+                                clienteTelefono = c.telefono.orEmpty()
+                                clienteDireccion = c.direccion.orEmpty()
+                                sheetType = null
+                            },
+                            onClose = { sheetType = null }
+                        )
                         null -> {}
                     }
                 }
             }
         }
+    }
+
+    // IIBB Dialog
+    if (showIIBBDialog) {
+        val colors = getPrestadorColors()
+        var iibbPctText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showIIBBDialog = false; iibbPctText = "" },
+            title = { Text("IIBB", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = iibbPctText,
+                    onValueChange = { iibbPctText = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Alícuota %") },
+                    singleLine = true,
+                    suffix = { Text("%") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.primaryOrange,
+                        focusedLabelColor = colors.primaryOrange,
+                        cursorColor = colors.primaryOrange
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val pct = iibbPctText.toDoubleOrNull() ?: 0.0
+                    if (pct > 0) {
+                        taxes.add(BudgetTax(id = System.currentTimeMillis(), description = "IIBB ${iibbPctText}%", amount = subtotal * pct / 100))
+                        isTaxesExpanded = true
+                    }
+                    showIIBBDialog = false; iibbPctText = ""
+                }) { Text("Agregar", color = colors.primaryOrange, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showIIBBDialog = false; iibbPctText = "" }) { Text("Cancelar") }
+            }
+        )
     }
 }
 

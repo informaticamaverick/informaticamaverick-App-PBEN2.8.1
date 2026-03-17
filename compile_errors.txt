@@ -1,0 +1,39 @@
+> Task :prestador:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :prestador:preBuild UP-TO-DATE
+> Task :prestador:preDebugBuild UP-TO-DATE
+> Task :prestador:checkDebugAarMetadata UP-TO-DATE
+> Task :prestador:processDebugNavigationResources UP-TO-DATE
+> Task :prestador:compileDebugNavigationResources UP-TO-DATE
+> Task :prestador:generateDebugResValues UP-TO-DATE
+> Task :prestador:processDebugGoogleServices UP-TO-DATE
+> Task :prestador:mapDebugSourceSetPaths UP-TO-DATE
+> Task :prestador:generateDebugResources UP-TO-DATE
+> Task :prestador:mergeDebugResources UP-TO-DATE
+> Task :prestador:packageDebugResources UP-TO-DATE
+> Task :prestador:parseDebugLocalResources UP-TO-DATE
+> Task :prestador:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :prestador:extractDeepLinksDebug UP-TO-DATE
+> Task :prestador:processDebugMainManifest UP-TO-DATE
+> Task :prestador:processDebugManifest UP-TO-DATE
+> Task :prestador:processDebugManifestForPackage UP-TO-DATE
+> Task :prestador:processDebugResources UP-TO-DATE
+> Task :prestador:kspDebugKotlin UP-TO-DATE
+
+> Task :prestador:compileDebugKotlin FAILED
+e: file:///D:/Proyecto/MyApplication/prestador/src/main/java/com/example/myapplication/prestador/ui/chat/ChatScreem.kt:228:36 No value passed for parameter 'onConfirm'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':prestador:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 3s
+18 actionable tasks: 1 executed, 17 up-to-date

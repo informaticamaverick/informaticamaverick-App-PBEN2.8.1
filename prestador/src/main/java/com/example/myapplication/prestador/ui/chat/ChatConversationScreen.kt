@@ -31,8 +31,15 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.prestador.data.ChatData
+import com.example.myapplication.prestador.data.PPrestadorProfileFalso
 import com.example.myapplication.prestador.data.local.entity.AppointmentEntity
 import com.example.myapplication.prestador.data.model.Message
+import com.example.myapplication.prestador.ui.presupuesto.BudgetItem
+import com.example.myapplication.prestador.ui.presupuesto.BudgetMiscExpense
+import com.example.myapplication.prestador.ui.presupuesto.BudgetProfessionalFee
+import com.example.myapplication.prestador.ui.presupuesto.BudgetPreviewPDFDialog
+import com.example.myapplication.prestador.ui.presupuesto.BudgetService
+import com.example.myapplication.prestador.ui.presupuesto.BudgetTax
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import com.example.myapplication.prestador.viewmodel.AppointmentViewModel
 import kotlinx.coroutines.delay
@@ -41,6 +48,9 @@ import java.io.File
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.room.util.appendPlaceholders
 import com.example.myapplication.prestador.utils.NotificationHelper
+import com.example.myapplication.prestador.utils.displayAddress
+import com.example.myapplication.prestador.utils.displayCompanyOrFullName
+import com.example.myapplication.prestador.utils.toPrestadorProfileFalso
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,12 +122,20 @@ fun ChatConversationScreen(
     var showAttachMenu by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var recordingTime by remember { mutableStateOf(0) }
-    
+
     // Estado del diálogo de agendar cita
     var showScheduleDialog by remember { mutableStateOf(false) }
 
+    // Estado del sheet de presupuesto
+    var showBudgetSheet by remember { mutableStateOf(false) }
+
+    // Presupuesto a visualizar al hacer clic en "Ver presupuesto"
+    var presupuestoMsgToView by remember { mutableStateOf<Message?>(null) }
+
     // Datos según tipo de servicio
     val profileState by editProfileViewModel.profileState.collectAsState()
+    val businessEntity by editProfileViewModel.businessEntity.collectAsState()
+
     val currentServiceType = remember(profileState) {
         when (profileState) {
             is com.example.myapplication.prestador.viewmodel.ProfileState.Success ->
@@ -127,6 +145,17 @@ fun ChatConversationScreen(
             else -> com.example.myapplication.prestador.data.model.ServiceType.PROFESSIONAL
         }
     }
+
+    // En algunos flujos, el providerId real para horarios es el del perfil (Room/Firebase),
+    // no necesariamente el UID de Auth.
+    val effectiveProviderId = remember(profileState, providerId) {
+        val fromProfile = (profileState as? com.example.myapplication.prestador.viewmodel.ProfileState.Success)?.provider?.id
+        if (!fromProfile.isNullOrBlank()) fromProfile else providerId
+    }
+
+    val provider = (profileState as? com.example.myapplication.prestador.viewmodel.ProfileState.Success)?.provider
+    val providerDisplayName = provider?.displayCompanyOrFullName(businessEntity).orEmpty()
+    val providerDisplayAddress = provider?.displayAddress(businessEntity).orEmpty()
     val rentalSpaces by rentalSpacesViewModel.rentalSpaces.collectAsState()
     val availableSpaces = remember(rentalSpaces) {
         rentalSpaces.filter { it.isActive }.map { it.id to it.name }
@@ -138,6 +167,7 @@ fun ChatConversationScreen(
         }
     }
     val availableSlots by appointmentViewModel.availabilitySlots.collectAsState()
+    val slotsLoading by appointmentViewModel.availabilityLoading.collectAsState()
     val empleadosState by empleadosViewModel.uiState.collectAsState()
     val availableEmployees = remember(empleadosState) {
         when (val state = empleadosState) {
@@ -547,7 +577,10 @@ fun ChatConversationScreen(
                             onReschedule = {
                                 // Abrir diálogo para reprogramar
                                 showScheduleDialog = true
-                            }
+                            },
+                            onVerPresupuesto = if (message.type == Message.MessageType.BUDGET) {
+                                { presupuestoMsgToView = message }
+                            } else null
                         )
                     }
                 }
@@ -631,6 +664,7 @@ fun ChatConversationScreen(
                     .padding(bottom = 16.dp, start = 5.dp)
             ) {
                 AttachmentOptionsMenu(
+                    serviceType = currentServiceType,
                     onDismiss = { showAttachMenu = false },
                     onImageClick = {
                         showAttachMenu = false
@@ -712,8 +746,7 @@ fun ChatConversationScreen(
                     },
                     onDocumentClick = {
                         showAttachMenu = false
-                        // Navegar a crear presupuesto
-                        onNavigateToPresupuesto()
+                        showBudgetSheet = true
                     },
                     onScheduleClick = {
                         showAttachMenu = false
@@ -750,6 +783,16 @@ fun ChatConversationScreen(
             com.example.myapplication.prestador.ui.appointments.CreateAppointmentDialog(
                 serviceType = currentServiceType,
                 onDismiss = { showScheduleDialog = false },
+                onRequestSlots = { date, duration ->
+                    if (effectiveProviderId.isNotBlank()) {
+                        println("🟠 Chat: loadAvailabilitySlots providerId=$effectiveProviderId date=$date duration=$duration")
+                        appointmentViewModel.loadAvailabilitySlots(effectiveProviderId, date, duration)
+                    } else {
+                        println("🔴 Chat: providerId vacío, no se pueden cargar turnos")
+                    }
+                },
+                slotsRequestKey = effectiveProviderId,
+                isSlotsLoading = slotsLoading,
                 onConfirm = { clientName, service, date, time, duration, rentalSpaceId, scheduleId, notes, assignedEmployeeIds, peopleCount ->
                     showScheduleDialog = false
                     val appointmentId= "apt_${userId}_${System.currentTimeMillis()}"
@@ -757,7 +800,7 @@ fun ChatConversationScreen(
                         id = appointmentId,
                         clientId = userId,
                         clientName = userName,
-                        providerId = providerId,
+                        providerId = effectiveProviderId,
                         service = service,
                         date = date,
                         time = time,
@@ -797,6 +840,95 @@ fun ChatConversationScreen(
                 initialClientName = userName
             )
 
+        }
+
+        // Sheet de presupuesto en el chat
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && showBudgetSheet) {
+            com.example.myapplication.prestador.ui.presupuesto.BudgetChatSheet(
+                userId = userId,
+                userName = userName,
+                onDismiss = { showBudgetSheet = false }
+            )
+        }
+
+        // Vista previa de presupuesto al hacer clic en "Ver presupuesto"
+        presupuestoMsgToView?.let { msg ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                fun parseItems(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                    json.split("|").mapNotNull { s ->
+                        val p = s.split(";")
+                        if (p.size >= 4) BudgetItem(
+                            id = 0L, code = p[0], description = p[1],
+                            quantity = p[2].toIntOrNull() ?: 1,
+                            unitPrice = p[3].toDoubleOrNull() ?: 0.0,
+                            taxPercentage = p.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
+                            discountPercentage = p.getOrNull(5)?.toDoubleOrNull() ?: 0.0
+                        ) else null
+                    }
+                fun parseServices(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                    json.split("|").mapNotNull { s ->
+                        val p = s.split(";")
+                        if (p.size >= 2) BudgetService(id = 0L, code = p[0], description = p[1], total = p.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
+                    }
+                fun parseFees(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                    json.split("|").mapNotNull { s ->
+                        val p = s.split(";")
+                        if (p.size >= 2) BudgetProfessionalFee(id = 0L, code = p[0], description = p[1], total = p.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
+                    }
+                fun parseMisc(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                    json.split("|").mapNotNull { s ->
+                        val p = s.split(";")
+                        if (p.size >= 2) BudgetMiscExpense(id = 0L, description = p[0], amount = p[1].toDoubleOrNull() ?: 0.0) else null
+                    }
+                fun parseTaxes(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                    json.split("|").mapNotNull { s ->
+                        val p = s.split(";")
+                        if (p.size >= 2) BudgetTax(id = 0L, description = p[0], amount = p[1].toDoubleOrNull() ?: 0.0) else null
+                    }
+
+                val prestador = remember(msg.id, provider?.id, providerDisplayName, providerDisplayAddress) {
+                    provider?.toPrestadorProfileFalso(businessEntity) ?: PPrestadorProfileFalso(
+                        id = effectiveProviderId.ifBlank { "demo" },
+                        name = providerDisplayName.ifBlank { "Prestador" },
+                        lastName = "",
+                        profileImageUrl = "",
+                        bannerImageUrl = null,
+                        rating = 0f,
+                        isVerified = false,
+                        isOnline = false,
+                        services = emptyList(),
+                        companyName = null,
+                        address = providerDisplayAddress,
+                        email = "",
+                        doesHomeVisits = false,
+                        hasPhysicalLocation = false,
+                        works24h = false,
+                        galleryImages = emptyList(),
+                        isFavorite = false,
+                        isSubscribed = false
+                    )
+                }
+
+                BudgetPreviewPDFDialog(
+                    prestador = prestador,
+                    items = parseItems(msg.budgetItemsJson),
+                    services = parseServices(msg.budgetServiciosJson),
+                    professionalFees = parseFees(msg.budgetHonorariosJson),
+                    miscExpenses = parseMisc(msg.budgetGastosJson),
+                    taxes = parseTaxes(msg.budgetImpuestosJson),
+                    grandTotal = msg.budgetTotal ?: 0.0,
+                    subtotal = msg.budgetSubtotal ?: 0.0,
+                    taxAmount = msg.budgetImpuestos ?: 0.0,
+                    discountAmount = 0.0,
+                    showSendButton = false,
+                    providerName = providerDisplayName,
+                    providerAddress = providerDisplayAddress,
+                    isProfessional = currentServiceType == com.example.myapplication.prestador.data.model.ServiceType.PROFESSIONAL,
+                    presupuestoNumero = msg.budgetNumero ?: "",
+                    onDismiss = { presupuestoMsgToView = null },
+                    onEnviar = { presupuestoMsgToView = null }
+                )
+            }
         }
     }
 }

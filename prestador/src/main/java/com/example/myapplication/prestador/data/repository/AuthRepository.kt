@@ -11,7 +11,8 @@ import javax.inject.Singleton
 @Singleton
 class AuthRepository @Inject constructor(
     private val auth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val application: android.app.Application
 ) {
     // Obtener usuario actual
     fun getCurrentUser(): FirebaseUser? {
@@ -39,9 +40,16 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    // Cerrar sesión
+    // Cerrar sesión (Firebase + limpiar credenciales Google para forzar re-selección de cuenta)
     fun signOut() {
         auth.signOut()
+        com.google.android.gms.auth.api.signin.GoogleSignIn
+            .getClient(
+                application,
+                com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                ).build()
+            ).signOut()
     }
 
     // Enviar email de recuperacion de contraseña
@@ -81,17 +89,9 @@ class AuthRepository @Inject constructor(
                 return false
             }
 
-            // Verificar que tenga los campos específicos del prestador completos
-            val servicios = doc.get("servicios") as? List<*>
-            val provincia = doc.getString("provincia")
-
-            android.util.Log.d("PrestadorAuthRepo", "Servicios: $servicios, Provincia: $provincia")
-
-            val hasCompleteProfile = !servicios.isNullOrEmpty() && !provincia.isNullOrEmpty()
-
-            android.util.Log.d("PrestadorAuthRepo", "¿Perfil prestador completo?: $hasCompleteProfile")
-
-            hasCompleteProfile
+            // Si tiene rol prestador, el perfil existe
+            android.util.Log.d("PrestadorAuthRepo", "Perfil prestador encontrado")
+            true
         } catch (e: Exception) {
             android.util.Log.e("PrestadorAuthRepo", "Error verificando perfil: ${e.message}")
             false

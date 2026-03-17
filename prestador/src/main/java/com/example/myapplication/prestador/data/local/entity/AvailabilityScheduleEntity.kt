@@ -35,7 +35,7 @@ data class AvailabilityScheduleEntity(
 )
 
 /**
- * Helper para convertir día numérico a nombre
+ * Helper para convertir día numérico a nombre completo
  */
 fun Int.toDayName(): String {
     return when (this) {
@@ -47,5 +47,21 @@ fun Int.toDayName(): String {
         6 -> "Sábado"
         7 -> "Domingo"
         else -> "Desconocido"
+    }
+}
+
+/**
+ * Helper para convertir día numérico a abreviatura
+ */
+fun Int.toDayAbbr(): String {
+    return when (this) {
+        1 -> "L"
+        2 -> "Ma"
+        3 -> "Mi"
+        4 -> "J"
+        5 -> "V"
+        6 -> "S"
+        7 -> "D"
+        else -> "?"
     }
 }

@@ -5,9 +5,14 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.myapplication.prestador.viewmodel.EmpleadosViewModel
 import com.example.myapplication.prestador.viewmodel.EmpleadoActionState
 import com.example.myapplication.prestador.viewmodel.EmpleadosUiState
@@ -33,28 +40,52 @@ import com.example.myapplication.prestador.ui.theme.getPrestadorColors
  * Sección de Equipo de Trabajo (Empleados)
  * Se muestra en ambos modos: Personal y Empresa
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun EmpleadosSection(
     trabajaConOtros: Boolean,
     onTrabajaConOtrosChange: (Boolean) -> Unit,
     expanded: Boolean,
     onExpandChange: () -> Unit,
+    isProfessional: Boolean = false,
     viewModel: EmpleadosViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
     val uiState by viewModel.uiState.collectAsState()
     val actionState by viewModel.actionState.collectAsState()
     
-    var showAddDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+
+    var showInlineForm by remember { mutableStateOf(false) }
     var empleadoToEdit by remember { mutableStateOf<EmpleadoEntity?>(null) }
     var showDeleteConfirmation by remember { mutableStateOf<String?>(null) }
+
+    var nombre by remember { mutableStateOf("") }
+    var apellido by remember { mutableStateOf("") }
+    var dni by remember { mutableStateOf("") }
+    var nombreError by remember { mutableStateOf(false) }
+    var apellidoError by remember { mutableStateOf(false) }
+    var dniError by remember { mutableStateOf(false) }
+
+    fun resetForm() {
+        nombre = ""; apellido = ""; dni = ""; nombreError = false; apellidoError = false; dniError = false;
+        showInlineForm = false; empleadoToEdit = null
+    }
+
+    LaunchedEffect(empleadoToEdit) {
+        empleadoToEdit?.let {
+            nombre = it.nombre
+            apellido = it.apellido
+            dni = it.dni
+        }
+    }
     
     // Manejar estado de acción (success/error)
     LaunchedEffect(actionState) {
         when (actionState) {
             is EmpleadoActionState.Success -> {
-                showAddDialog = false
-                empleadoToEdit = null
+                resetForm()
                 kotlinx.coroutines.delay(2000)
                 viewModel.resetActionState()
             }
@@ -63,7 +94,7 @@ fun EmpleadosSection(
     }
     
     ArchiveroSection(
-        title = "Equipo de Trabajo",
+        title = if (isProfessional) "Asistentes / Personal" else "Equipo de Trabajo",
         sectionId = "team",
         icon = Icons.Default.Group,
         color = Color(0xFF9C27B0),
@@ -190,7 +221,7 @@ fun EmpleadosSection(
                     is EmpleadosUiState.Success -> {
                         val empleados = (uiState as EmpleadosUiState.Success).empleados
                         
-                        if (empleados.isEmpty()) {
+                        if (empleados.isEmpty() && !showInlineForm) {
                             // Sin empleados
                             Box(
                                 modifier = Modifier
@@ -224,7 +255,7 @@ fun EmpleadosSection(
                                         empleado = empleado,
                                         onEdit = {
                                             empleadoToEdit = empleado
-                                            showAddDialog = true
+                                            showInlineForm = true
                                         },
                                         onDelete = {
                                             showDeleteConfirmation = empleado.id
@@ -262,43 +293,161 @@ fun EmpleadosSection(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Botón Agregar Empleado
-                Button(
-                    onClick = {
-                        empleadoToEdit = null
-                        showAddDialog = true
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.primaryOrange
-                    ),
-                    enabled = actionState !is EmpleadoActionState.Loading
+                // Formulario inline
+                LaunchedEffect(showInlineForm) {
+                    if (showInlineForm) {
+                        delay(350) // esperar que la animación termine
+                        bringIntoViewRequester.bringIntoView()
+                    }
+                }
+                AnimatedVisibility(
+                    visible = showInlineForm,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
                 ) {
-                    Icon(Icons.Default.PersonAddAlt, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Agregar Empleado")
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                            .bringIntoViewRequester(bringIntoViewRequester),
+                        shape = RoundedCornerShape(12.dp),
+                        color = colors.surfaceElevated,
+                        shadowElevation = 2.dp
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = if (empleadoToEdit != null) "Editar Empleada" else "Nuevo Empleado",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.textPrimary
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            OutlinedTextField(
+                                value = nombre,
+                                onValueChange = { nombre = it; nombreError = false },
+                                label = { Text("Nombre") },
+                                leadingIcon = { Icon(Icons.Default.Person, null, tint = colors.textSecondary) },
+                                isError = nombreError,
+                                supportingText = if (nombreError) {{ Text("El nombre es requerido", color = MaterialTheme.colorScheme.error) }}
+                                else null,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.primaryOrange,
+                                    focusedLabelColor = colors.primaryOrange,
+                                    unfocusedBorderColor = colors.border
+                                ),
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedTextField(
+                                value = apellido,
+                                onValueChange = { apellido = it; apellidoError = false },
+                                label = { Text("Apellido") },
+                                leadingIcon = { Icon(Icons.Default.Person, null, tint = colors.textSecondary) },
+                                isError = apellidoError,
+                                supportingText = if (apellidoError) {{ Text("El apellido es requerido", color = MaterialTheme.colorScheme.error)}} else null,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.primaryOrange,
+                                    focusedLabelColor = colors.primaryOrange,
+                                    unfocusedBorderColor = colors.border
+                                ),
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedTextField(
+                                value = dni,
+                                onValueChange = {
+                                    if (it.all { c -> c.isDigit() } && it.length <= 8) {
+                                        dni = it; dniError = false
+                                    }
+                                },
+                                label = { Text("DNI") },
+                                leadingIcon = { Icon(Icons.Default.Badge, null, tint = colors.textSecondary) },
+                                isError = dniError,
+                                supportingText = if (dniError) {{ Text("DNI debe tener 7 u 8 Digitos", color = MaterialTheme.colorScheme.error) }} else null,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.primaryOrange,
+                                    focusedLabelColor = colors.primaryOrange,
+                                    unfocusedBorderColor = colors.border
+                                ),
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { resetForm() },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary)
+                                ) { Text("Cancelar") }
+
+                                Button(
+                                    onClick = {
+                                        var hasError = false
+                                        if (nombre.isBlank()) {
+                                            nombreError = true; hasError = true
+                                        }
+                                        if (apellido.isBlank()) {
+                                            apellidoError = true; hasError = true
+                                        }
+                                        if (dni.isBlank() || dni.length < 7) {
+                                            dniError = true; hasError = true
+                                        }
+                                        if (!hasError) {
+                                            if (empleadoToEdit != null) {
+                                                viewModel.updateEmpleado(
+                                                    empleadoToEdit!!.id,
+                                                    nombre,
+                                                    apellido,
+                                                    dni
+                                                )
+                                            } else {
+                                                viewModel.addEmpleado(nombre, apellido, dni)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange),
+                                    enabled = actionState !is EmpleadoActionState.Loading
+                                ) { Text(if (empleadoToEdit != null) "Actualizar" else "Agregar") }
+
+                                }
+                            }
+                        }
+                    }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (!showInlineForm) {
+                    Button(
+                        onClick = { empleadoToEdit = null; showInlineForm = true},
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primaryOrange),
+                        enabled = actionState !is EmpleadoActionState.Loading
+                    ) {
+                        Icon(Icons.Default.PersonAddAlt,
+                            contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Agregar Empleado")
+                    }
                 }
             }
         }
     }
     
-    // Dialog para agregar/editar empleado
-    if (showAddDialog) {
-        AddEmpleadoDialog(
-            empleado = empleadoToEdit,
-            onDismiss = {
-                showAddDialog = false
-                empleadoToEdit = null
-            },
-            onConfirm = { nombre, apellido, dni ->
-                if (empleadoToEdit != null) {
-                    viewModel.updateEmpleado(empleadoToEdit!!.id, nombre, apellido, dni)
-                } else {
-                    viewModel.addEmpleado(nombre, apellido, dni)
-                }
-            }
-        )
-    }
+    
     
     // Dialog de confirmación de eliminación
     showDeleteConfirmation?.let { empleadoId ->

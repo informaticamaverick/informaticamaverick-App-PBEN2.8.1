@@ -15,6 +15,12 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import androidx.compose.ui.platform.LocalContext
+import android.app.Activity
+import com.google.firebase.auth.FirebaseAuth
+import android.content.Intent
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.example.myapplication.prestador.ui.chat.PrestadorChatScreen
 import com.example.myapplication.prestador.ui.login.PrestadorLoginScreen
 import com.example.myapplication.prestador.ui.register.PrestadorRegisterScreen
@@ -37,6 +43,7 @@ fun PrestadorNavGraph(
     startDestination: String = PrestadorRoutes.Login.route
 ) {
     val colors = getPrestadorColors()
+    val activity = LocalContext.current as? Activity
     
     println("🌐 NavGraph: Usando ChatSimulationViewModel (${chatSimulationViewModel.hashCode()})")
     
@@ -81,17 +88,30 @@ fun PrestadorNavGraph(
                             popUpTo(PrestadorRoutes.Login.route) { inclusive = true }
                         }
                     } else {
-                        // Usuario nuevo, necesita completar registro
-                        navController.navigate(PrestadorRoutes.Register.route) {
+                        // Usuario nuevo de Google, necesita completar registro (sin email/contraseña)
+                        navController.navigate(PrestadorRoutes.Register.createRoute(isGoogle = true)) {
                             popUpTo(PrestadorRoutes.Login.route) { inclusive = true }
                         }
                     }
+                },
+                onNavigateToRegister = {
+                    navController.navigate(PrestadorRoutes.Register.createRoute(isGoogle = false))
                 }
             )
         }
         
-        composable(PrestadorRoutes.Register.route) {
+        composable(
+            route = PrestadorRoutes.Register.route,
+            arguments = listOf(
+                navArgument("isGoogle") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { backStackEntry ->
+            val isGoogle = backStackEntry.arguments?.getBoolean("isGoogle") ?: false
             PrestadorRegisterScreen(
+                isGoogleUser = isGoogle,
                 onRegisterSuccess = {
                     navController.navigate(PrestadorRoutes.Success.route) {
                         popUpTo(PrestadorRoutes.Register.route) { inclusive = true }
@@ -127,10 +147,29 @@ fun PrestadorNavGraph(
                     navController.navigate(PrestadorRoutes.ServiceConfig.route)
                 },
                 onLogout = {
-                    navController.navigate(PrestadorRoutes.Login.route) {
-                        popUpTo(0) { inclusive = true}
-                    } // Limpia toda la pila de navegacion
+                    // 1. Cerrar sesión en Firebase Auth
+                    FirebaseAuth.getInstance().signOut()
+                    // 2. Revocar token de Google
+                    try {
+                        activity?.let { ctx ->
+                            GoogleSignIn.getClient(
+                                ctx,
+                                GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+                            ).signOut()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("Logout", "Error signOut Google: ${e.message}")
+                    }
+                    // 3. Reiniciar Activity sin estado guardado (limpia backstack y ViewModels)
+                    activity?.also { ctx ->
+                        val restartIntent = Intent(ctx, ctx::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        }
+                        ctx.startActivity(restartIntent)
+                        ctx.finish()
+                    }
                 },
+
                 onNavigateToPresupuesto = {
                     navController.navigate(PrestadorRoutes.CrearPresupuesto.createRoute("dashboard"))
                 },

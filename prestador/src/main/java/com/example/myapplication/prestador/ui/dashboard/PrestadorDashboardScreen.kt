@@ -40,6 +40,7 @@ import com.example.myapplication.prestador.viewmodel.AvailabilityViewModel
 import com.example.myapplication.prestador.viewmodel.PresupuestoViewModel
 
 
+
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun PreviewDashboard() {
@@ -60,21 +61,26 @@ fun PrestadorDashboardScreen(
     onNavigateToPromotion: () -> Unit = {},
     onNavigateToPromotionList: () -> Unit = {},
     onNavigateToThemeDemo: () -> Unit = {},
-    chatSimulationViewModel: com.example.myapplication.prestador.viewmodel.ChatSimulationViewModel  // Pasar ViewModel
+    chatSimulationViewModel: com.example.myapplication.prestador.viewmodel.ChatSimulationViewModel,
+    fastSimulationViewModel: com.example.myapplication.prestador.viewmodel.FastSimulationViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
-    var selectedTab by rememberSaveable { mutableStateOf(2) } // Inicia en Home (2), persiste en navegación
+    var selectedTab by rememberSaveable { mutableStateOf(2) }
     var isInConversation by remember { mutableStateOf(false) }
     var targetChatUserId by remember { mutableStateOf<String?>(null) }
-    val coroutineScope = rememberCoroutineScope() // Para manejar delays
-
+    val coroutineScope = rememberCoroutineScope()
+    var triggerCalendarCreate by remember { mutableStateOf(false) }
+    val serviceType by chatSimulationViewModel.serviceType.collectAsState()
+    val isProfessional = serviceType.equals("PROFESSIONAL", ignoreCase = true)
 
     Scaffold(
         floatingActionButton = {
-            // Mostrar FAB solo en Home (tab 2) y no en conversación
-            if (selectedTab == 2 && !isInConversation) {
+            if (!isInConversation && selectedTab in listOf(1, 2)) {
                 FloatingActionButton(
-                    onClick = onNavigateToPromotion,
+                    onClick = {
+                        if (selectedTab == 2) onNavigateToPromotion()
+                        else if (selectedTab == 1) triggerCalendarCreate = true
+                    },
                     containerColor = colors.primaryOrange,
                     contentColor = Color.White,
                     elevation = FloatingActionButtonDefaults.elevation(
@@ -83,11 +89,20 @@ fun PrestadorDashboardScreen(
                     ),
                     modifier = Modifier.padding(bottom = 16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Campaign,
-                        contentDescription = "Crear promoción",
-                        modifier = Modifier.size(28.dp)
-                    )
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            (scaleIn(animationSpec = tween(200)) + fadeIn(animationSpec = tween(200))) togetherWith
+                            (scaleOut(animationSpec = tween(200)) + fadeOut(animationSpec = tween(200)))
+                        },
+                        label = "fab_icon"
+                    ) { tab ->
+                        Icon(
+                            imageVector = if (tab == 2) Icons.Filled.Campaign else Icons.Filled.Add,
+                            contentDescription = if (tab == 2) "Crear promoción" else "Nueva cita",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                 }
             }
         },
@@ -96,6 +111,7 @@ fun PrestadorDashboardScreen(
             if (!(selectedTab == 3 && isInConversation)) {
                 PrestadorBottomNavigationBar(
                     selectedTab = selectedTab,
+                    isProfessional = isProfessional,
                     onTabSelected = { selectedTab = it }
                 )
             }
@@ -120,10 +136,21 @@ fun PrestadorDashboardScreen(
             ) { currentTab ->
                 // Contenido según el tab seleccionado
                 when (currentTab) {
-                    0 -> PresupuestoContent(onNavigateToPresupuesto = onNavigateToPresupuesto, onBackToHome = { selectedTab = 2 })
+                    0 -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            PresupuestoContent(
+                                onNavigateToPresupuesto = onNavigateToPresupuesto,
+                                onBackToHome = { selectedTab = 2 }
+                            )
+                        } else {
+                            PresupuestoNotSupportedContent(onBackToHome = { selectedTab = 2 })
+                        }
+                    }
                     1 -> PrestadorCalendarScreen(
                         onBack = { selectedTab = 2 },
                         onNavigateToPresupuesto = onNavigateToPresupuestoCita,
+                        triggerCreateDialog = triggerCalendarCreate,
+                        onCreateDialogHandled = { triggerCalendarCreate = false },
                         onNavigateToChat = { clientId, clientName, newDate, newTime, existingAppointmentId ->
                             println("🔥 DASHBOARD: onNavigateToChat recibido")
                             println("🔥 ClientId: $clientId, Nombre: $clientName")
@@ -200,6 +227,7 @@ fun PrestadorDashboardScreen(
 @Composable
 fun PrestadorBottomNavigationBar(
     selectedTab: Int,
+    isProfessional: Boolean,
     onTabSelected: (Int) -> Unit
 ) {
     val colors = getPrestadorColors()
@@ -232,7 +260,7 @@ fun PrestadorBottomNavigationBar(
             // Presupuesto (Extremo izquierdo)
             BottomNavItem(
                 icon = Icons.Default.Edit,
-                label = "Presupuesto",
+                label = if (isProfessional) "Consulta" else "Presupuesto",
                 isSelected = selectedTab == 0,
                 onClick = { onTabSelected(0) }
             )
@@ -379,6 +407,42 @@ fun PresupuestoContent(
         },
         showTopBar = false // Ocultar TopBar porque ya está en el dashboard
     )
+}
+
+@Composable
+private fun PresupuestoNotSupportedContent(onBackToHome: () -> Unit) {
+    val colors = getPrestadorColors()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Default.Info,
+            contentDescription = null,
+            tint = colors.textSecondary,
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "Presupuestos no disponible en este Android",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Requiere Android 8.0 (API 26) o superior.",
+            fontSize = 14.sp,
+            color = colors.textSecondary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedButton(onClick = onBackToHome) {
+            Text("Volver")
+        }
+    }
 }
 
 

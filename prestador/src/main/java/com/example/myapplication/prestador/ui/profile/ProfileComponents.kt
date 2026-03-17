@@ -3,6 +3,8 @@ package com.example.myapplication.prestador.ui.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -101,6 +103,33 @@ fun SwitchOption(
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = colors.textSecondary.copy(alpha = 0.3f)
             )
+        )
+    }
+}
+
+@Composable
+fun VerificadoBadge(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(
+                color = Color(0xFF4CAF50).copy(alpha = 0.15f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = "Verificado",
+            tint = Color(0xFF4CAF50),
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = "Verificado",
+            fontSize = 12.sp,
+            color = Color(0xFF4CAF50),
+            fontWeight = FontWeight.Medium
         )
     }
 }

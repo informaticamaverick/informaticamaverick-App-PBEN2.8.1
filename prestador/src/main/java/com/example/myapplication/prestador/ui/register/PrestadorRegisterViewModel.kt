@@ -2,17 +2,17 @@ package com.example.myapplication.prestador.ui.register
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.prestador.data.local.dao.ProviderDao
+import com.example.myapplication.prestador.data.local.entity.ProviderEntity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
-import com.example.myapplication.prestador.data.local.dao.ProviderDao
-import com.example.myapplication.prestador.data.local.entity.ProviderEntity
-import com.google.gson.Gson
 
 @HiltViewModel
 class PrestadorRegisterViewModel @Inject constructor(
@@ -28,59 +28,85 @@ class PrestadorRegisterViewModel @Inject constructor(
         email: String,
         password: String,
         nombre: String,
-        dniCuit: String,
-        telefono: String,
-        matricula: String,
-        profesion: String,
-        direccion: String,
-        codigoPostal: String,
-        provincia: String,
-        servicios: List<String>,
-        // Configuración de Negocio
-        tieneNegocio: Boolean,
-        nombreNegocio: String,
-        razonSocial: String,
-        cuitNegocio: String,
-        direccionNegocio: String,
-        codigoPostalNegocio: String,
-        sucursales: List<Map<String, String>>,
-        // Configuración de Servicio
-        isHomeService: Boolean,
-        is24Hours: Boolean,
-        hasPhysicalStore: Boolean,
-        hasStoreAppointments: Boolean
+        apellido: String,
+        categoria: String,
+        mensaje: String,
+        serviceType: String,
+        isGoogleUser: Boolean = false,
+        telefono: String = "",
+        dniCuit: String = "",
+        matricula: String = "",
+        profesion: String = "",
+        direccion: String = "",
+        codigoPostal: String = "",
+        provincia: String = "",
+        tieneNegocio: Boolean = false,
+        nombreNegocio: String = "",
+        razonSocial: String = "",
+        cuitNegocio: String = "",
+        direccionNegocio: String = "",
+        codigoPostalNegocio: String = "",
+        sucursales: List<Map<String, String>> = emptyList(),
+        isHomeService: Boolean = false,
+        is24Hours: Boolean = false,
+        hasPhysicalStore: Boolean = false,
+        hasStoreAppointments: Boolean = false
     ) {
+
+        //Validar campos antes de llamar Firebase
+        if (!isGoogleUser) {
+            if (email.isBlank() || !email.contains("@")) {
+               _registerState.value = RegisterState.Error("Ingresá un correo electrónico valido")
+                return
+            }
+            if (password.length < 6) {
+                _registerState.value = RegisterState.Error("La contraseña debe tener al menso 6 caracteres")
+                return
+            }
+        }
+
+        if (nombre.isBlank()) {
+            _registerState.value = RegisterState.Error("Ingresa tunombre")
+            return
+        }
+
         viewModelScope.launch {
             _registerState.value = RegisterState.Loading
 
             try {
-                // Obtener usuario actual (ya autenticado con Google)
-                val currentUser = auth.currentUser
-                
+                val servicios = listOf(categoria).filter { it.isNotBlank() }
+                //Para registro manual. siempre crear cuenta nueva en Fireba Auth
+                //ignorar cualquier sesion activa de otro usuario
+                val currentUser = if (isGoogleUser) auth.currentUser else null
+
                 if (currentUser != null) {
-                    // Usuario ya autenticado (Google), verificar si ya tiene documento
                     val userDocRef = firestore.collection("usuarios").document(currentUser.uid)
                     val existingDoc = userDocRef.get().await()
-                    
+
                     if (existingDoc.exists()) {
-                        // El usuario ya existe, agregar rol de prestador
-                        val currentRoles = existingDoc.get("roles") as? MutableList<String> ?: mutableListOf()
+                        val currentRoles =
+                            (existingDoc.get("roles") as? List<*>)?.filterIsInstance<String>()?.toMutableList()
+                                ?: mutableListOf()
+
                         if (!currentRoles.contains("prestador")) {
                             currentRoles.add("prestador")
                         }
-                        
-                        // Actualizar con nuevos datos de prestador
+
                         val updateData = hashMapOf<String, Any>(
                             "roles" to currentRoles,
                             "nombre" to nombre,
-                            "dniCuit" to dniCuit,
+                            "apellido" to apellido,
+                            "email" to (currentUser.email ?: email),
                             "telefono" to telefono,
+                            "dniCuit" to dniCuit,
                             "matricula" to matricula,
                             "profesion" to profesion,
                             "direccion" to direccion,
                             "codigoPostal" to codigoPostal,
                             "provincia" to provincia,
                             "servicios" to servicios,
+                            "description" to mensaje,
+                            "serviceType" to serviceType,
                             "tieneNegocio" to tieneNegocio,
                             "nombreNegocio" to nombreNegocio,
                             "razonSocial" to razonSocial,
@@ -94,21 +120,33 @@ class PrestadorRegisterViewModel @Inject constructor(
                             "hasStoreAppointments" to hasStoreAppointments,
                             "prestadorCreatedAt" to System.currentTimeMillis()
                         )
-                        
+
                         userDocRef.update(updateData).await()
+                        saveProviderToRoom(
+                            id = currentUser.uid,
+                            nombre = nombre,
+                            apellido = apellido,
+                            email = currentUser.email ?: email,
+                            telefono = telefono,
+                            mensaje = mensaje,
+                            servicios = servicios,
+                            serviceType = serviceType
+                        )
                     } else {
-                        // Usuario nuevo, crear documento
                         val prestadorData = hashMapOf(
                             "nombre" to nombre,
+                            "apellido" to apellido,
                             "email" to (currentUser.email ?: email),
-                            "dniCuit" to dniCuit,
                             "telefono" to telefono,
+                            "dniCuit" to dniCuit,
                             "matricula" to matricula,
                             "profesion" to profesion,
                             "direccion" to direccion,
                             "codigoPostal" to codigoPostal,
                             "provincia" to provincia,
                             "servicios" to servicios,
+                            "description" to mensaje,
+                            "serviceType" to serviceType,
                             "tieneNegocio" to tieneNegocio,
                             "nombreNegocio" to nombreNegocio,
                             "razonSocial" to razonSocial,
@@ -123,30 +161,39 @@ class PrestadorRegisterViewModel @Inject constructor(
                             "roles" to listOf("prestador"),
                             "createdAt" to System.currentTimeMillis()
                         )
-                        
+
                         userDocRef.set(prestadorData).await()
-                        userDocRef.set(prestadorData).await()
-                        //Guardar en la base de datos local Room
-                        saveProviderToRoom(currentUser.uid, nombre, currentUser.email ?: email, telefono, servicios)
+                        saveProviderToRoom(
+                            id = currentUser.uid,
+                            nombre = nombre,
+                            apellido = apellido,
+                            email = currentUser.email ?: email,
+                            telefono = telefono,
+                            mensaje = mensaje,
+                            servicios = servicios,
+                            serviceType = serviceType
+                        )
                     }
 
                     _registerState.value = RegisterState.Success
                 } else {
-                    // Usuario nuevo con email y contraseña
                     val result = auth.createUserWithEmailAndPassword(email, password).await()
                     val userId = result.user?.uid ?: throw Exception("Error al crear usuario")
 
                     val prestadorData = hashMapOf(
                         "nombre" to nombre,
+                        "apellido" to apellido,
                         "email" to email,
-                        "dniCuit" to dniCuit,
                         "telefono" to telefono,
+                        "dniCuit" to dniCuit,
                         "matricula" to matricula,
                         "profesion" to profesion,
                         "direccion" to direccion,
                         "codigoPostal" to codigoPostal,
                         "provincia" to provincia,
                         "servicios" to servicios,
+                        "description" to mensaje,
+                        "serviceType" to serviceType,
                         "tieneNegocio" to tieneNegocio,
                         "nombreNegocio" to nombreNegocio,
                         "razonSocial" to razonSocial,
@@ -166,47 +213,61 @@ class PrestadorRegisterViewModel @Inject constructor(
                         .document(userId)
                         .set(prestadorData)
                         .await()
-                    //Guardar en la base de datos local Room
-                    saveProviderToRoom(userId, nombre, email, telefono, servicios)
+
+                    saveProviderToRoom(
+                        id = userId,
+                        nombre = nombre,
+                        apellido = apellido,
+                        email = email,
+                        telefono = telefono,
+                        mensaje = mensaje,
+                        servicios = servicios,
+                        serviceType = serviceType
+                    )
 
                     _registerState.value = RegisterState.Success
-
                 }
-
             } catch (e: Exception) {
                 _registerState.value = RegisterState.Error(e.message ?: "Error al registrar")
             }
         }
     }
-    
+
+    fun resetState() {
+        _registerState.value = RegisterState.Idle
+    }
+
     private suspend fun saveProviderToRoom(
         id: String,
         nombre: String,
+        apellido: String,
         email: String,
         telefono: String,
-        servicios: List<String>
+        mensaje: String,
+        servicios: List<String>,
+        serviceType: String
     ) {
-        val gson = Gson()
-        val categoriesJson = gson.toJson(servicios)
-        
+        val categoriesJson = Gson().toJson(servicios)
+
         val providerEntity = ProviderEntity(
             id = id,
             name = nombre,
+            apellido = apellido.ifBlank { null },
             email = email,
             phone = telefono,
             imageUrl = null,
-            description = null,
+            description = mensaje.ifBlank { null },
             address = null,
             rating = 0f,
             categories = categoriesJson,
             isActive = true,
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
+            serviceType = serviceType
         )
-        
+
         providerDao.insertProvider(providerEntity)
     }
 }
-
 
 sealed class RegisterState {
     object Idle : RegisterState()

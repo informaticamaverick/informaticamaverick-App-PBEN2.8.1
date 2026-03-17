@@ -108,4 +108,17 @@ object DatabaseModule {
         return database.plantillaPresupuestoDao()
     }
 
+
+    @Provides
+    @Singleton
+    fun provideDireccionDao(database: PrestadorDatabase): DireccionDao {
+        return database.direccionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideReferenteDao(database: PrestadorDatabase): ReferenteDao {
+        return database.referenteDao()
+    }
+
 }

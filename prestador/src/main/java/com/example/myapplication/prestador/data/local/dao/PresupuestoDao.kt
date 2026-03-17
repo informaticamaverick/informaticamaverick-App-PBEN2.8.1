@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PresupuestoDao {
     
-    @Query("SELECT * FROM presupuestos ORDER BY fecha DESC")
+    @Query("SELECT * FROM presupuestos WHERE estado != '__catalog__' ORDER BY fecha DESC")
     fun getAllPresupuestos(): Flow<List<PresupuestoEntity>>
     
     @Query("SELECT * FROM presupuestos WHERE estado = :estado ORDER BY fecha DESC")

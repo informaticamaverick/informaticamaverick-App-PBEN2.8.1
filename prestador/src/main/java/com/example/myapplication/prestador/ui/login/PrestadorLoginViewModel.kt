@@ -50,6 +50,10 @@ class PrestadorLoginViewModel @Inject constructor(
         _loginState.value = LoginState.Loading
     }
 
+    fun resetLoginState() {
+        _loginState.value = LoginState.Idle
+    }
+
     fun handleGoogleSignInResult(idToken: String) {
         viewModelScope.launch {
             try {

@@ -99,7 +99,10 @@ class AppointmentAvailabilityRepository @Inject constructor(
             // Verificar que no haya otra cita en ese horario
             val existingAppointments = appointmentDao.getByProviderAndDateSuspend(providerId, date)
             val hasConflict = existingAppointments.any { appointment ->
-                if (appointment.status == "cancelado") return@any false
+                if (
+                    appointment.status.equals("cancelado", ignoreCase = true) ||
+                    appointment.status.equals("cancelled", ignoreCase = true)
+                ) return@any false
                 
                 val appointmentStart = timeToMinutes(appointment.time)
                 val appointmentEnd = appointmentStart + appointment.duration
@@ -142,7 +145,10 @@ class AppointmentAvailabilityRepository @Inject constructor(
             // Verificar que no haya otra reserva en ese espacio y horario
             val existingAppointments = appointmentDao.getByProviderAndDateSuspend(providerId, date)
             val hasConflict = existingAppointments.any { appointment ->
-                if (appointment.status == "cancelado") return@any false
+                if (
+                    appointment.status.equals("cancelado", ignoreCase = true) ||
+                    appointment.status.equals("cancelled", ignoreCase = true)
+                ) return@any false
                 if (appointment.rentalSpaceId != rentalSpaceId) return@any false
                 
                 val requestedMinutes = timeToMinutes(time)
@@ -200,7 +206,10 @@ class AppointmentAvailabilityRepository @Inject constructor(
                     
                     // Verificar si hay conflicto con citas existentes
                     val hasConflict = existingAppointments.any { appointment ->
-                        if (appointment.status == "cancelado") return@any false
+                        if (
+                            appointment.status.equals("cancelado", ignoreCase = true) ||
+                            appointment.status.equals("cancelled", ignoreCase = true)
+                        ) return@any false
                         
                         val appointmentStart = timeToMinutes(appointment.time)
                         val appointmentEnd = appointmentStart + appointment.duration

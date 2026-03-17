@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,8 +59,9 @@ import java.util.*
 fun MessageBubble(
     message: Message,
     isFromCurrentUser: Boolean,
-    onReschedule: (() -> Unit)? = null
-) {
+    onReschedule: (() -> Unit)? = null,
+    onVerPresupuesto: (() -> Unit)? = null
+){
     val colors = getPrestadorColors()
     val bubbleColor = if (message.type == Message.MessageType.BUDGET) {
         Color.Transparent
@@ -168,7 +170,7 @@ fun MessageBubble(
                         )
                     }
                     Message.MessageType.BUDGET -> {
-                        BudgetMessageContent(message = message)
+                        BudgetMessageContent(message = message, onVerPresupuesto = onVerPresupuesto)
                     }
                 }
                 
@@ -792,7 +794,10 @@ fun TypingDots() {
 
 // --- BUDGET MESSAGE ---
 @Composable
-fun BudgetMessageContent(message: com.example.myapplication.prestador.data.model.Message) {
+fun BudgetMessageContent(
+    message: com.example.myapplication.prestador.data.model.Message,
+    onVerPresupuesto: (() -> Unit)? = null
+) {
     val Orange = Color(0xFFFF6B35)
     val SlateLight = Color(0xFFF8FAFC)
     val SlateBorder = Color(0xFFE2E8F0)
@@ -821,8 +826,8 @@ fun BudgetMessageContent(message: com.example.myapplication.prestador.data.model
         addAll(parseItems(message.budgetImpuestosJson))
     }
 
-    androidx.compose.foundation.layout.Column(
-        modifier = androidx.compose.ui.Modifier
+    Column(
+        modifier = Modifier
             .width(280.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color.White)
@@ -830,7 +835,7 @@ fun BudgetMessageContent(message: com.example.myapplication.prestador.data.model
     ) {
         // Header naranja
         Row(
-            modifier = androidx.compose.ui.Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .background(Orange)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -845,8 +850,8 @@ fun BudgetMessageContent(message: com.example.myapplication.prestador.data.model
         }
 
         // Líneas de items
-        androidx.compose.foundation.layout.Column(
-            modifier = androidx.compose.ui.Modifier
+        Column(
+            modifier = Modifier
                 .fillMaxWidth()
                 .background(SlateLight)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -855,36 +860,36 @@ fun BudgetMessageContent(message: com.example.myapplication.prestador.data.model
             if (allLines.isEmpty()) {
                 Text("Sin ítems", fontSize = 11.sp, color = SlateText)
             } else {
-                allLines.take(6).forEach { (desc, total) ->
+                allLines.take(4).forEach { (desc, total) ->
                     Row(
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
                             desc.take(22) + if (desc.length > 22) "…" else "",
                             fontSize = 11.sp, color = SlateDark,
-                            modifier = androidx.compose.ui.Modifier.weight(1f)
+                            modifier = Modifier.weight(1f)
                         )
                         Text(total, fontSize = 11.sp, color = SlateDark, fontWeight = FontWeight.SemiBold)
                     }
                 }
-                if (allLines.size > 6) {
-                    Text("+ ${allLines.size - 6} ítems más…", fontSize = 10.sp, color = SlateText)
+                if (allLines.size > 4) {
+                    Text("+ ${allLines.size - 4} ítems más…", fontSize = 10.sp, color = SlateText)
                 }
             }
         }
 
-        androidx.compose.material3.HorizontalDivider(color = SlateBorder)
+        HorizontalDivider(color = SlateBorder)
 
         // Footer con total
         Row(
-            modifier = androidx.compose.ui.Modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            androidx.compose.foundation.layout.Column {
+            Column {
                 Text("TOTAL", fontSize = 9.sp, color = SlateText, fontWeight = FontWeight.Bold)
                 Text(
                     "$ ${String.format("%,.2f", message.budgetTotal ?: 0.0)}",
@@ -900,12 +905,28 @@ fun BudgetMessageContent(message: com.example.myapplication.prestador.data.model
         }
 
         if (!message.budgetNotas.isNullOrBlank()) {
-            androidx.compose.material3.HorizontalDivider(color = SlateBorder)
+            HorizontalDivider(color = SlateBorder)
             Text(
                 message.budgetNotas,
                 fontSize = 10.sp, color = SlateText,
-                modifier = androidx.compose.ui.Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
+        }
+
+        // Botón "Ver presupuesto"
+        HorizontalDivider(color = SlateBorder)
+        TextButton(
+            onClick = { onVerPresupuesto?.invoke() },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.textButtonColors(contentColor = Orange)
+        ) {
+            Icon(
+                Icons.Default.Visibility,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Ver presupuesto", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
