@@ -122,8 +122,8 @@ data class BadgeItem(
     val label: String,         // Descripción para el popup
     val isActive: Boolean      // Estado de la propiedad
 )
-    // --- MODELOS DE DATOS ---
-    data class Provider(
+// --- MODELOS DE DATOS ---
+data class Provider(
 val id: String,
 val displayName: String,
 val photoUrl: String,

@@ -36,6 +36,8 @@ data class BudgetEntity(
     val clientId: String,          // Tu ID de usuario
     val providerId: String,        // ID del prestador que lo envía
     val tenderId: String? = null,  // Si es null, es un presupuesto directo de chat
+    
+    val category: String? = null,  // 🔥 Agregado: Categoría directa del presupuesto
 
     // Información del Prestador (Copia local para verla offline rápido)
     val providerName: String,

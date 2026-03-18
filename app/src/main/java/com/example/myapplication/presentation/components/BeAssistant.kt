@@ -96,8 +96,13 @@ fun BeAssistantSearchFab(
     onBubbleActionClick: () -> Unit = {},
     onToggleSearch: () -> Unit = {},
     onToggleActions: () -> Unit = {},
-    onToggleSleep: () -> Unit = {}
+    onToggleSleep: () -> Unit = {},
+    //prueba de Be para que vuelva a casa🏠 ***********************************************
+    resetTrigger: Int = 0, // Recibe la orden
+    //************************************************************************************
 ) {
+
+
 // --- ESTADO INTERNO ----------------------------------------------------------------------------------
     var state by remember { mutableStateOf(BeState.IDLE) }
     var currentTipIndex by remember { mutableIntStateOf(0) }
@@ -114,6 +119,19 @@ fun BeAssistantSearchFab(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
    // val isImeVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
+
+    //**************************************************
+    // 🏠 EFECTO DE REGRESO A CASA
+    LaunchedEffect(resetTrigger) {
+        if (resetTrigger > 0) {
+            offsetX = 0f
+            offsetY = 0f
+        }
+    }
+    //************************************************PRUEBA PARA QUE BE VUELVA A SU CASA
+
+
+
 
     // 🔥 MODIFICACIÓN: Separamos la lógica del teclado del estado de búsqueda activa
     // --- EFECTO PARA SOLICITUD EXPLÍCITA DE TECLADO ---
@@ -189,7 +207,9 @@ fun BeAssistantSearchFab(
     Box(
         modifier = (if (showSmallActions) Modifier.fillMaxSize() else modifier.fillMaxWidth())
             .zIndex(if (isDragging || state == BeState.TALKING || isSearchActive) 200f else 100f),
-        contentAlignment = Alignment.BottomEnd // Anclamos todo al extremo derecho inferior
+        contentAlignment = if (isSearchActive) Alignment.TopEnd else Alignment.BottomEnd
+       // contentAlignment = Alignment.BottomEnd // Anclamos todo al extremo derecho inferior
+
     ) {
         // --- CAPA 0: SCRIM GLOBAL PARA CERRAR ACCIONES ---
         AnimatedVisibility(
@@ -238,7 +258,7 @@ fun BeAssistantSearchFab(
             // 🔥 MODIFICACIÓN: Transición fluida entre bandas.
             // Ambas viven en el mismo Box para que las animaciones de BeBuild.kt se solapen correctamente.
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                
+
                 // 1. Barra Extendida (BeBuild): Solo si se mantiene presionado
                 BeSmallActionsBuilder(
                     isVisible = showSmallActions,

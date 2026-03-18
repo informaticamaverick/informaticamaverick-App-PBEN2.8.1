@@ -1,7 +1,8 @@
 package com.example.myapplication.presentation.client
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -37,10 +38,6 @@ import com.example.myapplication.presentation.components.CompactCategoryCard
 import com.example.myapplication.presentation.components.MenuFiltros
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
-/**
- * Componente maestro que gestiona la visibilidad y animación del panel de detalles.
- * Ahora es autosuficiente y observa el estado global desde BeBrainViewModel.
- */
 @Composable
 fun SuperCategoryDetailsPanel(
     beViewModel: BeBrainViewModel,
@@ -52,7 +49,7 @@ fun SuperCategoryDetailsPanel(
     val searchResults by beViewModel.searchResults.collectAsStateWithLifecycle()
     val isVisible = selectedSuperCategory != null
 
-    // 🔥 GESTIÓN DE EFECTOS SEGÚN VISIBILIDAD (Heredado del antiguo panel)
+    // 🔥 GESTIÓN DE EFECTOS SEGÚN VISIBILIDAD
     LaunchedEffect(isVisible) {
         if (isVisible) {
             beViewModel.setUIBlocked(true)
@@ -75,9 +72,7 @@ fun SuperCategoryDetailsPanel(
     )
 }
 
-/**
- * Versión de SuperCategoryDetailsPanel sin dependencia directa de ViewModel para Previews.
- */
+/*** Versión de SuperCategoryDetailsPanel sin dependencia directa de ViewModel para Previews. */
 @Composable
 fun SuperCategoryDetailsPanelContent(
     selectedSuperCategory: SuperCategory?,
@@ -87,29 +82,38 @@ fun SuperCategoryDetailsPanelContent(
     onCategoryClick: (String) -> Unit
 ) {
     val isVisible = selectedSuperCategory != null
+    
+    // 🔥 CLAVE: Mantenemos la categoría en memoria mientras se anima la salida
+    var currentSuperCat by remember { mutableStateOf<SuperCategory?>(null) }
+    LaunchedEffect(selectedSuperCategory) {
+        if (selectedSuperCategory != null) currentSuperCat = selectedSuperCategory
+    }
 
-    // --- CAPA DE ANIMACIÓN Y FONDO (SCRIM) ---
+    // 🔥 ESTRUCTURA IDÉNTICA A BeResultadoScreen.kt
     AnimatedVisibility(
         visible = isVisible,
-        enter = slideInVertically(initialOffsetY = { it }, animationSpec = spring(dampingRatio = 0.85f)) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        enter = slideInVertically(
+            initialOffsetY = { it },
+            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
+        ) + fadeIn(),
+        exit = slideOutVertically(
+            targetOffsetY = { it },
+            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
+        ) + fadeOut(),
+        modifier = Modifier.fillMaxSize().zIndex(200f)
     ) {
         // Fondo oscuro que cubre TODA la pantalla y cierra al tocar fuera
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(200f) // Aseguramos que esté por encima de todo
                 .background(Color.Black.copy(alpha = 0.75f))
                 .clickable(
-                    interactionSource = remember { MutableInteractionSource() }, 
+                    interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) {
-                    onClose()
-                },
+                ) { onClose() },
             contentAlignment = Alignment.BottomCenter
         ) {
-            selectedSuperCategory?.let { superCat ->
-                // Renderizamos el contenido visual
+            currentSuperCat?.let { superCat ->
                 SuperCategoryDetailsContent(
                     superCategory = superCat,
                     searchQuery = searchQuery,
@@ -122,10 +126,7 @@ fun SuperCategoryDetailsPanelContent(
     }
 }
 
-/**
- * Contenido interno del panel (Anteriormente SuperCategoryDetailsPanel).
- * Ahora es privado para asegurar que se use a través del componente maestro.
- */
+/*** Contenido interno del panel. */
 @Composable
 private fun SuperCategoryDetailsContent(
     superCategory: SuperCategory,
@@ -136,24 +137,33 @@ private fun SuperCategoryDetailsContent(
 ) {
     var activeFilters by remember { mutableStateOf(setOf<String>()) }
 
-    Surface(
+    // BOX RAÍZ: Nos permite superponer elementos fuera de los límites de la tarjeta (Surface)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.78f)
-            .clickable(enabled = false) { }, // Evita que clicks internos cierren el scrim
-        color = Color(0xFF0A0E14),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        tonalElevation = 16.dp
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        // --- TARJETA PRINCIPAL ---
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 16.dp) // ESPACIO VITAL: Empuja la tarjeta hacia abajo para que el botón sobresalga
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { }, // Absorbe los clicks silenciosamente sin cerrar el panel
+            color = Color(0xFF0A0E14),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            tonalElevation = 16.dp
+        ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(20.dp)) // Ajuste de espacio por el botón
 
                 // --- Encabezado del Panel ---
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -164,7 +174,6 @@ private fun SuperCategoryDetailsContent(
                             fontWeight = FontWeight.Black,
                             color = Color.White,
                             letterSpacing = 0.5.sp,
-                            lineHeight = 24.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -174,7 +183,6 @@ private fun SuperCategoryDetailsContent(
                                 color = Color(0xFF22D3EE),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.sp,
                                 modifier = Modifier.padding(top = 2.dp)
                             )
                         }
@@ -192,10 +200,7 @@ private fun SuperCategoryDetailsContent(
                     )
                 }
 
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White.copy(alpha = 0.1f)
-                )
+                HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = Color.White.copy(alpha = 0.1f))
 
                 // --- Lógica de Filtrado de Grilla ---
                 val displayItems = remember(superCategory.items, searchResults, searchQuery) {
@@ -220,35 +225,33 @@ private fun SuperCategoryDetailsContent(
                             onClick = { onCategoryClick(category.name) }
                         )
                     }
-
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Spacer(modifier = Modifier.height(130.dp)) // Espacio para Be
                     }
                 }
             }
+        }
 
-            // --- Botón de Cierre ---
-            Surface(
-                onClick = onClose,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .size(32.dp)
-                    .zIndex(100f)
-                    .shadow(12.dp, CircleShape, spotColor = Color.Red),
-                shape = CircleShape,
-                color = Color(0xFF0A0E14),
-                border = BorderStroke(1.5.dp, Color(0xFFEF4444)),
-                shadowElevation = 8.dp
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Cerrar",
-                        tint = Color(0xFFEF4444),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+        // --- BOTÓN DE CIERRE SUPERPUESTO ---
+        Surface(
+            onClick = onClose,
+            modifier = Modifier
+                .align(Alignment.TopEnd) // Se alinea en el límite superior absoluto del Box
+                .padding(top = 0.dp, end = 8.dp) // Alineado horizontalmente con el contenido
+                .size(38.dp)
+                .shadow(12.dp, CircleShape, spotColor = Color.Red),
+            shape = CircleShape,
+            color = Color(0xFF0A0E14),
+            border = BorderStroke(1.5.dp, Color(0xFFEF4444)),
+            shadowElevation = 8.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Cerrar",
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
@@ -262,45 +265,10 @@ private fun SuperCategoryDetailsContent(
 @Composable
 fun SuperCategoryDetailsPanelPreview() {
     val sampleCategories = listOf(
-        CategoryEntity(
-            name = "Plomería",
-            icon = "🚰",
-            color = 0xFF2196F3L,
-            superCategory = "Hogar",
-            superCategoryIcon = "🏠",
-            imageUrl = null,
-            isNew = false,
-            isNewPrestador = false,
-            isAd = false
-        ),
-        CategoryEntity(
-            name = "Electricidad",
-            icon = "⚡",
-            color = 0xFFFFC107L,
-            superCategory = "Hogar",
-            superCategoryIcon = "🏠",
-            imageUrl = null,
-            isNew = false,
-            isNewPrestador = false,
-            isAd = false
-        ),
-        CategoryEntity(
-            name = "Pintura",
-            icon = "🎨",
-            color = 0xFFE91E63L,
-            superCategory = "Hogar",
-            superCategoryIcon = "🏠",
-            imageUrl = null,
-            isNew = false,
-            isNewPrestador = false,
-            isAd = false
-        )
+        CategoryEntity(name = "Plomería", icon = "🚰", color = 0xFF2196F3L, superCategory = "Hogar", superCategoryIcon = "🏠", imageUrl = null, isNew = false, isNewPrestador = false, isAd = false),
+        CategoryEntity(name = "Electricidad", icon = "⚡", color = 0xFFFFC107L, superCategory = "Hogar", superCategoryIcon = "🏠", imageUrl = null, isNew = false, isNewPrestador = false, isAd = false)
     )
-    val sampleSuperCategory = SuperCategory(
-        title = "Servicios del Hogar",
-        icon = "🏠",
-        items = sampleCategories
-    )
+    val sampleSuperCategory = SuperCategory(title = "Servicios del Hogar", icon = "🏠", items = sampleCategories)
     MyApplicationTheme {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             SuperCategoryDetailsPanelContent(

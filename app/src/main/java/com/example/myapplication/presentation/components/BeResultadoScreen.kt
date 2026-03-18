@@ -2,6 +2,7 @@ package com.example.myapplication.presentation.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -39,9 +41,8 @@ import com.example.myapplication.presentation.client.prepareForSearch
 import com.example.myapplication.presentation.client.wordStartsWith
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
-/**
- * Componente de texto que reduce automáticamente su tamaño si es demasiado largo
- */
+
+/*** Componente de texto que reduce automáticamente su tamaño si es demasiado largo */
 @Composable
 fun AutoSizeText(
     text: String,
@@ -68,10 +69,8 @@ fun AutoSizeText(
     )
 }
 
-/**
- * Pantalla de resultados inteligente de Be.
- * Integra búsqueda de Categorías, Supercategorías y Favoritos del HomeScreen.
- */
+/*** Pantalla de resultados inteligente de Be.
+ * Integra búsqueda de Categorías, Supercategorías y Favoritos del HomeScreen. */
 @Composable
 fun BeResultadoScreen(
     viewModel: BeBrainViewModel,
@@ -139,7 +138,7 @@ fun BeResultadoScreen(
         onSuperCategoryClick = { superCat ->
             // 🔥 MODIFICACIÓN: Al tocar una Supercategoría, notificamos al ViewModel global
             // Esto permite que HomeScreenCliente3 reaccione y abra el SuperCategoryDetailsPanel
-           // viewModel.selectSuperCategory(superCat)
+            // viewModel.selectSuperCategory(superCat)
             viewModel.cerrarBeAssistantCompleto() // Cerramos Be para dar paso al nuevo panel
             onSuperCategoryClick(superCat)
         },
@@ -150,9 +149,7 @@ fun BeResultadoScreen(
     )
 }
 
-/**
- * Contenido de la pantalla de resultados de Be con secciones colapsables.
- */
+/*** Contenido de la pantalla de resultados de Be con secciones colapsables.*/
 @Composable
 fun BeResultadoContent(
     searchQuery: String,
@@ -191,38 +188,41 @@ fun BeResultadoContent(
                 ) { onClose() },
             contentAlignment = Alignment.BottomCenter
         ) {
-            Surface(
+            // BOX RAÍZ: Contenedor que permite al botón sobresalir de la tarjeta
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.78f) // 🔥 Altura perfecta según SuperCategoryDetailsPanel
-                    .clickable(enabled = false) { }, // Evita que clicks en el panel cierren el overlay
-                color = cyberBackground,
-                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                tonalElevation = 16.dp
+                    .fillMaxHeight(0.78f) // Altura perfecta
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // Borde brillante superior (Efecto Gemini)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(geminiGradientBrush(isAnimated = true))
-                    )
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 24.dp, vertical = 24.dp)
-                    ) {
-                        // Header: Título y botón de Cerrar
-                        Row(
+                // --- TARJETA PRINCIPAL ---
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 16.dp) // ESPACIO VITAL para que el botón sobresalga
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { }, // Evita que clicks en el panel cierren el overlay de forma segura
+                    color = cyberBackground,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    tonalElevation = 16.dp,
+                    // 🔥 AQUÍ SE APLICA EL BORDE DE GEMINI: Toma la forma curva automáticamente
+                    border = BorderStroke(2.dp, geminiGradientBrush(isAnimated = false))
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .fillMaxSize()
+                                .padding(horizontal = 24.dp, vertical = 24.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                            Spacer(modifier = Modifier.height(8.dp)) // Ajuste de espacio por el botón
+
+                            // Header: Título
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp, end = 40.dp) // end = 40.dp para que el texto no pise el botón
+                            ) {
                                 AutoSizeText(
                                     text = if (searchQuery.isEmpty()) "Análisis de Be" else "Resultados para: ${searchQuery.uppercase()}",
                                     color = textMain,
@@ -239,150 +239,155 @@ fun BeResultadoContent(
                                 )
                             }
 
-                            // --- BOTÓN DE CIERRE (X) ---
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.05f))
-                                    .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-                                    .clickable { onClose() },
-                                contentAlignment = Alignment.Center
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.7f), thickness = 1.dp)
+
+                            // Lista de Resultados Dinámica
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Cerrar",
-                                    tint = textMuted,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
+                                // --- SECCIÓN: CATEGORÍAS (SERVICIOS) ---
+                                if (categories.isNotEmpty()) {
+                                    item {
+                                        CollapsibleSectionHeader(
+                                            title = "Servicios",
+                                            count = categories.size,
+                                            isExpanded = categoriesExpanded,
+                                            onToggle = { categoriesExpanded = !categoriesExpanded }
+                                        )
+                                    }
 
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f), thickness = 1.dp)
-                        
-                        // Lista de Resultados Dinámica
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
-                        ) {
-                            // --- SECCIÓN: CATEGORÍAS (SERVICIOS) ---
-                            if (categories.isNotEmpty()) {
-                                item {
-                                    CollapsibleSectionHeader(
-                                        title = "Servicios",
-                                        count = categories.size,
-                                        isExpanded = categoriesExpanded,
-                                        onToggle = { categoriesExpanded = !categoriesExpanded }
-                                    )
+                                    if (categoriesExpanded) {
+                                        item {
+                                            LazyRow(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                                            ) {
+                                                items(categories) { category ->
+                                                    Box(modifier = Modifier.width(150.dp)) {
+                                                        CompactCategoryCard(
+                                                            item = category,
+                                                            onClick = { onCategoryClick(category.name) }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
 
-                                if (categoriesExpanded) {
+                                // --- SECCIÓN: SUPERCATEGORÍAS (GRUPOS) ---
+                                if (superCategories.isNotEmpty()) {
                                     item {
-                                        LazyRow(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                                        ) {
-                                            items(categories) { category ->
-                                                Box(modifier = Modifier.width(150.dp)) {
-                                                    CompactCategoryCard(
-                                                        item = category,
-                                                        onClick = { onCategoryClick(category.name) }
+                                        CollapsibleSectionHeader(
+                                            title = "Grupos",
+                                            count = superCategories.size,
+                                            isExpanded = superCategoriesExpanded,
+                                            onToggle = { superCategoriesExpanded = !superCategoriesExpanded }
+                                        )
+                                    }
+                                    if (superCategoriesExpanded) {
+                                        item {
+                                            LazyRow(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                            ) {
+                                                items(superCategories) { superCat ->
+                                                    Box(modifier = Modifier.width(280.dp)) {
+                                                        BentoSuperCategoryCard(
+                                                            superCategory = superCat,
+                                                            emoji = superCat.icon,
+                                                            height = 180.dp,
+                                                            onClick = { onSuperCategoryClick(superCat) }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // --- SECCIÓN: FAVORITOS (PRESTADORES) ---
+                                if (favorites.isNotEmpty()) {
+                                    item {
+                                        CollapsibleSectionHeader(
+                                            title = "Mis Favoritos",
+                                            count = favorites.size,
+                                            isExpanded = favoritesExpanded,
+                                            onToggle = { favoritesExpanded = !favoritesExpanded }
+                                        )
+                                    }
+                                    if (favoritesExpanded) {
+                                        item {
+                                            LazyRow(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(0.dp),
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                            ) {
+                                                items(favorites) { provider ->
+                                                    PrestadorCardVerticalV2(
+                                                        provider = provider,
+                                                        onClick = { onProviderClick(provider.id) },
+                                                        allCategories = allCategories
                                                     )
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            }
 
-                            // --- SECCIÓN: SUPERCATEGORÍAS (GRUPOS) ---
-                            if (superCategories.isNotEmpty()) {
-                                item {
-                                    CollapsibleSectionHeader(
-                                        title = "Grupos",
-                                        count = superCategories.size,
-                                        isExpanded = superCategoriesExpanded,
-                                        onToggle = { superCategoriesExpanded = !superCategoriesExpanded }
-                                    )
-                                }
-                                if (superCategoriesExpanded) {
+                                // --- EMPTY STATE ---
+                                if (categories.isEmpty() && superCategories.isEmpty() && favorites.isEmpty()) {
                                     item {
-                                        LazyRow(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
-                                            items(superCategories) { superCat ->
-                                                Box(modifier = Modifier.width(280.dp)) {
-                                                    BentoSuperCategoryCard(
-                                                        superCategory = superCat,
-                                                        emoji = superCat.icon,
-                                                        height = 180.dp,
-                                                        onClick = { onSuperCategoryClick(superCat) }
-                                                    )
-                                                }
-                                            }
+                                            Icon(
+                                                imageVector = Icons.Default.Search,
+                                                contentDescription = null,
+                                                tint = textMuted.copy(alpha = 0.3f),
+                                                modifier = Modifier.size(48.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text(
+                                                text = "Busca categorías, grupos o profesionales favoritos para ver resultados.",
+                                                color = textMuted,
+                                                fontSize = 14.sp,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.padding(horizontal = 32.dp)
+                                            )
                                         }
-                                    }
-                                }
-                            }
-
-                            // --- SECCIÓN: FAVORITOS (PRESTADORES) ---
-                            if (favorites.isNotEmpty()) {
-                                item {
-                                    CollapsibleSectionHeader(
-                                        title = "Mis Favoritos",
-                                        count = favorites.size,
-                                        isExpanded = favoritesExpanded,
-                                        onToggle = { favoritesExpanded = !favoritesExpanded }
-                                    )
-                                }
-                                if (favoritesExpanded) {
-                                    item {
-                                        LazyRow(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(0.dp),
-                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-                                        ) {
-                                            items(favorites) { provider ->
-                                                PrestadorCardVerticalV2(
-                                                    provider = provider,
-                                                    onClick = { onProviderClick(provider.id) },
-                                                    allCategories = allCategories
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // --- EMPTY STATE ---
-                            if (categories.isEmpty() && superCategories.isEmpty() && favorites.isEmpty()) {
-                                item {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Search,
-                                            contentDescription = null,
-                                            tint = textMuted.copy(alpha = 0.3f),
-                                            modifier = Modifier.size(48.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text(
-                                            text = "Busca categorías, grupos o profesionales favoritos para ver resultados.",
-                                            color = textMuted,
-                                            fontSize = 14.sp,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.padding(horizontal = 32.dp)
-                                        )
                                     }
                                 }
                             }
                         }
+                    }
+                }
+
+                // --- BOTÓN DE CIERRE SUPERPUESTO ---
+                Surface(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd) // Se alinea en el límite superior absoluto del Box
+                        .padding(top = 0.dp, end = 8.dp) // Alineado horizontalmente con el contenido
+                        .size(38.dp)
+                        .shadow(12.dp, CircleShape, spotColor = Color.Red),
+                    shape = CircleShape,
+                    color = Color(0xFF0A0E14),
+                    border = BorderStroke(1.5.dp, Color(0xFFEF4444)),
+                    shadowElevation = 8.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Cerrar",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -390,9 +395,7 @@ fun BeResultadoContent(
     }
 }
 
-/**
- * Encabezado colapsable para secciones de resultados con contador.
- */
+/*** Encabezado colapsable para secciones de resultados con contador. */
 @Composable
 fun CollapsibleSectionHeader(
     title: String,
@@ -401,7 +404,7 @@ fun CollapsibleSectionHeader(
     onToggle: () -> Unit
 ) {
     val rotation by animateFloatAsState(targetValue = if (isExpanded) 90f else 0f, label = "rotation")
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -435,7 +438,7 @@ fun CollapsibleSectionHeader(
         Icon(
             imageVector = Icons.Default.ChevronRight,
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.5f),
+            tint = Color.White.copy(alpha = 0.9f),
             modifier = Modifier
                 .size(20.dp)
                 .rotate(rotation)

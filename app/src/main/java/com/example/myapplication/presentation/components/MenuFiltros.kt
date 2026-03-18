@@ -43,11 +43,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
-
-
-
 // ==========================================================================================
-// --- MODELOS DE DATOS Y COMPONENTES BASE (Migrados de TacticalPanel) ---
+// --- MODELOS DE DATOS Y COMPONENTES BASE ---
 // ==========================================================================================
 
 /**
@@ -130,27 +127,28 @@ fun CompactItemButton(
 
 /**
  * MenuFiltros: Componente táctico para la gestión de filtros y categorías.
- * Ahora implementado como un Popup autónomo con efecto de burbuja y rebote.
- * Toma el control total para dejar obsoleto a TacticalPanel.
  */
 @Composable
 fun MenuFiltros(
     activeFilters: Set<String>,
     dynamicCategories: List<ControlItem>,
+    refinementFilters: List<ControlItem> = emptyList(), // 🔥 NUEVO: Filtros tácticos dinámicos desde el ViewModel
     onAction: (String) -> Unit,
     onApply: () -> Unit,
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
-    showProductService: Boolean = false // 🔥 NUEVO: Habilita filtros de Productos y Servicios
+    showProductService: Boolean = false 
 ) {
     var isExpanded by remember { mutableStateOf(false) }
-    val hasFilters = activeFilters.isNotEmpty()
+    
+    // 🔥 CORRECCIÓN: Solo muestra la X si hay filtros de tipo 'filter_' o 'cat_' para no duplicar con Ordenamiento
+    val hasSpecificFilters = activeFilters.any { it.startsWith("filter_") || it.startsWith("cat_") }
 
     // 1. Animación de rotación para el icono (Tornado en este caso)
     val iconRotation by animateFloatAsState(
-        targetValue = if (isExpanded) 180f else 0f,
+        targetValue = if (isExpanded) 360f else 0f,
         animationSpec = tween(500, easing = FastOutSlowInEasing),
-        label = "Rotation"
+        label = "RotationFiltros"
     )
 
     // 2. Animación de escala con Rebote para el panel (Réplica exacta)
@@ -161,15 +159,13 @@ fun MenuFiltros(
         } else {
             tween(200)
         },
-        label = "Scale"
+        label = "ScaleFiltros"
     )
-
 
     // Gradiente premium para el fondo del panel
     val cardBackground = Brush.verticalGradient(
         colors = listOf(Color(0xFF1A1F26), Color(0xFF0A0E14))
     )
-
 
     // CONTENEDOR PRINCIPAL (Anclado a la derecha como MenuOrdenamiento)
     Box(
@@ -187,7 +183,7 @@ fun MenuFiltros(
         ) {
             // 🔥 BOTÓN X: Brota desde detrás del Tornado hacia la izquierda
             AnimatedVisibility(
-                visible = hasFilters,
+                visible = hasSpecificFilters,
                 enter = fadeIn(tween(400)) + slideInHorizontally(initialOffsetX = { it }),
                 exit = fadeOut(tween(300)) + slideOutHorizontally(targetOffsetX = { it })
             ) {
@@ -229,7 +225,7 @@ fun MenuFiltros(
         if (isExpanded || scale > 0.01f) {
             Popup(
                 alignment = Alignment.TopEnd,
-                offset = IntOffset(-10, 50),
+                offset = IntOffset(-50, 115),
                 properties = PopupProperties(focusable = true, dismissOnClickOutside = true),
                 onDismissRequest = { isExpanded = false }
             ) {
@@ -241,7 +237,7 @@ fun MenuFiltros(
                             scaleX = scale
                             scaleY = scale
                             alpha = scale.coerceIn(0f, 1f)
-                            transformOrigin = TransformOrigin(1f, 0f) // Brota desde el icono
+                            transformOrigin = TransformOrigin(1f, 0f)
                         }
                 ) {
                    Card(
@@ -299,14 +295,14 @@ fun MenuFiltros(
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                         CompactItemButton(
-                                            item = ControlItem("Productos", Icons.Default.ShoppingBag, "🛍️", Color(0xFF22D3EE), "filter_productos"),
-                                            isSelected = activeFilters.contains("filter_productos"),
-                                            onClick = { onAction("filter_productos") }
+                                            item = ControlItem("Productos", Icons.Default.ShoppingBag, "🛍️", Color(0xFF22D3EE), "filter_products"),
+                                            isSelected = activeFilters.contains("filter_products"),
+                                            onClick = { onAction("filter_products") }
                                         )
                                         CompactItemButton(
-                                            item = ControlItem("Servicios", Icons.Default.Build, "🔧", Color(0xFFF59E0B), "filter_servicios"),
-                                            isSelected = activeFilters.contains("filter_servicios"),
-                                            onClick = { onAction("filter_servicios") }
+                                            item = ControlItem("Servicios", Icons.Default.Build, "🔧", Color(0xFFF59E0B), "filter_services"),
+                                            isSelected = activeFilters.contains("filter_services"),
+                                            onClick = { onAction("filter_services") }
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(16.dp))
@@ -332,33 +328,19 @@ fun MenuFiltros(
                                     Spacer(modifier = Modifier.height(16.dp))
                                 }
 
-                                // --- 3. SECCIÓN: REFINAR BÚSQUEDA (GRID TÁCTICO) ---
-                                Text("REFINAR BÚSQUEDA", color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.height(12.dp))
+                                // --- 3. SECCIÓN: REFINAR BÚSQUEDA (GRID DINÁMICO) ---
+                                if (refinementFilters.isNotEmpty()) {
+                                    Text("REFINAR BÚSQUEDA", color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.height(12.dp))
 
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    // Fila 1 de refinamiento
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                        val row1 = listOf(
-                                            ControlItem("Local", Icons.Default.Storefront, "🏪", Color(0xFF2197F5), "filter_local"),
-                                            ControlItem("Envios", Icons.Default.LocalShipping, "🚚", Color(0xFF9B51E0), "filter_envios"),
-                                            ControlItem("24hs", Icons.Default.AccessTimeFilled, "⏳", Color(0xFFFF9800), "filter_24hs"),
-                                            ControlItem("Turnos", Icons.Default.EventAvailable, "📅", Color(0xFF00FFC2), "filter_turnos")
-                                        )
-                                        row1.forEach { item ->
-                                            CompactItemButton(item = item, isSelected = activeFilters.contains(item.id), onClick = { onAction(item.id) })
-                                        }
-                                    }
-                                    // Fila 2 de refinamiento
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                        val row2 = listOf(
-                                            ControlItem("Fast", Icons.Default.Bolt, "⚡", Color(0xFFFFEB3B), "filter_fast"),
-                                            ControlItem("Verif.", Icons.Default.Verified, "✅", Color(0xFF9B51E0), "filter_verif"),
-                                            ControlItem("Favs", Icons.Default.Favorite, "❤️", Color(0xFFE91E63), "filter_favs"),
-                                            ControlItem("Cerca", Icons.Default.LocationOn, "📍", Color(0xFF4CAF50), "filter_cerca")
-                                        )
-                                        row2.forEach { item ->
-                                            CompactItemButton(item = item, isSelected = activeFilters.contains(item.id), onClick = { onAction(item.id) })
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        // 🔥 DIBUJA AUTOMÁTICAMENTE LOS FILTROS RECIBIDOS EN FILAS DE 4
+                                        refinementFilters.chunked(4).forEach { rowItems ->
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                                rowItems.forEach { item ->
+                                                    CompactItemButton(item = item, isSelected = activeFilters.contains(item.id), onClick = { onAction(item.id) })
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -371,115 +353,44 @@ fun MenuFiltros(
     }
 }
 
-
-
-                                /**
-// --- LÓGICA DE FILTROS (MANTENIDA INTACTA) ---
-                                // 🔥 NUEVA SECCIÓN: PRODUCTOS Y SERVICIOS (Si está habilitado)
-                                if (showProductService) {
-                                    Text("TIPO DE OFERTA", color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceEvenly
-                                    ) {
-                                        CompactItemButton(
-                                            item = ControlItem("Productos", Icons.Default.ShoppingBag, "🛍️", Color(0xFF22D3EE), "filter_productos"),
-                                            isSelected = activeFilters.contains("filter_productos"),
-                                            onClick = { onAction("filter_productos") }
-                                        )
-                                        CompactItemButton(
-                                            item = ControlItem("Servicios", Icons.Default.Build, "🔧", Color(0xFFF59E0B), "filter_servicios"),
-                                            isSelected = activeFilters.contains("filter_servicios"),
-                                            onClick = { onAction("filter_servicios") }
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                }
-
-                                // SECCIÓN CATEGORÍAS (ServiceTag)
-                                if (dynamicCategories.isNotEmpty()) {
-                                    Text("CATEGORÍAS", color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        items(dynamicCategories) { item ->
-                                            val isSelected = activeFilters.contains(item.id)
-                                            Box(modifier = Modifier.clickable { onAction(item.id) }) {
-                                                ServiceTag(
-                                                    text = item.label,
-                                                    color = if (isSelected) item.color else item.color.copy(alpha = 0.2f),
-                                                    icon = item.emoji,
-                                                    modifier = Modifier.border(
-                                                        width = if (isSelected) 1.5.dp else 0.5.dp,
-                                                        color = if (isSelected) Color.White else Color.Transparent,
-                                                        shape = RoundedCornerShape(6.dp)
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                }
-
-                                // SECCIÓN REFINAR (Filtros Técnicos migrados de TacticalPanel)
-                                Text("REFINAR BÚSQUEDA", color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                        val row1 = listOf(
-                                            ControlItem("Local", Icons.Default.Storefront, "🏪", Color(0xFF2197F5), "filter_local"),
-                                            ControlItem("Envios", Icons.Default.LocalShipping, "🚚", Color(0xFF9B51E0), "filter_envios"),
-                                            ControlItem("24hs", Icons.Default.AccessTimeFilled, "⏳", Color(0xFFFF9800), "filter_24hs"),
-                                            ControlItem("Turnos", Icons.Default.EventAvailable, "📅", Color(0xFF00FFC2), "filter_turnos")
-                                        )
-                                        row1.forEach { item ->
-                                            CompactItemButton(item = item, isSelected = activeFilters.contains(item.id), onClick = { onAction(item.id) })
-                                        }
-                                    }
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                        val row2 = listOf(
-                                            ControlItem("Fast", Icons.Default.Bolt, "⚡", Color(0xFFFFEB3B), "filter_fast"),
-                                            ControlItem("Verif.", Icons.Default.Verified, "✅", Color(0xFF9B51E0), "filter_verif"),
-                                            ControlItem("Favs", Icons.Default.Favorite, "❤️", Color(0xFFE91E63), "filter_favs"),
-                                            ControlItem("Cerca", Icons.Default.LocationOn, "📍", Color(0xFF4CAF50), "filter_cerca")
-                                        )
-                                        row2.forEach { item ->
-                                            CompactItemButton(item = item, isSelected = activeFilters.contains(item.id), onClick = { onAction(item.id) })
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-**/
-
+/**
+ * Vista previa exhaustiva de MenuFiltros con datos de ejemplo.
+ */
 @Preview(showBackground = true, backgroundColor = 0xFF05070A)
 @Composable
 fun MenuFiltrosPreview() {
-    val sampleCategories = listOf(
-        ControlItem("Limpieza", Icons.Default.CleaningServices, "🧹", Color(0xFF2197F5), "cat_limpieza"),
-        ControlItem("Plomería", Icons.Default.Build, "🪠", Color(0xFF9B51E0), "cat_plomeria")
-    )
     MyApplicationTheme {
-        Box(modifier = Modifier.padding(16.dp)) {
+        // Estado local para simular la interacción en la Preview
+        var activeFilters by remember { mutableStateOf(setOf("filter_products", "cat_plomeria")) }
+        
+        // Categorías dinámicas de ejemplo
+        val sampleCategories = listOf(
+            ControlItem("Plomería", null, "🔧", Color(0xFF2197F5), "cat_plomeria"),
+            ControlItem("Electricidad", null, "⚡", Color(0xFFFFEB3B), "cat_electricidad"),
+            ControlItem("Pintura", null, "🖌️", Color(0xFF4CAF50), "cat_pintura")
+        )
+        
+        // Filtros de refinamiento (estilo BeBrain)
+        val sampleRefinements = listOf(
+            ControlItem("Suscrito", Icons.Default.Verified, "✅", Color(0xFF9B51E0), "filter_sub"),
+            ControlItem("Favorito", Icons.Default.Favorite, "❤️", Color(0xFFE91E63), "filter_fav"),
+            ControlItem("Online", Icons.Default.Circle, "🌐", Color(0xFF10B981), "filter_online"),
+            ControlItem("24hs", Icons.Default.AccessTimeFilled, "⏳", Color(0xFFFF9800), "filter_24h")
+        )
+
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
             MenuFiltros(
-                activeFilters = setOf("filter_local"),
+                activeFilters = activeFilters,
                 dynamicCategories = sampleCategories,
-                onAction = {},
-                onApply = {},
-                onClearFilters = {},
-                showProductService = true
+                refinementFilters = sampleRefinements,
+                showProductService = true,
+                onAction = { id ->
+                    val current = activeFilters.toMutableSet()
+                    if (!current.add(id)) current.remove(id)
+                    activeFilters = current
+                },
+                onApply = { /* Simulación de aplicar */ },
+                onClearFilters = { activeFilters = emptySet() }
             )
         }
     }

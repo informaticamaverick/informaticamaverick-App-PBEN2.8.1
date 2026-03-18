@@ -87,6 +87,9 @@ fun AppNavigation(
     val isDormido by hudViewModel.isBeDormido.collectAsStateWithLifecycle()
     val showBeTools by hudViewModel.showBeTools.collectAsStateWithLifecycle()
     val requestKeyboard by hudViewModel.requestKeyboard.collectAsStateWithLifecycle() // 🔥 CONEXIÓN: Recolectamos el estado del teclado del ViewModel
+    
+    // 🔥 SUSCRIPCIÓN AL DISPARADOR DE RESETEO 🔥
+    val resetBeTrigger by hudViewModel.resetBePositionTrigger.collectAsStateWithLifecycle()
 
 
     AppNavigationContent(
@@ -102,6 +105,7 @@ fun AppNavigation(
         favorites = favorites,
         allCategories = categories, // 🔥 Pasamos las categorías
         isBottomBarVisible = isBottomBarVisible,
+        resetBeTrigger = resetBeTrigger, // 🔥 PASAMOS EL TRIGGER
         onRouteChanged = { hudViewModel.onRouteChanged(it) },
         onToggleFavorite = { id, isFav -> providerViewModel.toggleFavoriteStatus(id, isFav) },
         onBeClick = { hudViewModel.onBeClick() },
@@ -126,6 +130,7 @@ fun AppNavigationContent(
     favorites: List<Provider>,
     allCategories: List<CategoryEntity>, // 🔥 NUEVO: Todas las categorías
     isBottomBarVisible: Boolean,
+    resetBeTrigger: Int, // 🔥 AGREGAMOS PARÁMETRO
     onRouteChanged: (String?) -> Unit,
     onToggleFavorite: (String, Boolean) -> Unit,
     onBeClick: () -> Unit,
@@ -233,6 +238,17 @@ fun AppNavigationContent(
                 composable(route = Screen.Login.route, enterTransition = secondaryEnterTransition, exitTransition = secondaryExitTransition) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Login Screen Placeholder") }
                 }
+                //***********************************************************************************
+                composable(route = Screen.Presupuestos.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) {
+                    PresupuestosScreen(
+                        viewModel = hiltViewModel(),
+                        onBack = { navController.popBackStack() },
+                        onChatClick = { pid -> navController.navigate("chat?providerId=$pid") },
+                        bottomPadding = innerPadding,
+                        beBrainViewModel = beViewModel // 🔥 PASAMOS LA INSTANCIA GLOBAL AQUÍ
+                    )
+                }
+
             }
         }
         // --- PANTALLA DE RESULTADOS DE BE (GLOBAL OVERLAY) ---
@@ -269,6 +285,9 @@ fun AppNavigationContent(
             val beTopPadding by animateDpAsState(targetValue = if (isSearchActive) topInsets + 8.dp else 0.dp)
             val beBottomPadding by animateDpAsState(targetValue = if (isSearchActive) 0.dp else 40.dp)
             Box(modifier = Modifier.fillMaxSize()) {
+
+//----------------------------------------------------------------------------------------------------------
+//---------------------------------- 🏠 CASA DE BE 🏠-------------------------------------------------------
                 Box(
                     modifier = Modifier
                         .fillMaxWidth() // 🔥 MODIFICACIÓN CLAVE: Obliga al contenedor padre a usar todo el ancho de la pantalla.
@@ -291,40 +310,17 @@ fun AppNavigationContent(
                         currentActions = currentActions,
                         showSmallActions = showBeTools,
                         requestKeyboard = requestKeyboard,
+                        resetTrigger = resetBeTrigger, // 🔥 CONEXIÓN FINAL REALIZADA AQUÍ
                         onToggleSearch = onBeClick,
                         onToggleActions = onBeLongClick,
                         onToggleSleep = onBeDoubleClick
                     )
                 }
+                // 🏠 CASA DE BE 🏠
+//----------------------------------------------------------------------------------------------------------
             }
         }
 
-           /**
-            Box(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier.align(BiasAlignment(horizontalBias = 1f, verticalBias = beVerticalBias))
-                        .navigationBarsPadding().padding(end = beHorizontalPadding, top = beTopPadding, bottom = beBottomPadding)
-                ) {
-                    BeAssistantSearchFab(
-                        isSearchActive = isSearchActive,
-                        searchQuery = searchQuery,
-                        contextMessages = beMessages,
-                        onSearchQueryChange = onSearchQueryChange,
-                        onSearchStateChange = { },
-                        onBubbleActionClick = { },
-                        isDormido = isDormido,
-                        currentActions = currentActions,
-                        showSmallActions = showBeTools,
-                        requestKeyboard = requestKeyboard, // 🔥 CONEXIÓN FINAL: El componente ahora recibe la orden
-                        onToggleSearch = onBeClick,
-                        onToggleActions = onBeLongClick,
-                        onToggleSleep = onBeDoubleClick
-                    )
-                }
-            }
-        }
-
-        **/
         // --- PANEL DE FAVORITOS (GLOBAL OVERLAY) ---
         if (showFavoritesPanel) {
             Box(modifier = Modifier.fillMaxSize().zIndex(600f).background(Color.Black.copy(alpha = 0.65f)).clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { showFavoritesPanel = false })
