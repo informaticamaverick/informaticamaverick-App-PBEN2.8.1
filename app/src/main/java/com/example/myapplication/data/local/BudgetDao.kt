@@ -55,6 +55,12 @@ interface BudgetDao {
     fun getAllDirectBudgets(): Flow<List<BudgetEntity>>
 
     /**
+     * 🔥 [NUEVO] Obtiene todos los presupuestos sin filtros.
+     */
+    @Query("SELECT * FROM budgets")
+    fun getAllBudgets(): Flow<List<BudgetEntity>>
+
+    /**
      * Obtiene todos los presupuestos recibidos para una licitación específica.
      * Esto permite al cliente comparar los montos totales (grandTotal).
      */
@@ -72,4 +78,13 @@ interface BudgetDao {
      */
     @Update
     suspend fun updateBudgetStatus(budget: BudgetEntity)
+
+    /**
+     * 🔥 [NUEVO] Marca un presupuesto como leído.
+     */
+    @Query("UPDATE budgets SET isRead = 1 WHERE budgetId = :bId")
+    suspend fun markAsRead(bId: String)
+
+    @Query("DELETE FROM budgets WHERE budgetId = :bId")
+    suspend fun deleteBudget(bId: String)
 }

@@ -5,7 +5,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -105,35 +107,20 @@ fun BeSmallActionsBuilder(
             ) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
         ) {
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth() // Ocupa todo el ancho
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-
-                       // .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    visibleActions.chunked(4).forEach { rowActions ->
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(), // La fila también se expande
-                            horizontalArrangement = Arrangement.SpaceBetween, // 🔥 Distribuye iconos en el ancho total
-                           // horizontalArrangement = Arrangement.spacedBy(14.dp), // <-- [ESPACIO] Entre iconos
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            rowActions.forEach { action -> SmallActionButton(action) }
-                        }
-                    }
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                visibleActions.forEach { action -> SmallActionButton(action) }
             }
         }
     }
-/**
- * Constructor de Barra por Defecto (Fast, Lic, Fav).
- * ACTUALIZADO: Ahora utiliza la misma configuración de fondo y altura que BeSmallActionsBuilder.
- */
+}
+/*** Constructor de Barra por Defecto (Fast, Lic, Fav).* ACTUALIZADO: Ahora utiliza la misma configuración de fondo y altura que BeSmallActionsBuilder.*/
 @Composable
 fun BeDefaultActionsBand(
     isVisible: Boolean,
@@ -167,7 +154,6 @@ fun BeDefaultActionsBand(
                     )
             )
         }
-
         // --- 2. ICONOS CON EFECTO REBOTE (IGUALADO A SMALLACTIONS) ---
         AnimatedVisibility(
             visible = isVisible && defaultActions.isNotEmpty(),
@@ -182,8 +168,8 @@ fun BeDefaultActionsBand(
                      //   .fillMaxWidth() // Ocupa todo el ancho de la pantalla
                        // .padding(horizontal = 25.dp, vertical = 10.dp), // Más padding lateral para que no toquen los bordes
                   //  horizontalArrangement = Arrangement.SpaceBetween, // 🔥 Los separa equitativamente
-                    modifier = Modifier.padding(10.dp), // <-- [MISMO PADDING INTERNO]
-                   horizontalArrangement = Arrangement.spacedBy(14.dp), // <-- [MISMO ESPACIO] Antes 12.dp, ahora 14.dp
+                    modifier = Modifier.padding(6.dp), // <-- [MISMO PADDING INTERNO]
+                   horizontalArrangement = Arrangement.spacedBy(5.dp), // <-- [MISMO ESPACIO] Antes 12.dp, ahora 14.dp
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     defaultActions.forEach { action -> SmallActionButton(action) }
@@ -191,16 +177,29 @@ fun BeDefaultActionsBand(
             }
         }
     }
-
-/**
- * Botón individual con Emoji, Descripción y Sacudida (Shake).
- */
+/*** Botón individual con Emoji, Descripción y Sacudida (Shake).*/
 //  ESTE ES EL BOTON BASE, LO USAN LAS 2 FUNCIONES ANTERIORES
 @Composable
 fun SmallActionButton(action: BeSmallActionModel) {
+    if (action.id == "divider_v") {
+        Box(
+            modifier = Modifier
+                .width(12.dp) // Reducido para mejor integración con el espaciado de 2dp
+                .height(46.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(24.dp)
+                    .background(Color.White.copy(alpha = 0.2f))
+            )
+        }
+        return
+    }
+
     val scope = rememberCoroutineScope()
     val rotation = remember { Animatable(0f) }
-
     val scale by animateFloatAsState(
         targetValue = if (action.isSelected) 1.2f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
@@ -209,17 +208,17 @@ fun SmallActionButton(action: BeSmallActionModel) {
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(54.dp) // <-- [ANCHO BOTÓN] Área táctil total por botón
+        modifier = Modifier.width(46.dp) // <-- Ajustado a 46.dp para que con spacedBy(2.dp) la separación sea exacta
     ) {
         Box(
             modifier = Modifier
-                .size(46.dp) // <-- [TAMAÑO CÍRCULO] Diámetro del botón
+                .size(46.dp) // <-- [TAMAÑO BOTÓN]
                 .scale(scale)
                 .graphicsLayer { rotationZ = rotation.value } // Aplica animación de sacudida
-                .shadow(if (action.isSelected) 10.dp else 0.dp, CircleShape, spotColor = Color(0xFF22D3EE))
-                .clip(CircleShape)
+                .shadow(if (action.isSelected) 10.dp else 0.dp, RoundedCornerShape(12.dp), spotColor = Color(0xFF22D3EE))
+                .clip(RoundedCornerShape(12.dp))
                 .background(if (action.isSelected) Color(0xFF22D3EE).copy(alpha = 0.25f) else Color(0xFF1A1F26)) // <-- [FONDO BOTÓN]
-                .border(1.dp, (if (action.isSelected) Color(0xFF22D3EE) else Color.White).copy(alpha = 0.6f), CircleShape)
+                .border(1.dp, (if (action.isSelected) Color(0xFF22D3EE) else Color.White).copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                 .clickable {
                     scope.launch {
                         // SECUENCIA DE SACUDIDA RÁPIDA
@@ -237,15 +236,15 @@ fun SmallActionButton(action: BeSmallActionModel) {
                 Text(text = action.emoji, fontSize = 22.sp) // <-- [TAMAÑO EMOJI]
             } else {
                 Icon(
-                    imageVector = action.icon, 
-                    contentDescription = action.label, 
-                    tint = if (action.isSelected) Color(0xFF22D3EE) else action.tint, 
+                    imageVector = action.icon,
+                    contentDescription = action.label,
+                    tint = if (action.isSelected) Color(0xFF22D3EE) else action.tint,
                     modifier = Modifier.size(24.dp) // <-- [TAMAÑO ICONO VECTORIAL]
                 )
             }
         }
         
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
             text = action.label,
@@ -261,9 +260,6 @@ fun SmallActionButton(action: BeSmallActionModel) {
 @Composable
 fun BeSmallActionsBuilderPreview() {
     val sampleActions = listOf(
-        BeSmallActionModel("1", Icons.Default.FlashOn, "Fast", emoji = "⚡", isDefault = true) {},
-        BeSmallActionModel("2", Icons.Default.Gavel, "Licitación", emoji = "⚖️", isDefault = true) {},
-        BeSmallActionModel("3", Icons.Default.Favorite, "Favoritos", emoji = "❤️", isDefault = true) {},
         BeSmallActionModel("4", Icons.Default.Share, "Compartir", emoji = "📤") {},
         BeSmallActionModel("5", Icons.Default.Delete, "Borrar", emoji = "🗑️", tint = Color.Red) {}
     )

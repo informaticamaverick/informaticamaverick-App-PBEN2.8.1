@@ -15,10 +15,13 @@ data class TenderEntity(
     val title: String,             // Título: "Arreglo de techo", "Instalación A/C"
     val description: String,       // Detalle de lo que el cliente necesita
     val category: String,          // Categoría: "Plomero", "Electricista"
-    val status: String = "ABIERTA", // Estado: ABIERTA, CERRADA, ADJUDICADA
+    val status: String = "ABIERTA", // Estado: ABIERTA, CERRADA, ADJUDICADA, CANCELADA
     val dateTimestamp: Long = System.currentTimeMillis(),
     val endDate: Long = 0,       // Fecha de fin de la licitación
-    val budgetCount: Int = 0       // Cuántos presupuestos ha recibido esta licitación
+    val budgetCount: Int = 0,       // Cuántos presupuestos ha recibido esta licitación
+    val cancellationDate: Long? = null, // 🔥 Fecha en la que se canceló
+    val awardedProviderId: String? = null, // 🔥 [NUEVO] ID del prestador adjudicado
+    val awardedProviderName: String? = null // 🔥 [NUEVO] Nombre del prestador adjudicado
 )
 
 /**
@@ -66,6 +69,7 @@ data class BudgetEntity(
     val executionTime: String? = null,  // Ej: "Aproximadamente 2 días"
 
     val status: BudgetStatus = BudgetStatus.PENDIENTE,
+    val isRead: Boolean = false, // 🔥 [NUEVO] Indica si el cliente ya abrió el presupuesto
     val dateTimestamp: Long = System.currentTimeMillis()
 )
 

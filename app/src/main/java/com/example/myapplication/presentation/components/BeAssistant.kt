@@ -83,23 +83,21 @@ fun BeAssistantSearchFab(
     modifier: Modifier = Modifier,
     // Estados sincronizados con BeBrainViewModel
     isSearchActive: Boolean = false,
-    searchQuery: String = "", // 🔥 MODIFICACIÓN: Habilitado para búsqueda en tiempo real
+    searchQuery: String = "", 
     contextMessages: List<BeMessage> = emptyList(),
     isDormido: Boolean = false,
-    //isThinking: Boolean = false,
     currentActions: List<BeSmallActionModel> = emptyList(),
     showSmallActions: Boolean = false,
-    requestKeyboard: Boolean = false, // 🔥 NUEVO: Recibe el estado del teclado del ViewModel
+    requestKeyboard: Boolean = false,
+    isMultiSelectionActive: Boolean = false, // 🔥 NUEVO: Estado de multiselección
     // Callbacks de acción
-    onSearchQueryChange: (String) -> Unit = {}, // 🔥 MODIFICACIÓN: Habilitado para búsqueda en tiempo real
+    onSearchQueryChange: (String) -> Unit = {},
     onSearchStateChange: (Boolean) -> Unit = {},
     onBubbleActionClick: () -> Unit = {},
     onToggleSearch: () -> Unit = {},
     onToggleActions: () -> Unit = {},
     onToggleSleep: () -> Unit = {},
-    //prueba de Be para que vuelva a casa🏠 ***********************************************
-    resetTrigger: Int = 0, // Recibe la orden
-    //************************************************************************************
+    resetTrigger: Int = 0,
 ) {
 
 
@@ -118,9 +116,7 @@ fun BeAssistantSearchFab(
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-   // val isImeVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
 
-    //**************************************************
     // 🏠 EFECTO DE REGRESO A CASA
     LaunchedEffect(resetTrigger) {
         if (resetTrigger > 0) {
@@ -128,16 +124,10 @@ fun BeAssistantSearchFab(
             offsetY = 0f
         }
     }
-    //************************************************PRUEBA PARA QUE BE VUELVA A SU CASA
 
-
-
-
-    // 🔥 MODIFICACIÓN: Separamos la lógica del teclado del estado de búsqueda activa
     // --- EFECTO PARA SOLICITUD EXPLÍCITA DE TECLADO ---
     LaunchedEffect(requestKeyboard) {
         if (requestKeyboard) {
-            // Solo si se pide explícitamente (ej: openKeyboard() en ViewModel)
             delay(300)
             focusRequester.requestFocus()
             keyboardController?.show()
@@ -147,15 +137,13 @@ fun BeAssistantSearchFab(
     // --- EFECTO PARA GESTIÓN DE FOCO Y ESTADOS SEGÚN BÚSQUEDA ---
     LaunchedEffect(isSearchActive) {
         if (!isSearchActive) {
-            // Si la búsqueda se apaga, cerramos teclado y quitamos foco
             keyboardController?.hide()
             focusManager.clearFocus()
         }
-        // Si entramos en búsqueda, nos aseguramos de que Be no esté en modo "Talking"
         if (isSearchActive && state == BeState.TALKING) state = BeState.IDLE
     }
 
-    // --- CEREBRO DEL ASISTENTE (Lógica de notificación local) ---
+    // --- CEREBRO DEL ASISTENTE ---
     LaunchedEffect(state, contextMessages, isDormido) {
         if (isDormido) { state = BeState.IDLE; return@LaunchedEffect }
         when (state) {
@@ -208,10 +196,9 @@ fun BeAssistantSearchFab(
         modifier = (if (showSmallActions) Modifier.fillMaxSize() else modifier.fillMaxWidth())
             .zIndex(if (isDragging || state == BeState.TALKING || isSearchActive) 200f else 100f),
         contentAlignment = if (isSearchActive) Alignment.TopEnd else Alignment.BottomEnd
-       // contentAlignment = Alignment.BottomEnd // Anclamos todo al extremo derecho inferior
-
     ) {
         // --- CAPA 0: SCRIM GLOBAL PARA CERRAR ACCIONES ---
+        // 🔥 MODIFICACIÓN: Si la multiselección está activa, el scrim es "transparente" a clicks
         AnimatedVisibility(
             visible = showSmallActions,
             enter = fadeIn(),
@@ -221,14 +208,23 @@ fun BeAssistantSearchFab(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.1f)) // Sutil oscurecimiento
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { onToggleActions() })
-                    }
+                    .then(
+                        if (!isMultiSelectionActive) {
+                            Modifier.clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) {
+                                onToggleActions()
+                            }
+                        } else {
+                            // 🔥 Si hay multiselección, el Scrim no debe capturar clicks para permitir tocar las tarjetas
+                            Modifier
+                        }
+                    )
             )
         }
 
-        // --- NUEVA CAPA: SCRIM SUPERIOR PARA BÚSQUEDA (INVERTIDO) ---
-        // Este bloque añade el Blur y el degradado que pediste cuando la búsqueda está activa
+        // --- CAPA: SCRIM SUPERIOR PARA BÚSQUEDA (INVERTIDO) ---
         AnimatedVisibility(
             visible = isSearchActive,
             enter = fadeIn(tween(400)) + expandVertically(expandFrom = Alignment.Top),
@@ -237,15 +233,15 @@ fun BeAssistantSearchFab(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp) // Altura similar a la de herramientas pero arriba
+                    .height(140.dp) 
                     .align(Alignment.TopCenter)
-                    .blur(15.dp) // Mismo nivel de desenfoque
+                    .blur(15.dp) 
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.98f), // 🔥 Inicia oscuro arriba
+                                Color.Black.copy(alpha = 0.98f), 
                                 Color.Black.copy(alpha = 0.7f),
-                                Color.Transparent               // 🔥 Termina transparente hacia abajo
+                                Color.Transparent               
                             )
                         )
                     )
@@ -253,10 +249,7 @@ fun BeAssistantSearchFab(
         }
 
         // --- CAPA 1: HERRAMIENTAS (ESTÁTICA) ---
-        // Estas herramientas se quedan en la posición inicial y no siguen el movimiento de Be.
         if (!isDormido && !isSearchActive) {
-            // 🔥 MODIFICACIÓN: Transición fluida entre bandas.
-            // Ambas viven en el mismo Box para que las animaciones de BeBuild.kt se solapen correctamente.
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
 
                 // 1. Barra Extendida (BeBuild): Solo si se mantiene presionado
@@ -274,24 +267,20 @@ fun BeAssistantSearchFab(
         }
 
         // --- CAPA 2: ASISTENTE BE (MÓVIL) ---
-        // Esta capa responde al arrastre (offsetX/offsetY) y al vuelo táctico.
-
         Row(
             modifier = Modifier
                 .offset { IntOffset((offsetX + flySidePx).roundToInt(), (offsetY + flyUpPx).roundToInt()) }
-                // 🔥 MODIFICACIÓN: Si la búsqueda está activa, la Row toma todo el ancho de la pantalla
                 .then(if (isSearchActive) Modifier.fillMaxWidth().padding(start = 16.dp) else Modifier),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.End
         ) {
             if (isSearchActive) {
-                // 🔥 MODIFICACIÓN: SearchBarComponent ahora recibe query y focusRequester
                 SearchBarComponent(
                     query = searchQuery,
                     onQueryChange = onSearchQueryChange,
                     focusRequester = focusRequester,
                     onSearchClick = { keyboardController?.show(); focusRequester.requestFocus() },
-                    modifier = Modifier.weight(1f) // 🔥 MODIFICACIÓN: Obliga a la barra a expandirse ocupando el espacio restante
+                    modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
             }

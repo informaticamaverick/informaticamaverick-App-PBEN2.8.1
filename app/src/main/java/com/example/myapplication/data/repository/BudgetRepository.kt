@@ -32,6 +32,11 @@ class BudgetRepository @Inject constructor(
     val directBudgets: Flow<List<BudgetEntity>> = budgetDao.getAllDirectBudgets()
 
     /**
+     * 🔥 [NUEVO] Lista de todos los presupuestos recibidos.
+     */
+    val allBudgets: Flow<List<BudgetEntity>> = budgetDao.getAllBudgets()
+
+    /**
      * Obtiene los presupuestos específicos de una licitación.
      * Útil para la pantalla de "Comparar Ofertas".
      */
@@ -92,10 +97,24 @@ class BudgetRepository @Inject constructor(
     }
 
     /**
+     * 🔥 [NUEVO] Marca un presupuesto como leído en la DB.
+     */
+    suspend fun markBudgetAsRead(budgetId: String) {
+        budgetDao.markAsRead(budgetId)
+    }
+
+    /**
      * Borra una licitación localmente.
      */
     suspend fun removeTender(tenderId: String) {
         budgetDao.deleteTender(tenderId)
         // TODO: Borrar también en Firebase si es necesario
+    }
+
+    /**
+     * Borra un presupuesto localmente.
+     */
+    suspend fun removeBudget(budgetId: String) {
+        budgetDao.deleteBudget(budgetId)
     }
 }

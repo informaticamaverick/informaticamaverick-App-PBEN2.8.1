@@ -46,6 +46,7 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+
 // ==================================================================================
 // --- DEFINICIÓN CENTRALIZADA DE TODAS LAS RUTAS DE LA APLICACIÓN ---
 // ==================================================================================
@@ -71,7 +72,8 @@ fun AppNavigation(
     // Inyectamos el nuevo ViewModel renombrado que actúa como cerebro del HUD
     hudViewModel: BeBrainViewModel = hiltViewModel(),
     providerViewModel: ProviderViewModel = hiltViewModel(),
-    categoryViewModel: CategoryViewModel = hiltViewModel() // 🔥 NUEVO: ViewModel de categorías
+    categoryViewModel: CategoryViewModel = hiltViewModel(), // 🔥 NUEVO: ViewModel de categorías
+    simulationViewModel: SimulationViewModel = hiltViewModel() // 🔥 NUEVO: Motor de simulación
 ) {
     // Suscripción reactiva a los estados del cerebro de Be
     val showBe by hudViewModel.showBe.collectAsStateWithLifecycle()
@@ -91,9 +93,12 @@ fun AppNavigation(
     // 🔥 SUSCRIPCIÓN AL DISPARADOR DE RESETEO 🔥
     val resetBeTrigger by hudViewModel.resetBePositionTrigger.collectAsStateWithLifecycle()
 
+    val isMultiSelectionActive by hudViewModel.isMultiSelectionActive.collectAsStateWithLifecycle() // 🔥 NUEVO: Estado de multiselección
+
 
     AppNavigationContent(
         beViewModel = hudViewModel,
+        simulationViewModel = simulationViewModel,
         showBe = showBe,
         isSearchActive = isSearchActive,
         searchQuery = searchQueries, // 🔥 Pasamos el query
@@ -106,6 +111,7 @@ fun AppNavigation(
         allCategories = categories, // 🔥 Pasamos las categorías
         isBottomBarVisible = isBottomBarVisible,
         resetBeTrigger = resetBeTrigger, // 🔥 PASAMOS EL TRIGGER
+        isMultiSelectionActive = isMultiSelectionActive, // 🔥 PASAMOS EL ESTADO
         onRouteChanged = { hudViewModel.onRouteChanged(it) },
         onToggleFavorite = { id, isFav -> providerViewModel.toggleFavoriteStatus(id, isFav) },
         onBeClick = { hudViewModel.onBeClick() },
@@ -119,6 +125,7 @@ fun AppNavigation(
 @Composable
 fun AppNavigationContent(
     beViewModel: BeBrainViewModel,
+    simulationViewModel: SimulationViewModel,
     showBe: Boolean,
     isSearchActive: Boolean,
     searchQuery: String,
@@ -131,6 +138,7 @@ fun AppNavigationContent(
     allCategories: List<CategoryEntity>, // 🔥 NUEVO: Todas las categorías
     isBottomBarVisible: Boolean,
     resetBeTrigger: Int, // 🔥 AGREGAMOS PARÁMETRO
+    isMultiSelectionActive: Boolean, // 🔥 NUEVO
     onRouteChanged: (String?) -> Unit,
     onToggleFavorite: (String, Boolean) -> Unit,
     onBeClick: () -> Unit,
@@ -151,6 +159,8 @@ fun AppNavigationContent(
                 "fast" -> navController.navigate(Screen.Fast.route) { launchSingleTop = true }
                 "licit" -> navController.navigate(Screen.CrearLicitacion.route) { launchSingleTop = true }
                 "fav" -> showFavoritesPanel = !showFavoritesPanel
+                "sim_chat" -> simulationViewModel.simulateFiveDirectBudgetsToChat()
+                "sim_tender" -> simulationViewModel.simulateTenderResponsesForEachActive()
             }
         }
 
@@ -213,9 +223,7 @@ fun AppNavigationContent(
                 composable(route = Screen.Home.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) {
                     HomeScreenComplete(navController = navController, bottomPadding = innerPadding, beViewModel = beViewModel)
                 }
-                composable(route = Screen.Presupuestos.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) {
-                    PresupuestosScreen(viewModel = hiltViewModel(), onBack = { navController.popBackStack() }, onChatClick = { pid -> navController.navigate("chat?providerId=$pid") }, bottomPadding = innerPadding)
-                }
+                
                 composable(route = Screen.Chat.route, arguments = listOf(navArgument("providerId") { type = NavType.StringType; nullable = true; defaultValue = null }), enterTransition = mainEnterTransition, exitTransition = mainExitTransition) { backStackEntry ->
                     val providerId = backStackEntry.arguments?.getString("providerId")
                     ChatScreen(onBack = { navController.popBackStack() }, initialProviderId = providerId)
@@ -238,7 +246,8 @@ fun AppNavigationContent(
                 composable(route = Screen.Login.route, enterTransition = secondaryEnterTransition, exitTransition = secondaryExitTransition) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Login Screen Placeholder") }
                 }
-                //***********************************************************************************
+                
+                // --- RUTA UNIFICADA DE PRESUPUESTOS CON CONEXIÓN BE ---
                 composable(route = Screen.Presupuestos.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) {
                     PresupuestosScreen(
                         viewModel = hiltViewModel(),
@@ -311,6 +320,7 @@ fun AppNavigationContent(
                         showSmallActions = showBeTools,
                         requestKeyboard = requestKeyboard,
                         resetTrigger = resetBeTrigger, // 🔥 CONEXIÓN FINAL REALIZADA AQUÍ
+                        isMultiSelectionActive = isMultiSelectionActive, // 🔥 NUEVO
                         onToggleSearch = onBeClick,
                         onToggleActions = onBeLongClick,
                         onToggleSleep = onBeDoubleClick

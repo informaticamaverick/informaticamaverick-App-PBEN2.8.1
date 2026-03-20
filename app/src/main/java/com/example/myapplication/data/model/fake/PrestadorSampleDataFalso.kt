@@ -27,7 +27,7 @@ object PrestadorSampleDataFalso {
         val providers = generateProviders(realCategories)
 
         // PASO 2: Generar Licitaciones de ejemplo
-        val tenders = generateTenders(realCategories)
+        val tenders = generateTenders(realCategories, providers)
 
         // PASO 3: Generar Agenda Técnica (Visitas, Turnos, Envíos)
         val calendarEvents = generateCalendarEvents(providers)
@@ -39,6 +39,45 @@ object PrestadorSampleDataFalso {
             messages = emptyList(),
             calendarEvents = calendarEvents
         )
+    }
+
+    private fun generateTenders(realCategories: List<CategoryEntity>, providers: List<ProviderEntity>): List<TenderEntity> {
+        val categoryNames = realCategories.map { it.name }.ifEmpty { listOf("Informatica", "Hogar", "Electricidad") }
+        val tenders = mutableListOf<TenderEntity>()
+
+        val titlesMap = mapOf(
+            "ABIERTA" to listOf("Arreglo de Techo", "Pintura de Fachada", "Instalación de AC"),
+            "CERRADA" to listOf("Mantenimiento de Jardín", "Limpieza de Tanque", "Recableado Eléctrico"),
+            "ADJUDICADA" to listOf("Reparación de Cañería", "Instalación de Cámaras", "Servicio de Flete"),
+            "CANCELADA" to listOf("Construcción de Quincho", "Pulido de Pisos", "Cambio de Aberturas")
+        )
+
+        // Generamos al menos 2 por cada estado solicitado
+        listOf("ABIERTA", "CERRADA", "ADJUDICADA", "CANCELADA").forEach { status ->
+            val titles = titlesMap[status] ?: listOf("Tarea de $status")
+
+            repeat(Random.nextInt(2, 4)) { i ->
+                val id = "T-${status.take(1)}-$i-${UUID.randomUUID().toString().take(4)}"
+                val provider = if (status == "ADJUDICADA") providers.random() else null
+
+                tenders.add(
+                    TenderEntity(
+                        tenderId = id,
+                        title = titles.random() + " #$i",
+                        description = "Requerimiento para el hogar/negocio. Se solicita presupuesto detallado para $status.",
+                        category = categoryNames.random(),
+                        status = status,
+                        dateTimestamp = System.currentTimeMillis() - (86400000 * Random.nextInt(1, 16)),
+                        endDate = System.currentTimeMillis() + (86400000 * Random.nextInt(5, 20)),
+                        cancellationDate = if (status == "CANCELADA") System.currentTimeMillis() - 7200000 else null,
+                        awardedProviderId = provider?.id,
+                        awardedProviderName = provider?.displayName,
+                        budgetCount = Random.nextInt(1, 12)
+                    )
+                )
+            }
+        }
+        return tenders.shuffled()
     }
 
     private fun generateProviders(realCategories: List<CategoryEntity>): List<ProviderEntity> {
@@ -131,30 +170,6 @@ object PrestadorSampleDataFalso {
         }
 
         return events
-    }
-
-    private fun generateTenders(realCategories: List<CategoryEntity>): List<TenderEntity> {
-        val categoryNames = realCategories.map { it.name }.ifEmpty { listOf("Informatica", "Hogar", "Electricidad") }
-
-        val sampleTenders = listOf(
-            TenderEntity(
-                tenderId = "T-001",
-                title = "Reparación de Techo",
-                description = "Filtraciones en el techo del garaje. Requiere sellado urgente.",
-                category = categoryNames.random(),
-                status = "ABIERTA",
-                dateTimestamp = System.currentTimeMillis() - 86400000 * 1
-            ),
-            TenderEntity(
-                tenderId = "T-002",
-                title = "Instalación Eléctrica Local",
-                description = "Instalación completa de luminarias en local comercial nuevo.",
-                category = categoryNames.random(),
-                status = "ADJUDICADA",
-                dateTimestamp = System.currentTimeMillis() - 86400000 * 10
-            )
-        )
-        return sampleTenders.shuffled().take(Random.nextInt(1, 3))
     }
 
     /**

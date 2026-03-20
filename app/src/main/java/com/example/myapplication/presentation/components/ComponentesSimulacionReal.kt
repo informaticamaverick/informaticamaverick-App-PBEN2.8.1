@@ -70,6 +70,105 @@ class SimulationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 🔥 [NUEVO] Simulación de 5 presupuestos directos de distintos prestadores al chat.
+     * Garantiza el envío de al menos 5 mensajes de distintos prestadores con presupuestos.
+     */
+    fun simulateFiveDirectBudgetsToChat() {
+        viewModelScope.launch {
+            val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
+            val allProviders = providerRepository.allProviders.first().shuffled()
+            
+            if (allProviders.size < 5) {
+                Toast.makeText(application, "Necesitas al menos 5 prestadores para esta simulación.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            val selectedProviders = allProviders.take(5)
+
+            selectedProviders.forEachIndexed { index, provider ->
+                val chatId = "chat_${currentUserId}_${provider.id}"
+                
+                // Mensaje de saludo realista
+                val greetings = listOf(
+                    "Hola! Analicé lo que necesitabas y te armé este presupuesto.",
+                    "Buenas tardes, un gusto. Aquí te envío mi propuesta detallada.",
+                    "Hola, vi tu pedido. Te adjunto el presupuesto para que lo revises.",
+                    "¿Cómo estás? Te paso la cotización por el servicio solicitado.",
+                    "Hola! Te envío el presupuesto técnico con el desglose de materiales."
+                ).random()
+                
+                simulateMessage(chatId, currentUserId, provider, greetings, MessageType.TEXT)
+                
+                delay(Random.nextLong(1000, 2500)) // Delay para simular escritura
+
+                // Crear presupuesto con precio variado
+                val budget = createUltraRealisticBudget(currentUserId, provider, null)
+                budgetRepository.receiveBudgetFromChat(budget)
+
+                // Enviar mensaje del presupuesto al chat
+                simulateMessage(
+                    chatId = chatId,
+                    currentUserId = currentUserId,
+                    provider = provider,
+                    text = "📄 Presupuesto Directo #${budget.budgetId.takeLast(4)}",
+                    type = MessageType.BUDGET,
+                    relatedId = budget.budgetId
+                )
+                
+                delay(800)
+            }
+            notificationHelper.showNotification("Simulación", "Has recibido 5 nuevos presupuestos en tus chats.")
+        }
+    }
+
+    /**
+     * 🔥 [NUEVO] Simulación de respuestas para TODAS las licitaciones activas.
+     * Envía por lo menos 5 presupuestos de distintos prestadores por cada licitación abierta.
+     */
+    fun simulateTenderResponsesForEachActive() {
+        viewModelScope.launch {
+            val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
+            val openTenders = budgetRepository.getOpenTenders()
+            
+            if (openTenders.isEmpty()) {
+                Toast.makeText(application, "No tienes licitaciones ABIERTAS para simular respuestas.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+
+            openTenders.forEach { tender ->
+                // Buscamos prestadores de la misma categoría de la licitación
+                val matchingProviders = providerRepository.getProvidersByCategory(tender.category).shuffled()
+                
+                // Si no hay suficientes en la categoría, completamos con generales para llegar a 5
+                val selectedProviders = if (matchingProviders.size >= 5) {
+                    matchingProviders.take(5)
+                } else {
+                    val all = providerRepository.allProviders.first().shuffled()
+                    (matchingProviders + all.filter { it.id !in matchingProviders.map { p -> p.id } }).take(5)
+                }
+
+                selectedProviders.forEach { provider ->
+                    // Crear presupuesto vinculado a la licitación con alta variabilidad de precio
+                    val budget = createUltraRealisticBudget(currentUserId, provider, tender.tenderId, tender.category)
+                    budgetRepository.receiveBudgetFromChat(budget)
+                    
+                    // También enviamos un aviso al chat para mayor realismo
+                    val chatId = "chat_${currentUserId}_${provider.id}"
+                    simulateMessage(
+                        chatId = chatId,
+                        currentUserId = currentUserId,
+                        provider = provider,
+                        text = "¡Hola! He enviado una propuesta para tu licitación de '${tender.title}'. Quedo a tu disposición.",
+                        type = MessageType.TEXT
+                    )
+                }
+            }
+
+            notificationHelper.showNotification("Licitaciones", "Se han generado ofertas para todas tus licitaciones activas (${openTenders.size}).")
+        }
+    }
+
     fun simulateMassiveTenderResponses() {
         viewModelScope.launch {
             val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
@@ -119,7 +218,11 @@ class SimulationViewModel @Inject constructor(
     }
 
     private fun createUltraRealisticBudget(clientId: String, provider: Provider, tenderId: String?, forceCategory: String? = null): BudgetEntity {
-        val profileFactor = listOf(0.8, 1.0, 1.5, 2.5).random()
+        // Mayor variabilidad de precios: Factor base + micro-variabilidad aleatoria
+        val baseFactor = listOf(0.7, 0.9, 1.1, 1.3, 1.8, 2.5).random()
+        val microVariability = Random.nextDouble(0.9, 1.15)
+        val profileFactor = baseFactor * microVariability
+
         val category = forceCategory ?: listOf("Electricidad", "Plomería", "Climatización").random()
         
         val items = mutableListOf<BudgetItem>()

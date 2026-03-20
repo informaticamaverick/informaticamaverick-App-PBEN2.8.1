@@ -87,6 +87,105 @@ class SimulationViewModel @Inject constructor(
     }
 
     /**
+     * 🔥 [NUEVO] Simulación de 5 presupuestos directos de distintos prestadores al chat.
+     * Garantiza el envío de al menos 5 mensajes de distintos prestadores con presupuestos.
+     */
+    fun simulateFiveDirectBudgetsToChat() {
+        viewModelScope.launch {
+            val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
+            val allProviders = providerRepository.allProviders.first().shuffled()
+            
+            if (allProviders.size < 5) {
+                Toast.makeText(application, "Necesitas al menos 5 prestadores para esta simulación.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            val selectedProviders = allProviders.take(5)
+
+            selectedProviders.forEach { provider ->
+                val chatId = "chat_${currentUserId}_${provider.id}"
+                
+                // Mensaje de saludo realista
+                val greetings = listOf(
+                    "¡Hola! Analicé lo que necesitabas y te armé este presupuesto.",
+                    "Buenas tardes, un gusto. Aquí te envío mi propuesta detallada.",
+                    "Hola, vi tu pedido. Te adjunto el presupuesto para que lo revises.",
+                    "¿Cómo estás? Te paso la cotización por el servicio solicitado.",
+                    "¡Hola! Te envío el presupuesto técnico con el desglose de materiales."
+                ).random()
+                
+                simulateMessage(chatId, currentUserId, provider, greetings, MessageType.TEXT)
+                
+                delay(Random.nextLong(1500, 3000)) // Delay para simular escritura
+
+                // Crear presupuesto con precio variado
+                val budget = createProfessionalDesglosadoBudget(currentUserId, provider, null)
+                budgetRepository.receiveBudgetFromChat(budget)
+
+                // Enviar mensaje del presupuesto al chat
+                simulateMessage(
+                    chatId = chatId,
+                    currentUserId = currentUserId,
+                    provider = provider,
+                    text = "📄 Presupuesto Directo #${budget.budgetId.takeLast(4)}",
+                    type = MessageType.BUDGET,
+                    relatedId = budget.budgetId
+                )
+                
+                delay(1000)
+            }
+            notificationHelper.showNotification("Simulación", "Has recibido 5 nuevos presupuestos en tus chats.")
+        }
+    }
+
+    /**
+     * 🔥 [NUEVO] Simulación de respuestas para TODAS las licitaciones activas.
+     * Envía por lo menos 5 presupuestos de distintos prestadores por cada licitación abierta.
+     */
+    fun simulateTenderResponsesForEachActive() {
+        viewModelScope.launch {
+            val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
+            val openTenders = budgetRepository.getOpenTenders()
+            
+            if (openTenders.isEmpty()) {
+                Toast.makeText(application, "No tienes licitaciones ABIERTAS para simular respuestas.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+
+            openTenders.forEach { tender ->
+                // Buscamos prestadores de la misma categoría de la licitación
+                val matchingProviders = providerRepository.getProvidersByCategory(tender.category).shuffled()
+                
+                // Si no hay suficientes en la categoría, completamos con generales para llegar a 5
+                val selectedProviders = if (matchingProviders.size >= 5) {
+                    matchingProviders.take(5)
+                } else {
+                    val all = providerRepository.allProviders.first().shuffled()
+                    (matchingProviders + all.filter { it.id !in matchingProviders.map { p -> p.id } }).take(5)
+                }
+
+                selectedProviders.forEach { provider ->
+                    // Crear presupuesto vinculado a la licitación con alta variabilidad de precio
+                    val budget = createProfessionalDesglosadoBudget(currentUserId, provider, tender.tenderId, tender.category)
+                    budgetRepository.receiveBudgetFromChat(budget)
+                    
+                    // También enviamos un aviso al chat para mayor realismo
+                    val chatId = "chat_${currentUserId}_${provider.id}"
+                    simulateMessage(
+                        chatId = chatId,
+                        currentUserId = currentUserId,
+                        provider = provider,
+                        text = "¡Hola! He enviado una propuesta para tu licitación de '${tender.title}'. Quedo a tu disposición.",
+                        type = MessageType.TEXT
+                    )
+                }
+            }
+
+            notificationHelper.showNotification("Licitaciones", "Se han generado ofertas para todas tus licitaciones activas.")
+        }
+    }
+
+    /**
      * SIMULACIÓN B: GENERACIÓN MASIVA PARA LICITACIONES (20 Presupuestos)
      * Crea respuestas automáticas para probar la tabla comparativa de columnas.
      * 🔥 Nombre restaurado a simulateTenderResponses para mantener compatibilidad con HomeScreenCliente3
@@ -176,7 +275,7 @@ class SimulationViewModel @Inject constructor(
     /**
      * 🔥 CREADOR DE PRESUPUESTOS (ADAPTADO EXACTAMENTE A TUS DATA CLASSES)
      */
-    private fun createProfessionalDesglosadoBudget(clientId: String, provider: Provider, tenderId: String?): BudgetEntity {
+    private fun createProfessionalDesglosadoBudget(clientId: String, provider: Provider, tenderId: String?, forceCategory: String? = null): BudgetEntity {
 
         val randomValue = Random.nextDouble()
         val priceMultiplier = when {
@@ -185,21 +284,26 @@ class SimulationViewModel @Inject constructor(
             else -> Random.nextDouble(0.9, 1.2)
         }
 
+        val category = forceCategory ?: provider.categories.firstOrNull() ?: "General"
+
         // 1. MATERIALES (BudgetItem usa unitPrice y quantity)
-        val items = listOf(
-            BudgetItem(
-                code = "MAT-01",
-                description = "Kit de Insumos Técnicos Cat.A",
-                quantity = 1,
-                unitPrice = 15000.0 * priceMultiplier
-            ),
-            BudgetItem(
-                code = "MAT-02",
-                description = "Componentes de Repuesto Original",
-                quantity = 2,
-                unitPrice = 4500.0 * priceMultiplier
-            )
-        )
+        val items = mutableListOf<BudgetItem>()
+        
+        when(category) {
+            "Electricidad" -> {
+                items.add(BudgetItem(description = "Cable Unipolar 2.5mm (Normalizado)", quantity = 1, unitPrice = 45000.0 * priceMultiplier))
+                items.add(BudgetItem(description = "Térmica Sica 2x20A", quantity = 2, unitPrice = 8500.0 * priceMultiplier))
+            }
+            "Plomería" -> {
+                items.add(BudgetItem(description = "Kit Termofusión Agua Fría/Caliente", quantity = 1, unitPrice = 15000.0 * priceMultiplier))
+                items.add(BudgetItem(description = "Grifería Monocomando Premium", quantity = 1, unitPrice = 85000.0 * priceMultiplier))
+            }
+            else -> {
+                items.add(BudgetItem(description = "Kit de Insumos Técnicos Cat.A", quantity = 1, unitPrice = 15000.0 * priceMultiplier))
+                items.add(BudgetItem(description = "Componentes de Repuesto Original", quantity = 2, unitPrice = 4500.0 * priceMultiplier))
+            }
+        }
+        
         val itemsTotal = items.sumOf { it.unitPrice * it.quantity }
 
         // 2. SERVICIOS (BudgetService usa solo total)
@@ -250,6 +354,7 @@ class SimulationViewModel @Inject constructor(
             clientId = clientId,
             providerId = provider.id,
             tenderId = tenderId,
+            category = category,
             providerName = provider.displayName,
             providerCompanyName = provider.companies.firstOrNull()?.name,
             providerPhotoUrl = provider.photoUrl,
@@ -280,365 +385,3 @@ class SimulationViewModel @Inject constructor(
         )
     }
 }
-
-/**
-package com.example.myapplication.presentation.client
-
-import android.app.Application
-import android.widget.Toast
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.example.myapplication.data.local.BudgetEntity
-import com.example.myapplication.data.local.BudgetItem
-import com.example.myapplication.data.local.BudgetStatus
-import com.example.myapplication.data.local.MessageEntity
-import com.example.myapplication.data.model.MessageType
-import com.example.myapplication.data.model.Provider
-import com.example.myapplication.data.repository.BudgetRepository
-import com.example.myapplication.data.repository.ChatRepository
-import com.example.myapplication.data.repository.ProviderRepository
-import com.example.myapplication.presentation.util.NotificationHelper
-import com.google.firebase.auth.FirebaseAuth
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import java.util.UUID
-import javax.inject.Inject
-import kotlin.random.Random
-
-/**
- * VIEWMODEL DE SIMULACIÓN PROFESIONAL (MAVERICK FAST)
- * [ACTUALIZADO] Adaptado a la nueva estructura de categorías (List<String>) y campos de Provider.
- */
-@HiltViewModel
-class SimulationViewModel @Inject constructor(
-    private val auth: FirebaseAuth,
-    private val chatRepository: ChatRepository,
-    private val budgetRepository: BudgetRepository,
-    private val providerRepository: ProviderRepository,
-    private val application: Application
-) : ViewModel() {
-
-    private val notificationHelper = NotificationHelper(application)
-
-    /**
-     * Simulación A: CHAT Y PRESUPUESTO DIRECTO
-     * Genera respuestas de TODOS los chats activos actuales.
-     */
-    fun simulateProviderWelcomeAndBudget(specificClientId: String? = null) {
-        viewModelScope.launch {
-            val currentUserId = specificClientId ?: auth.currentUser?.uid ?: "user_demo_66"
-
-            // Obtenemos IDs de chats donde ya hubo interacción
-            val activeChatIds = chatRepository.getActiveChatIds(currentUserId).first()
-            val allProviders = providerRepository.allProviders.first()
-
-            val targetProviders = if (activeChatIds.isNotEmpty()) {
-                allProviders.filter { activeChatIds.contains(it.id) }
-            } else {
-                // Si no hay chats, iniciamos con 2 al azar para no estar vacíos
-                allProviders.shuffled().take(2)
-            }
-
-            if (targetProviders.isEmpty()) {
-                Toast.makeText(application, "No hay prestadores para simular.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            Toast.makeText(application, "Simulando respuestas en ${targetProviders.size} chats...", Toast.LENGTH_SHORT).show()
-
-            targetProviders.forEachIndexed { index, provider ->
-                launch {
-                    delay(index * 2000L)
-                    executeDirectChatSimulation(currentUserId, provider)
-                }
-            }
-        }
-    }
-
-    /**
-     * Simulación B: RESPUESTAS A LICITACIONES (TENDERS)
-     * Busca licitaciones abiertas y genera presupuestos técnicos.
-     */
-    fun simulateTenderResponses() {
-        viewModelScope.launch {
-            val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
-            val openTenders = budgetRepository.getOpenTenders()
-            val allProviders = providerRepository.allProviders.first()
-
-            if (openTenders.isEmpty()) {
-                Toast.makeText(application, "Crea una Licitación ABIERTA para simular.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            var count = 0
-            openTenders.forEach { tender ->
-                // 🔥 CORRECCIÓN: Buscamos prestadores donde su LISTA de categorías contenga la categoría de la licitación
-                val candidates = allProviders.filter { provider ->
-                    provider.categories.any { it.equals(tender.category, ignoreCase = true) }
-                }
-
-                candidates.shuffled().take(Random.nextInt(1, 3)).forEach { provider ->
-                    val budget = createProfessionalA4Budget(currentUserId, provider, tender.tenderId)
-                    budgetRepository.receiveBudgetFromChat(budget)
-                    count++
-                }
-            }
-
-            if (count > 0) {
-                notificationHelper.showNotification("Gestión Comercial", "Recibiste $count propuestas nuevas.")
-                Toast.makeText(application, "Se generaron $count presupuestos.", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(application, "No se hallaron prestadores para los rubros licitados.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private suspend fun executeDirectChatSimulation(currentUserId: String, provider: Provider) {
-        val chatId = "chat_${currentUserId}_${provider.id}"
-
-        val welcomeText = "¡Hola! Soy ${provider.name}. Estuve viendo tu consulta y te envío mi propuesta formal."
-        sendSimulatedMessage(chatId, currentUserId, provider, welcomeText, MessageType.TEXT)
-        notificationHelper.showNotification(provider.displayName, welcomeText)
-
-        delay(3000L)
-
-        val newBudget = createProfessionalA4Budget(currentUserId, provider, null)
-        budgetRepository.receiveBudgetFromChat(newBudget)
-
-        sendSimulatedMessage(
-            chatId = chatId,
-            currentUserId = currentUserId,
-            provider = provider,
-            text = "Presupuesto Técnico #${newBudget.budgetId.takeLast(4)}",
-            type = MessageType.BUDGET,
-            relatedId = newBudget.budgetId
-        )
-        notificationHelper.showNotification("Nuevo Presupuesto", "De: ${provider.displayName}")
-    }
-
-    private suspend fun sendSimulatedMessage(chatId: String, currentUserId: String, provider: Provider, text: String, type: MessageType, relatedId: String? = null) {
-        val msg = MessageEntity(
-            id = UUID.randomUUID().toString(),
-            chatId = chatId,
-            senderId = provider.id,
-            receiverId = currentUserId,
-            type = type,
-            content = text,
-            timestamp = System.currentTimeMillis(),
-            relatedId = relatedId,
-            isRead = false
-        )
-        chatRepository.sendMessage(msg)
-    }
-
-    private fun createProfessionalA4Budget(clientId: String, provider: Provider, tenderId: String?): BudgetEntity {
-        val items = listOf(
-            BudgetItem(description = "Mantenimiento Técnico Especializado", quantity = 1, unitPrice = 15000.0),
-            BudgetItem(description = "Insumos y Materiales", quantity = 1, unitPrice = 12000.0),
-            BudgetItem(description = "Mano de Obra Calificada", quantity = 1, unitPrice = 8000.0)
-        )
-        val total = items.sumOf { it.unitPrice * it.quantity }
-
-        return BudgetEntity(
-            budgetId = "SIM-${Random.nextInt(1000, 9999)}",
-            clientId = clientId,
-            providerId = provider.id,
-            tenderId = tenderId,
-            providerName = provider.displayName,
-            // 🔥 Usamos la información real de la empresa si existe
-            providerCompanyName = provider.companies.firstOrNull()?.name ?: "${provider.lastName} Soluciones",
-            providerPhotoUrl = provider.photoUrl,
-            items = items,
-            subtotal = total,
-            grandTotal = total,
-            status = BudgetStatus.PENDIENTE,
-            notes = if (tenderId != null) "Respuesta a Licitación Ref: $tenderId" else "Presupuesto directo Maverick.",
-            dateTimestamp = System.currentTimeMillis()
-        )
-    }
-}
-
-
-
-**/
-
-
-
-/**package com.example.myapplication.presentation.client
-
-import android.app.Application
-import android.widget.Toast
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.example.myapplication.data.local.BudgetEntity
-import com.example.myapplication.data.local.BudgetItem
-import com.example.myapplication.data.local.BudgetStatus
-import com.example.myapplication.data.local.MessageEntity
-import com.example.myapplication.data.local.TenderEntity
-import com.example.myapplication.data.model.MessageType
-import com.example.myapplication.data.model.Provider
-import com.example.myapplication.data.repository.BudgetRepository
-import com.example.myapplication.data.repository.ChatRepository
-import com.example.myapplication.data.repository.ProviderRepository
-import com.example.myapplication.presentation.util.NotificationHelper
-import com.google.firebase.auth.FirebaseAuth
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import java.util.UUID
-import javax.inject.Inject
-import kotlin.random.Random
-
-/**
- * VIEWMODEL DE SIMULACIÓN PROFESIONAL (MAVERICK FAST)
- * Centraliza la lógica de creación de presupuestos y mensajes simulados.
- */
-@HiltViewModel
-class SimulationViewModel @Inject constructor(
-    private val auth: FirebaseAuth,
-    private val chatRepository: ChatRepository,
-    private val budgetRepository: BudgetRepository,
-    private val providerRepository: ProviderRepository,
-    private val application: Application
-) : ViewModel() {
-
-    private val notificationHelper = NotificationHelper(application)
-
-    /**
-     * Simulación A: CHAT Y PRESUPUESTO DIRECTO
-     * Genera respuestas de TODOS los chats activos actuales.
-     */
-    fun simulateProviderWelcomeAndBudget(specificClientId: String? = null) {
-        viewModelScope.launch {
-            val currentUserId = specificClientId ?: auth.currentUser?.uid ?: "user_demo_66"
-            
-            // Obtenemos IDs de chats donde ya hubo interacción
-            val activeChatIds = chatRepository.getActiveChatIds(currentUserId).first()
-            val allProviders = providerRepository.allProviders.first()
-
-            val targetProviders = if (activeChatIds.isNotEmpty()) {
-                allProviders.filter { activeChatIds.contains(it.id) }
-            } else {
-                // Si no hay chats, iniciamos con 2 al azar para no estar vacíos
-                allProviders.shuffled().take(2)
-            }
-
-            if (targetProviders.isEmpty()) {
-                Toast.makeText(application, "No hay prestadores para simular.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            Toast.makeText(application, "Simulando respuestas en ${targetProviders.size} chats...", Toast.LENGTH_SHORT).show()
-
-            targetProviders.forEachIndexed { index, provider ->
-                launch {
-                    delay(index * 2000L) // Delay Long corregido
-                    executeDirectChatSimulation(currentUserId, provider)
-                }
-            }
-        }
-    }
-
-    /**
-     * Simulación B: RESPUESTAS A LICITACIONES (TENDERS)
-     * Busca licitaciones abiertas y genera presupuestos técnicos. NO genera chats.
-     */
-    fun simulateTenderResponses() {
-        viewModelScope.launch {
-            val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
-            val openTenders = budgetRepository.getOpenTenders()
-            val allProviders = providerRepository.allProviders.first()
-
-            if (openTenders.isEmpty()) {
-                Toast.makeText(application, "Crea una Licitación ABIERTA para simular respuestas.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            var count = 0
-            openTenders.forEach { tender ->
-                // Buscamos prestadores del mismo rubro
-                val candidates = allProviders.filter { it.categories.equals(tender.categories, true) }
-                
-                candidates.shuffled().take(Random.nextInt(1, 3)).forEach { provider ->
-                    val budget = createProfessionalA4Budget(currentUserId, provider, tender.tenderId)
-                    budgetRepository.receiveBudgetFromChat(budget)
-                    count++
-                }
-            }
-
-            if (count > 0) {
-                notificationHelper.showNotification("Gestión Comercial", "Recibiste $count propuestas nuevas en tus licitaciones.")
-                Toast.makeText(application, "Se generaron $count presupuestos en tus carpetas.", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(application, "No se hallaron prestadores para los rubros licitados.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private suspend fun executeDirectChatSimulation(currentUserId: String, provider: Provider) {
-        val chatId = "chat_${currentUserId}_${provider.id}"
-        
-        val welcomeText = "¡Hola! Soy ${provider.name}. Estuve viendo tu consulta y te envío mi propuesta formal."
-        sendSimulatedMessage(chatId, currentUserId, provider, welcomeText, MessageType.TEXT)
-        notificationHelper.showNotification(provider.displayName, welcomeText)
-
-        delay(3000L)
-
-        val newBudget = createProfessionalA4Budget(currentUserId, provider, null)
-        budgetRepository.receiveBudgetFromChat(newBudget)
-        
-        sendSimulatedMessage(
-            chatId = chatId,
-            currentUserId = currentUserId,
-            provider = provider,
-            text = "Presupuesto Técnico #${newBudget.budgetId.takeLast(4)}",
-            type = MessageType.BUDGET,
-            relatedId = newBudget.budgetId
-        )
-        notificationHelper.showNotification("Nuevo Presupuesto", "De: ${provider.displayName}")
-    }
-
-    private suspend fun sendSimulatedMessage(chatId: String, currentUserId: String, provider: Provider, text: String, type: MessageType, relatedId: String? = null) {
-        val msg = MessageEntity(
-            id = UUID.randomUUID().toString(),
-            chatId = chatId,
-            senderId = provider.id,
-            receiverId = currentUserId,
-            type = type,
-            content = text,
-            timestamp = System.currentTimeMillis(),
-            relatedId = relatedId,
-            isRead = false
-        )
-        chatRepository.sendMessage(msg)
-    }
-
-    private fun createProfessionalA4Budget(clientId: String, provider: Provider, tenderId: String?): BudgetEntity {
-        val items = listOf(
-            BudgetItem(description = "Mantenimiento Técnico Especializado", quantity = 1, unitPrice = 15000.0),
-            BudgetItem(description = "Repuestos y Componentes Originales", quantity = 1, unitPrice = 25000.0),
-            BudgetItem(description = "Instalación y Configuración Final", quantity = 1, unitPrice = 8000.0)
-        )
-        val total = items.sumOf { it.unitPrice * it.quantity }
-        
-        return BudgetEntity(
-            budgetId = "SIM-${Random.nextInt(1000, 9999)}",
-            clientId = clientId,
-            providerId = provider.id,
-            tenderId = tenderId,
-            providerName = provider.displayName,
-            providerCompanyName = provider.companies.firstOrNull()?.name ?: "${provider.lastName} Soluciones",
-            providerPhotoUrl = provider.photoUrl,
-            items = items,
-            subtotal = total,
-            grandTotal = total,
-            status = BudgetStatus.PENDIENTE,
-            notes = if (tenderId != null) "Respuesta a Licitación Ref: $tenderId" else "Presupuesto directo vía chat.",
-            dateTimestamp = System.currentTimeMillis()
-        )
-    }
-}
-**/
