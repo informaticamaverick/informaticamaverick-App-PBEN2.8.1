@@ -202,6 +202,7 @@ fun EditProfileScreenUnified(
             direccionViewModel.loadDireccion(provider.id, "PRESTADOR")
             direccionViewModel.loadConsultorioDireccion(provider.id)
             referenteViewModel.loadReferentesByProvider()
+            businessViewModel.loadBusinessesByProvider(provider.id)
             verificado = provider.verificado
         }
     }
@@ -618,41 +619,48 @@ fun EditProfileScreenUnified(
                                     ) {
                                         Spacer(modifier = Modifier.height(4.dp))
 
-                                        // Datos empresa
-
-                                        CompanyDataSection(
+                                        // PRIMARY empresa card
+                                        EmpresaUnificadaCard(
+                                            titulo = "Datos de Empresa",
                                             nombreEmpresa = nombreEmpresa,
-                                            onNombreEmpresaChange = { nombreEmpresa = it },
                                             razonSocial = direccionEmpresa,
-                                            onRazonSocialChange = { direccionEmpresa = it },
                                             cuitEmpresa = cuitEmpresa,
-                                            onCuitEmpresaChange = { cuitEmpresa = it },
-                                            expanded = expandedSection == "company",
+                                            provincia = direccionActual?.provincia ?: "",
+                                            localidad = direccionActual?.localidad ?: "",
+                                            codigoPostal = direccionActual?.codigoPostal ?: "",
+                                            calle = direccionActual?.calle ?: "",
+                                            numero = direccionActual?.numero ?: "",
+                                            horario = horarioCasaCentral,
+                                            tieneSucursales = tieneSucursales,
+                                            onTieneSucursalesChange = { tieneSucursales = it },
+                                            expanded = expandedSection == "empresa_0",
                                             onExpandChange = {
-                                                expandedSection =
-                                                    if (expandedSection == "company") null else "company"
+                                                expandedSection = if (expandedSection == "empresa_0") null else "empresa_0"
                                             },
-                                            onGuardar = { nombre, razon, cuit ->
+                                            onGuardar = { nombre, razon, cuit, prov, localidad, cp, calle, numero, horario ->
                                                 pendingEmpresaRefresh = true
+                                                horarioCasaCentral = horario
                                                 viewModel.updateProfile(
                                                     nombreEmpresa = nombre,
                                                     direccionEmpresa = razon,
                                                     cuitEmpresa = cuit,
                                                     tieneEmpresa = true
                                                 )
+                                                providerId?.let { id ->
+                                                    direccionViewModel.guardarDireccion(
+                                                        referenciaId = id,
+                                                        referenciaTipo = "EMPRESA",
+                                                        pais = "Argentina",
+                                                        provincia = prov,
+                                                        localidad = localidad,
+                                                        codigoPostal = cp,
+                                                        calle = calle,
+                                                        numero = numero
+                                                    )
+                                                    viewModel.updateHorarioCasaCentral(horario)
+                                                }
                                             },
-                                            colors = colors
-                                        )
-
-                                        // Dirección empresa + referentes casa central
-                                        DireccionSection(
-                                            titulo = "Dirección Casa Central",
-                                            direccion = direccionActual,
-                                            expanded = expandedSection == "direccion_empresa",
-                                            onExpandChange = {
-                                                expandedSection =
-                                                    if (expandedSection == "direccion_empresa") null else "direccion_empresa"
-                                            },
+                                            onEliminar = null,
                                             extraContent = {
                                                 HorarioSelectorField(
                                                     horario = horarioCasaCentral,
@@ -664,20 +672,15 @@ fun EditProfileScreenUnified(
                                                     referentes = referentesActuales,
                                                     onAgregar = { nombre, apellido, cargo, imageUri ->
                                                         scope.launch {
-                                                            val imageUrl: String? =
-                                                                imageUri?.let { uri ->
-                                                                    try {
-                                                                        val ref =
-                                                                            com.google.firebase.storage.FirebaseStorage.getInstance()
-                                                                                .reference
-                                                                                .child("referentes/$providerId/${java.util.UUID.randomUUID()}.jpg")
-                                                                        ref.putFile(uri).await()
-                                                                        ref.downloadUrl.await()
-                                                                            .toString()
-                                                                    } catch (e: Exception) {
-                                                                        null
-                                                                    }
-                                                                }
+                                                            val imageUrl: String? = imageUri?.let { uri ->
+                                                                try {
+                                                                    val ref = com.google.firebase.storage.FirebaseStorage.getInstance()
+                                                                        .reference
+                                                                        .child("referentes/$providerId/${java.util.UUID.randomUUID()}.jpg")
+                                                                    ref.putFile(uri).await()
+                                                                    ref.downloadUrl.await().toString()
+                                                                } catch (e: Exception) { null }
+                                                            }
                                                             referenteViewModel.addReferente(
                                                                 nombre = nombre,
                                                                 apellido = apellido.ifBlank { null },
@@ -687,65 +690,100 @@ fun EditProfileScreenUnified(
                                                         }
                                                     },
                                                     onDesactivar = { referente ->
-                                                        referenteViewModel.desactivarReferente(
-                                                            referente.id
-                                                        )
+                                                        referenteViewModel.desactivarReferente(referente.id)
                                                     }
                                                 )
                                             },
-                                            onGuardar = { pais, provincia, localidad, codigoPostal, calle, numero ->
-                                                providerId?.let { id ->
-                                                    direccionViewModel.guardarDireccion(
-                                                        referenciaId = id,
-                                                        referenciaTipo = "EMPRESA",
-                                                        pais = pais,
-                                                        provincia = provincia,
-                                                        localidad = localidad,
-                                                        codigoPostal = codigoPostal,
-                                                        calle = calle,
-                                                        numero = numero
-                                                    )
+                                            colors = colors,
+                                            refreshTrigger = empresaGuardadaTrigger,
+                                            onUploadImage = { uri ->
+                                                try {
+                                                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "unknown"
+                                                    val ref = com.google.firebase.storage.FirebaseStorage.getInstance()
+                                                        .reference
+                                                        .child("sucursales/$uid/${java.util.UUID.randomUUID()}.jpg")
+                                                    ref.putFile(uri).await()
+                                                    ref.downloadUrl.await().toString()
+                                                } catch (e: Exception) { null }
+                                            },
+                                            onSucursalAgregada = {
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar("✅ Sucursal guardada correctamente")
                                                 }
                                             }
                                         )
 
-                                        // Sucursales
-                                        ArchiveroSection(
-                                            title = "Sucursales",
-                                            sectionId = "sucursales",
-                                            icon = Icons.Default.Store,
-                                            color = colors.primaryOrange,
-                                            modifier = Modifier.padding(horizontal = 16.dp),
-                                            expanded = expandedSection == "sucursales",
-                                            onExpandChange = {
-                                                expandedSection =
-                                                    if (expandedSection == "sucursales") null else "sucursales"
-                                            }
-                                        ) {
-                                            SucursalesSection(
-                                                colors = colors,
-                                                refreshTrigger = empresaGuardadaTrigger,
-                                                onUploadImage = { uri ->
-                                                    try {
-                                                        val uid =
-                                                            com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-                                                                ?: "unknown"
-                                                        val ref =
-                                                            com.google.firebase.storage.FirebaseStorage.getInstance()
-                                                                .reference
-                                                                .child("sucursales/$uid/${java.util.UUID.randomUUID()}.jpg")
-                                                        ref.putFile(uri).await()
-                                                        ref.downloadUrl.await().toString()
-                                                    } catch (e: Exception) {
-                                                        null
-                                                    }
+                                        // ADDITIONAL empresa cards (Empresa 2, 3, etc.)
+                                        val primaryId = businessEntity?.id
+                                        val additionalBusinesses = allBusinesses.filter { it.id != primaryId }
+
+                                        additionalBusinesses.forEachIndexed { index, business ->
+                                            EmpresaUnificadaCard(
+                                                titulo = "Empresa ${index + 2}",
+                                                nombreEmpresa = business.nombreNegocio,
+                                                razonSocial = business.razonSocial,
+                                                cuitEmpresa = business.cuitNegocio,
+                                                provincia = "",
+                                                localidad = business.direccion,
+                                                codigoPostal = business.codigoPostal,
+                                                calle = "",
+                                                numero = "",
+                                                horario = business.horario ?: "",
+                                                tieneSucursales = false,
+                                                onTieneSucursalesChange = { /* not supported for additional */ },
+                                                expanded = expandedSection == "empresa_${index + 1}",
+                                                onExpandChange = {
+                                                    expandedSection = if (expandedSection == "empresa_${index + 1}") null else "empresa_${index + 1}"
                                                 },
-                                                onSucursalAgregada = {
-                                                    scope.launch {
-                                                        snackbarHostState.showSnackbar("✅ Sucursal guardada correctamente")
-                                                    }
-                                                }
+                                                onGuardar = { nombre, razon, cuit, prov, loc, cp, calle, num, horario ->
+                                                    val updated = business.copy(
+                                                        nombreNegocio = nombre,
+                                                        razonSocial = razon,
+                                                        cuitNegocio = cuit,
+                                                        direccion = listOfNotNull(
+                                                            calle.ifBlank { null },
+                                                            num.ifBlank { null },
+                                                            loc.ifBlank { null },
+                                                            prov.ifBlank { null }
+                                                        ).joinToString(", "),
+                                                        codigoPostal = cp,
+                                                        horario = horario.ifBlank { null },
+                                                        updatedAt = System.currentTimeMillis()
+                                                    )
+                                                    businessViewModel.updateBusiness(updated)
+                                                },
+                                                onEliminar = {
+                                                    businessViewModel.deleteBusiness(business.id)
+                                                },
+                                                colors = colors
                                             )
+                                        }
+
+                                        // "+" button to add a new empresa
+                                        OutlinedButton(
+                                            onClick = {
+                                                providerId?.let { id ->
+                                                    val newBusiness = com.example.myapplication.prestador.data.local.entity.BusinessEntity(
+                                                        id = java.util.UUID.randomUUID().toString(),
+                                                        providerId = id,
+                                                        nombreNegocio = "",
+                                                        razonSocial = "",
+                                                        cuitNegocio = "",
+                                                        direccion = "",
+                                                        codigoPostal = ""
+                                                    )
+                                                    businessViewModel.saveBusiness(newBusiness)
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primaryOrange),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.primaryOrange)
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Agregar otra empresa", fontSize = 14.sp)
                                         }
                                     }
                                 }
@@ -1380,36 +1418,66 @@ fun LocationSection(
     }
 }
 
-// SECCIÓN: Datos de Empresa
+// SECCIÓN: Datos de Empresa (Unificada)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CompanyDataSection(
-nombreEmpresa: String,
-onNombreEmpresaChange: (String) -> Unit,
-razonSocial: String,
-onRazonSocialChange: (String) -> Unit,
-cuitEmpresa: String,
-onCuitEmpresaChange: (String) -> Unit,
-expanded: Boolean,
-onExpandChange: () -> Unit,
-onGuardar: (nombre: String, razonSocial: String, cuit: String) -> Unit,
-colors: com.example.myapplication.prestador.ui.theme.PrestadorColors
+private fun EmpresaUnificadaCard(
+    titulo: String = "Datos de Empresa",
+    nombreEmpresa: String,
+    razonSocial: String,
+    cuitEmpresa: String,
+    provincia: String,
+    localidad: String,
+    codigoPostal: String,
+    calle: String,
+    numero: String,
+    horario: String,
+    tieneSucursales: Boolean,
+    onTieneSucursalesChange: (Boolean) -> Unit,
+    expanded: Boolean,
+    onExpandChange: () -> Unit,
+    onGuardar: (nombre: String, razonSocial: String, cuit: String, provincia: String, localidad: String, codigoPostal: String, calle: String, numero: String, horario: String) -> Unit,
+    onEliminar: (() -> Unit)? = null,
+    extraContent: (@Composable ColumnScope.() -> Unit)? = null,
+    colors: com.example.myapplication.prestador.ui.theme.PrestadorColors,
+    refreshTrigger: Int = 0,
+    onUploadImage: (suspend (android.net.Uri) -> String?)? = null,
+    onSucursalAgregada: (() -> Unit)? = null,
 ) {
     ArchiveroSection(
-        title = "Datos de Empresa",
-        sectionId = "company",
+        title = titulo,
+        sectionId = "empresa_unificada_$titulo",
         icon = Icons.Default.Business,
         color = Color(0xFFFF9800),
         modifier = Modifier.padding(horizontal = 16.dp),
         expanded = expanded,
         onExpandChange = { onExpandChange() }
     ) {
-        var editando by remember { mutableStateOf(nombreEmpresa.isBlank()) }
+        var editando by remember(nombreEmpresa) { mutableStateOf(nombreEmpresa.isBlank()) }
         var cuitError by remember { mutableStateOf("") }
         var localNombre by remember(nombreEmpresa) { mutableStateOf(nombreEmpresa) }
         var localRazon by remember(razonSocial) { mutableStateOf(razonSocial) }
         var cuitValue by remember(cuitEmpresa) {
             mutableStateOf(TextFieldValue(cuitEmpresa, TextRange(cuitEmpresa.length)))
         }
+        var localProvincia by remember(provincia) { mutableStateOf(provincia) }
+        var localLocalidad by remember(localidad) { mutableStateOf(localidad) }
+        var localCP by remember(codigoPostal) { mutableStateOf(codigoPostal) }
+        var localCalle by remember(calle) { mutableStateOf(calle) }
+        var localNumero by remember(numero) { mutableStateOf(numero) }
+        var localHorario by remember(horario) { mutableStateOf(horario) }
+        var tieneSucursalesLocal by remember { mutableStateOf(tieneSucursales) }
+        var mostrarSugerenciasProvincia by remember { mutableStateOf(false) }
+        var mostrarSugerenciasLocalidad by remember { mutableStateOf(false) }
+
+        LaunchedEffect(tieneSucursales) { tieneSucursalesLocal = tieneSucursales }
+
+        val provinciasFiltradas = if (localProvincia.isBlank()) emptyList()
+            else PROVINCIAS_ARGENTINA.filter { it.contains(localProvincia.trim(), ignoreCase = true) }
+        val localidadesDeProvincia = LOCALIDADES_POR_PROVINCIA.entries
+            .firstOrNull { it.key.equals(localProvincia.trim(), ignoreCase = true) }?.value ?: emptyList()
+        val localidadesFiltradas = if (localLocalidad.isBlank()) localidadesDeProvincia
+            else localidadesDeProvincia.filter { it.nombre.contains(localLocalidad.trim(), ignoreCase = true) }
 
         if (!editando && nombreEmpresa.isNotBlank()) {
             // ── MODO LECTURA ──
@@ -1459,19 +1527,75 @@ colors: com.example.myapplication.prestador.ui.theme.PrestadorColors
                             }
                         }
                     }
+                    val hasAddress = listOf(calle, numero, localidad, provincia, codigoPostal).any { it.isNotBlank() }
+                    if (hasAddress) {
+                        HorizontalDivider(color = colors.border)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(shape = RoundedCornerShape(6.dp), color = colors.primaryOrange.copy(alpha = 0.12f)) {
+                                Icon(Icons.Default.LocationOn, contentDescription = null,
+                                    tint = colors.primaryOrange, modifier = Modifier.padding(6.dp).size(16.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Dirección Casa Central", fontSize = 11.sp, color = colors.textSecondary)
+                                val addrLine = listOfNotNull(
+                                    if (calle.isNotBlank()) calle else null,
+                                    if (numero.isNotBlank()) numero else null
+                                ).joinToString(" ").ifBlank { null }
+                                val cityLine = listOfNotNull(
+                                    if (localidad.isNotBlank()) localidad else null,
+                                    if (provincia.isNotBlank()) provincia else null,
+                                    if (codigoPostal.isNotBlank()) "CP $codigoPostal" else null
+                                ).joinToString(", ").ifBlank { null }
+                                if (addrLine != null) Text(addrLine, fontSize = 14.sp, color = colors.textPrimary, fontWeight = FontWeight.Medium)
+                                if (cityLine != null) Text(cityLine, fontSize = 13.sp, color = colors.textPrimary)
+                            }
+                        }
+                    }
+                    if (horario.isNotBlank()) {
+                        HorizontalDivider(color = colors.border)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(shape = RoundedCornerShape(6.dp), color = colors.primaryOrange.copy(alpha = 0.12f)) {
+                                Icon(Icons.Default.Schedule, contentDescription = null,
+                                    tint = colors.primaryOrange, modifier = Modifier.padding(6.dp).size(16.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Horario", fontSize = 11.sp, color = colors.textSecondary)
+                                Text(horario, fontSize = 14.sp, color = colors.textPrimary, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = { editando = true },
-                modifier = Modifier.align(Alignment.End),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primaryOrange),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.primaryOrange),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (onEliminar != null) Arrangement.SpaceBetween else Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Editar", fontSize = 13.sp)
+                if (onEliminar != null) {
+                    OutlinedButton(
+                        onClick = onEliminar,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Eliminar", fontSize = 13.sp)
+                    }
+                }
+                OutlinedButton(
+                    onClick = { editando = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primaryOrange),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.primaryOrange),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Editar", fontSize = 13.sp)
+                }
             }
         } else {
             // ── MODO EDICIÓN ──
@@ -1520,8 +1644,212 @@ colors: com.example.myapplication.prestador.ui.theme.PrestadorColors
                 ),
                 singleLine = true
             )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Dirección Casa Central header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border)
+                Text(
+                    text = "Dirección Casa Central",
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                    fontWeight = FontWeight.Medium
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border)
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Provincia with autocomplete
+            Column(modifier = Modifier.fillMaxWidth()) {
+                FloatingLabelTextField(
+                    value = localProvincia,
+                    onValueChange = { localProvincia = it; mostrarSugerenciasProvincia = true },
+                    label = "Provincia",
+                    leadingIcon = Icons.Default.Place
+                )
+                AnimatedVisibility(
+                    visible = mostrarSugerenciasProvincia && provinciasFiltradas.isNotEmpty(),
+                    enter = fadeIn(tween(200)) + expandVertically(tween(250)),
+                    exit = fadeOut(tween(200)) + shrinkVertically(tween(200))
+                ) {
+                    Surface(shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp), shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
+                        Column {
+                            provinciasFiltradas.take(5).forEach { prov ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            localProvincia = prov
+                                            mostrarSugerenciasProvincia = false
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                                ) {
+                                    Text(prov, fontSize = 13.sp)
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Localidad with autocomplete
+            Column(modifier = Modifier.fillMaxWidth()) {
+                FloatingLabelTextField(
+                    value = localLocalidad,
+                    onValueChange = { localLocalidad = it; mostrarSugerenciasLocalidad = true },
+                    label = "Localidad",
+                    leadingIcon = Icons.Default.LocationCity
+                )
+                AnimatedVisibility(
+                    visible = mostrarSugerenciasLocalidad && localidadesFiltradas.isNotEmpty(),
+                    enter = fadeIn(tween(200)) + expandVertically(tween(250)),
+                    exit = fadeOut(tween(200)) + shrinkVertically(tween(200))
+                ) {
+                    Surface(shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp), shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
+                        Column {
+                            localidadesFiltradas.take(5).forEach { loc ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            localLocalidad = loc.nombre
+                                            localCP = loc.codigoPostal
+                                            mostrarSugerenciasLocalidad = false
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(loc.nombre, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                    Text(loc.codigoPostal, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            FloatingLabelTextField(
+                value = localCP,
+                onValueChange = { localCP = it },
+                label = "Código Postal",
+                leadingIcon = Icons.Default.PinDrop,
+                keyboardType = KeyboardType.Text
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            FloatingLabelTextField(
+                value = localCalle,
+                onValueChange = { localCalle = it },
+                label = "Calle",
+                leadingIcon = Icons.Default.EditRoad
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            FloatingLabelTextField(
+                value = localNumero,
+                onValueChange = { localNumero = it },
+                label = "Número",
+                leadingIcon = Icons.Default.Numbers,
+                keyboardType = KeyboardType.Number
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            HorarioSelectorField(
+                horario = localHorario,
+                onHorarioChange = { localHorario = it }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            extraContent?.invoke(this)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Sucursales divider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border)
+                Text("Sucursales", fontSize = 12.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium)
+                HorizontalDivider(modifier = Modifier.weight(1f), color = colors.border)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Sucursales switch row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.backgroundColor.copy(alpha = 0.5f))
+                    .clickable {
+                        val newVal = !tieneSucursalesLocal
+                        tieneSucursalesLocal = newVal
+                        onTieneSucursalesChange(newVal)
+                    }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Store,
+                    contentDescription = null,
+                    tint = if (tieneSucursalesLocal) colors.primaryOrange else colors.textSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Sucursales",
+                    fontSize = 14.sp,
+                    color = colors.textPrimary,
+                    fontWeight = if (tieneSucursalesLocal) FontWeight.Medium else FontWeight.Normal,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = tieneSucursalesLocal,
+                    onCheckedChange = { checked ->
+                        tieneSucursalesLocal = checked
+                        onTieneSucursalesChange(checked)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = colors.primaryOrange,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = colors.textSecondary.copy(alpha = 0.3f)
+                    )
+                )
+            }
+
+            AnimatedVisibility(
+                visible = tieneSucursalesLocal,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                if (onUploadImage != null) {
+                    SucursalesSection(
+                        colors = colors,
+                        refreshTrigger = refreshTrigger,
+                        onUploadImage = { uri -> onUploadImage(uri) },
+                        onSucursalAgregada = { onSucursalAgregada?.invoke() }
+                    )
+                } else {
+                    Text(
+                        text = "Guardá los datos de la empresa para gestionar sucursales",
+                        fontSize = 13.sp,
+                        color = colors.textSecondary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Save / Cancel row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1533,6 +1861,12 @@ colors: com.example.myapplication.prestador.ui.theme.PrestadorColors
                             localRazon = razonSocial
                             cuitValue = TextFieldValue(cuitEmpresa, TextRange(cuitEmpresa.length))
                             cuitError = ""
+                            localProvincia = provincia
+                            localLocalidad = localidad
+                            localCP = codigoPostal
+                            localCalle = calle
+                            localNumero = numero
+                            localHorario = horario
                             editando = false
                         },
                         modifier = Modifier.weight(1f),
@@ -1543,10 +1877,7 @@ colors: com.example.myapplication.prestador.ui.theme.PrestadorColors
                     onClick = {
                         if (localNombre.isBlank()) return@Button
                         if (cuitError.isNotEmpty()) return@Button
-                        onNombreEmpresaChange(localNombre)
-                        onRazonSocialChange(localRazon)
-                        onCuitEmpresaChange(cuitValue.text)
-                        onGuardar(localNombre, localRazon, cuitValue.text)
+                        onGuardar(localNombre, localRazon, cuitValue.text, localProvincia, localLocalidad, localCP, localCalle, localNumero, localHorario)
                         editando = false
                     },
                     modifier = Modifier.weight(1f),
