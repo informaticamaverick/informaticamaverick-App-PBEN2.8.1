@@ -64,15 +64,26 @@ object PrestadorSampleDataFalso {
                     TenderEntity(
                         tenderId = id,
                         title = titles.random() + " #$i",
+                        isActive = status == "ABIERTA",
+                        clientId = CLIENT_ID,
                         description = "Requerimiento para el hogar/negocio. Se solicita presupuesto detallado para $status.",
                         category = categoryNames.random(),
                         status = status,
                         dateTimestamp = System.currentTimeMillis() - (86400000 * Random.nextInt(1, 16)),
+                        startDate = System.currentTimeMillis() - (86400000 * Random.nextInt(1, 5)),
                         endDate = System.currentTimeMillis() + (86400000 * Random.nextInt(5, 20)),
                         cancellationDate = if (status == "CANCELADA") System.currentTimeMillis() - 7200000 else null,
                         awardedProviderId = provider?.id,
                         awardedProviderName = provider?.displayName,
-                        budgetCount = Random.nextInt(1, 12)
+                        budgetCount = Random.nextInt(1, 12),
+                        requiresVisit = Random.nextBoolean(),
+                        requiresPaymentMethod = Random.nextBoolean(),
+                        requiresWorkGuarantee = Random.nextBoolean(),
+                        requiresProviderDoc = Random.nextBoolean(),
+                        locationAddress = "Calle Falsa",
+                        locationNumber = "123",
+                        locationLocality = "San Miguel de Tucumán",
+                        locationType = "PERSONAL"
                     )
                 )
             }
@@ -255,145 +266,54 @@ object PrestadorSampleDataFalso {
                             address = AddressProvider(calle = "Av. Aconquija", numero = "2000", localidad = "Yerba Buena"),
                             works24h = false,
                             hasPhysicalLocation = true,
-                            doesShipping = false,
+                            doesShipping = true,
                             acceptsAppointments = true,
-                            workingHours = "Lunes a Viernes: 10:00 a 18:00 hs",
+                            workingHours = "Lunes a Viernes: 10:00 a 19:00 hs",
                             galleryImages = listOf("https://images.unsplash.com/photo-1497215728101-856f4ea42174"),
-                            employees = listOf(
-                                EmployeeProvider(name = "Carlos", lastName = "López", position = "Gerente de Sucursal", detail = "Referente comercial local.", photoUrl = "https://picsum.photos/seed/carlos/200/200")
-                            )
+                            employees = emptyList()
                         )
                     )
                 )
             ),
-            photoUrl = "https://picsum.photos/seed/maverick/200/200",
-            bannerImageUrl = "https://picsum.photos/seed/maverick_banner/800/400",
-            galleryImages = listOf(
-                "https://images.unsplash.com/photo-1550751827-4bd374c3f58b",
-                "https://images.unsplash.com/photo-1518770660439-4636190af475"
-            ),
-            favoriteProviderIds = emptyList(),
             createdAt = System.currentTimeMillis()
         )
     }
 
-    private fun generateRandomProvider(categoryName: String, index: Int): ProviderEntity {
-        val id = "auto_${categoryName.lowercase()}_$index"
-        val firstName = listOf("Carlos", "Luis", "Ana", "Marta", "Silvia", "Andrés", "Pedro", "Juan", "Bautista", "Emma", "Diego").random()
-        val lastName = listOf("Díaz", "Sosa", "Rodríguez", "Fernández", "Guzmán", "López", "Pérez", "García", "Martínez").random()
-        val isPremium = Random.nextDouble() < 0.4
-
-        val companyCount = if (Random.nextDouble() < 0.3) Random.nextInt(2, 4) else 1
-        val companies = (1..companyCount).map { generateRandomCompany(categoryName, lastName, it) }
+    private fun generateRandomProvider(category: String, index: Int): ProviderEntity {
+        val names = listOf("Juan", "Pedro", "Carlos", "Luis", "Miguel", "Jorge", "Andrés", "Marcos")
+        val lastNames = listOf("Pérez", "García", "López", "Rodríguez", "Sánchez", "Martínez", "Gómez", "Díaz")
+        val name = names.random()
+        val lastName = lastNames.random()
+        val isPremium = Random.nextInt(0, 10) > 7
 
         return ProviderEntity(
-            id = id,
-            email = "pro_$index@maverick.com",
-            alternateEmail = null, 
-            displayName = "$firstName $lastName",
-            name = firstName,
+            id = "P-${category.take(3)}-$index",
+            email = "${name.lowercase()}.${lastName.lowercase()}@example.com",
+            displayName = "$name $lastName",
+            name = name,
             lastName = lastName,
-            phoneNumber = "381-${Random.nextInt(4000000, 7000000)}",
-            additionalPhones = emptyList(),
-            matricula = if (isPremium) "REG-${Random.nextInt(1000, 9999)}" else null,
-            titulo = if (isPremium) "Especialista en $categoryName" else "Profesional $categoryName",
-            cuilCuit = "20-${Random.nextInt(10000000, 40000000)}-${Random.nextInt(0, 9)}", 
-
-            address = AddressProvider(calle = "Calle Falsa", numero = "123", localidad = "Tucumán"), 
-
-            works24h = Random.nextBoolean(),
-            hasPhysicalLocation = Random.nextBoolean(),
-            doesHomeVisits = true,
-            doesShipping = Random.nextBoolean(),
-            acceptsAppointments = true,
+            phoneNumber = "381-${Random.nextInt(1000000, 9999999)}",
+            rating = 3.5f + (Random.nextFloat() * 1.5f),
+            categories = listOf(category),
+            description = "Servicio profesional de $category. Amplia experiencia y garantía.",
             isSubscribed = isPremium,
             isVerified = Random.nextBoolean(),
             isOnline = Random.nextBoolean(),
-            isFavorite = false,
-
-            rating = (37 + Random.nextInt(13)).toFloat() / 10f,
-            workingHours = "09:00 a 18:00 hs", 
-            categories = listOf(categoryName), 
-            description = "Atención profesional en $categoryName para todo Tucumán.",
-
-            companies = companies,
-            hasCompanyProfile = true,
-
-            photoUrl = "https://i.pravatar.cc/150?u=$id",
-            bannerImageUrl = "https://picsum.photos/seed/$id/800/400",
-            galleryImages = listOf("https://picsum.photos/seed/${id}g1/400/300", "https://picsum.photos/seed/${id}g2/400/300"),
-            favoriteProviderIds = emptyList(),
-            createdAt = System.currentTimeMillis() - Random.nextLong(0, 31536000000L)
-        )
-    }
-
-    private fun generateRandomCompany(categoryName: String, ownerLastName: String, index: Int): CompanyProvider {
-        val branchCount = Random.nextInt(1, 4)
-        val allBranches = (1..branchCount).map { generateRandomBranch(it) }
-        val companyId = UUID.randomUUID().toString()
-
-        return CompanyProvider(
-            id = companyId,
-            name = "$ownerLastName $categoryName S.A. #$index",
-            razonSocial = "$ownerLastName Servicios Integrales S.R.L.",
-            cuit = "30-${Random.nextInt(20000000, 35000000)}-${Random.nextInt(0, 9)}",
-            description = "Brindamos servicios de $categoryName con seriedad y confianza.",
-            rating = 4.5f,
-            categories = listOf(categoryName, "Atención Personalizada", "Turnos"), 
-            productImages = listOf("https://picsum.photos/seed/${companyId}p1/400/300", "https://picsum.photos/seed/${companyId}p2/400/300"),
-            photoUrl = "https://picsum.photos/seed/${companyId}logo/200/200",
-            bannerImageUrl = "https://picsum.photos/seed/${companyId}banner/800/400",
-            workingHours = "08:00 a 20:00 hs", 
-            works24h = Random.nextBoolean(),
-            hasPhysicalLocation = true,
-            doesHomeVisits = true,
-            doesShipping = Random.nextBoolean(),
-            acceptsAppointments = true,
-            isVerified = Random.nextBoolean(),
-
-            mainBranch = allBranches.first(), 
-            branches = if (allBranches.size > 1) allBranches.drop(1) else emptyList()
-        )
-    }
-
-    private fun generateRandomBranch(index: Int): BranchProvider {
-        val branchId = UUID.randomUUID().toString()
-        val employees = (1..Random.nextInt(1, 4)).map {
-            EmployeeProvider(
-                name = listOf("Juan", "Pedro", "Santiago", "Agustín").random(),
-                lastName = listOf("Páez", "López", "García", "Martínez").random(),
-                position = listOf("Profesional", "Supervisor", "Asistente").random(),
-                detail = "Miembro calificado del equipo.",
-                photoUrl = "https://i.pravatar.cc/150?u=${UUID.randomUUID()}"
-            )
-        }
-
-        return BranchProvider(
-            id = branchId,
-            name = "Sucursal ${listOf("Centro", "Norte", "Sur", "Yerba Buena").random()} #$index",
+            hasCompanyProfile = Random.nextBoolean(),
             address = AddressProvider(
-                calle = listOf("Av. Aconquija", "San Martín", "Belgrano").random(),
-                numero = Random.nextInt(100, 3000).toString(),
-                localidad = "Tucumán"
+                calle = "Calle ${Random.nextInt(1, 100)}",
+                numero = "${Random.nextInt(100, 2000)}",
+                localidad = "San Miguel de Tucumán"
             ),
-            works24h = false,
-            hasPhysicalLocation = true,
-            doesHomeVisits = true,
-            doesShipping = false,
-            acceptsAppointments = true,
-            isVerified = true,
-            rating = 4.2f,
-            workingHours = "09:00 a 13:00 y 17:00 a 21:00 hs",
-            galleryImages = listOf("https://picsum.photos/seed/${branchId}g1/400/300", "https://picsum.photos/seed/${branchId}g2/400/300"),
-            employees = employees
+            createdAt = System.currentTimeMillis()
         )
     }
-
-    data class DataSeedBundle(
-        val providers: List<ProviderEntity>,
-        val tenders: List<TenderEntity>,
-        val budgets: List<BudgetEntity>,
-        val messages: List<MessageEntity>,
-        val calendarEvents: List<CalendarEventEntity>
-    )
 }
+
+data class DataSeedBundle(
+    val providers: List<ProviderEntity>,
+    val tenders: List<TenderEntity>,
+    val budgets: List<BudgetEntity>,
+    val messages: List<MessageEntity>,
+    val calendarEvents: List<CalendarEventEntity>
+)

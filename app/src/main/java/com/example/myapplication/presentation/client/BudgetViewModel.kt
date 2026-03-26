@@ -1,27 +1,26 @@
 package com.example.myapplication.presentation.client
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.local.*
 import com.example.myapplication.data.model.MessageType
 import com.example.myapplication.data.repository.BudgetRepository
 import com.example.myapplication.data.repository.ChatRepository
+import com.example.myapplication.presentation.components.BeSmallActionModel
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
-
-// ==========================================================
-// --- MODELOS DE ESTADO PARA LA ANALÍTICA ---
-// ==========================================================
-// NOTA: ChartBudgetItem ya está declarado en BudgetAnalyticsScreen.kt,
-// por lo que no lo volvemos a declarar aquí para evitar el error "Redeclaration".
 
 data class AnalyticsState(
     val items: List<ChartBudgetItem> = emptyList(),
@@ -32,124 +31,368 @@ data class AnalyticsState(
     val isAnalyzing: Boolean = true
 )
 
-/**
- * --- VIEWMODEL DE PRESUPUESTOS ---
- * Integra ChatRepository para notificar decisiones al prestador
- * y un motor matemático para Analíticas en 2do plano.
- */
 @HiltViewModel
 class BudgetViewModel @Inject constructor(
     private val repository: BudgetRepository,
-    private val chatRepository: ChatRepository // 🔥 Inyectado para notificar decisiones
+    private val chatRepository: ChatRepository,
+    private val auth: FirebaseAuth
 ) : ViewModel() {
 
     // ==========================================================
-    // 1. ESTADOS (DATOS OBSERVABLES)
+    // 1. ESTADOS DE BUSQUEDA Y SELECCION (Delegados)
     // ==========================================================
+    private val _searchQueryFromBe = MutableStateFlow("") 
+    val searchQuery = _searchQueryFromBe.asStateFlow()
 
-    val tenders: StateFlow<List<TenderEntity>> = repository.allTenders
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _activeFiltersFromBe = MutableStateFlow<Set<String>>(emptySet()) 
 
-    val directBudgets: StateFlow<List<BudgetEntity>> = repository.directBudgets
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _isMultiSelectionActive = MutableStateFlow(false)
+    val isMultiSelectionActive = _isMultiSelectionActive.asStateFlow()
+
+    private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedIds = _selectedIds.asStateFlow()
+
+    private val _currentHUDContext = MutableStateFlow(HUDContext.BUDGETS)
+    val currentHUDContext = _currentHUDContext.asStateFlow()
+
+    private val _selectedTenderId = MutableStateFlow<String?>(null)
+    fun setSelectedTenderId(id: String?) { 
+        _selectedTenderId.value = id 
+    }
+
+    fun setContext(context: HUDContext) {
+        // Si el contexto cambia (por ejemplo de TENDERS a DIRECT), reseteamos la UI
+        if (_currentHUDContext.value != context) {
+            resetPageState()
+        }
+        _currentHUDContext.value = context
+    }
 
     /**
-     * 🔥 [NUEVO] Todos los presupuestos para lógica de filtrado global y notificaciones.
+     * Resetea filtros, búsqueda y multiselección de esta pantalla específica
      */
-    val allBudgets: StateFlow<List<BudgetEntity>> = repository.allBudgets
+    fun resetPageState() {
+        _isMultiSelectionActive.value = false
+        _selectedIds.value = emptySet()
+        _searchQueryFromBe.value = ""
+        // Si quieres resetear también los filtros tácticos:
+        _activeFiltersFromBe.value = emptySet()
+    }
+
+
+    // ==========================================================
+    // 2. DATOS FILTRADOS Y ORDENADOS
+    // ==========================================================
+    val allBudgets: StateFlow<List<BudgetEntity>> = repository.allBudgets 
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Estado exclusivo para la pantalla de Análisis de Mercado
-    private val _analyticsState = MutableStateFlow(AnalyticsState())
-    val analyticsState: StateFlow<AnalyticsState> = _analyticsState.asStateFlow()
+    val allTenders: StateFlow<List<TenderEntity>> = repository.allTenders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val filteredTenders: StateFlow<List<TenderEntity>> = combine(
+        allTenders,
+        _searchQueryFromBe,
+        _activeFiltersFromBe,
+        allBudgets 
+    ) { tenders, query, activeFilters, allBudgetsList ->
+        var list = if (query.isNotEmpty()) {
+            val normalized = query.prepareForSearch()
+            tenders.filter { it.title.prepareForSearch().wordStartsWith(normalized) }
+        } else {
+            tenders
+        }
+
+        val catFilters = activeFilters.filter { it.startsWith("cat_") }.map { it.removePrefix("cat_") }
+        if (catFilters.isNotEmpty()) {
+            list = list.filter { tender -> 
+                catFilters.any { it.equals(tender.category, ignoreCase = true) }
+            }
+        }
+
+        val stateFilters = activeFilters.filter { it.startsWith("filter_tender_") }
+        if (stateFilters.isNotEmpty()) {
+            list = list.filter { tender ->
+                stateFilters.any { filterId ->
+                    when (filterId) {
+                        "filter_tender_active" -> tender.status == "ABIERTA"
+                        "filter_tender_closed" -> tender.status == "CERRADA"
+                        "filter_tender_canceled" -> tender.status == "CANCELADA"
+                        "filter_tender_awarded" -> tender.status == "ADJUDICADA"
+                        else -> false
+                    }
+                }
+            }
+        }
+
+        list = list.sortedWith(compareBy<TenderEntity> { tender ->
+            when (tender.status) {
+                "ABIERTA" -> 1
+                "ADJUDICADA" -> 2
+                "CERRADA" -> 3
+                "CANCELADA" -> 4
+                else -> 5
+            }
+        }.thenByDescending { tender ->
+            if (tender.status == "ABIERTA") {
+                allBudgetsList.any { it.tenderId == tender.tenderId && !it.isRead }
+            } else false
+        }.thenByDescending { it.dateTimestamp })
+
+        if (activeFilters.contains("sort_alpha")) list = list.sortedBy { it.title }
+        if (activeFilters.contains("sort_date")) list = list.sortedByDescending { it.dateTimestamp }
+        list
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val filteredDirectBudgets: StateFlow<List<BudgetEntity>> = combine(
+        repository.directBudgets,
+        _searchQueryFromBe,
+        _activeFiltersFromBe
+    ) { budgets, query, activeFilters ->
+        applyBudgetFilters(budgets, query, activeFilters)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val filteredOverlayBudgets: StateFlow<List<BudgetEntity>> = _selectedTenderId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList())
+            else repository.getBudgetsForTender(id).combine(combine(_searchQueryFromBe, _activeFiltersFromBe) { q, f -> q to f }) { budgets, params ->
+                applyBudgetFilters(budgets, params.first, params.second)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun getFilteredBudgetsForTender(tenderId: String): StateFlow<List<BudgetEntity>> {
+        return combine(repository.getBudgetsForTender(tenderId), _searchQueryFromBe, _activeFiltersFromBe) { budgets, query, activeFilters ->
+            applyBudgetFilters(budgets, query, activeFilters)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    private fun applyBudgetFilters(budgets: List<BudgetEntity>, query: String, activeFilters: Set<String>): List<BudgetEntity> {
+        var list = if (query.isNotEmpty()) {
+            val normalized = query.prepareForSearch()
+            budgets.filter { 
+                it.providerName.prepareForSearch().wordStartsWith(normalized) || 
+                (it.providerCompanyName?.prepareForSearch()?.wordStartsWith(normalized) ?: false) || 
+                it.grandTotal.toString().startsWith(normalized) || 
+                it.budgetId.prepareForSearch().wordStartsWith(normalized)
+            }
+        } else {
+            budgets
+        }
+
+        val catFilters = activeFilters.filter { it.startsWith("cat_") }.map { it.removePrefix("cat_") }
+        if (catFilters.isNotEmpty()) {
+            list = list.filter { budget -> 
+                catFilters.any { it.equals(budget.category, ignoreCase = true) }
+            }
+        }
+
+        list = list.sortedWith(budgetComparator())
+
+        if (activeFilters.contains("sort_alpha")) list = list.sortedBy { it.providerName }
+        if (activeFilters.contains("sort_date")) list = list.sortedByDescending { it.dateTimestamp }
+        if (activeFilters.contains("sort_price")) list = list.sortedBy { it.grandTotal }
+        return list
+    }
+
+    private fun budgetComparator() = compareByDescending<BudgetEntity> { !it.isRead && it.status == BudgetStatus.PENDIENTE }
+        .thenByDescending { it.status == BudgetStatus.PENDIENTE }
+        .thenByDescending { it.status == BudgetStatus.ACEPTADO }
+        .thenByDescending { it.status == BudgetStatus.RECHAZADO || it.status == BudgetStatus.VENCIDO }
+        .thenByDescending { it.dateTimestamp }
 
     // ==========================================================
-    // 2. ACCIONES
+    // 3. FLUJO DE ACCIONES DINÁMICAS
     // ==========================================================
+    val beActions: StateFlow<List<BeSmallActionModel>> = combine(
+        _isMultiSelectionActive,
+        _selectedIds,
+        _currentHUDContext
+    ) { isMulti, selected, context ->
+        val actions = mutableListOf<BeSmallActionModel>()
+        val count = selected.size
 
-    fun createTender(title: String, description: String, category: String, endDate: Long) {
+        if (isMulti) {
+            if (context == HUDContext.BUDGETS_TENDERS) {
+                // Requerimiento Licitaciones: cerrar, divider vertical, detalles (solo si count == 1), eliminar
+                actions.add(BeSmallActionModel("cancel", Icons.Default.Close, "Cerrar") { })
+                actions.add(BeSmallActionModel("divider_v_1", Icons.Default.VerticalAlignBottom, "Divider") { })
+
+                // Icono de detalles solo si hay una seleccionada
+                if (count == 1) {
+                    actions.add(BeSmallActionModel("view_tender_details", Icons.AutoMirrored.Filled.Assignment, "Detalles", emoji = "📋") { })
+                    actions.add(BeSmallActionModel("divider_v_2", Icons.Default.VerticalAlignBottom, "Divider") { })
+                }
+
+                actions.add(BeSmallActionModel("delete_multi", Icons.Default.Delete, "Eliminar", tint = Color.Red) { })
+            } else {
+                // Requerimiento Presupuestos Directos: cerrar, divider vertical, comparar(solo si > 1), divider vertical, Todos, leidos, divider vertical, eliminar
+                actions.add(BeSmallActionModel("cancel", Icons.Default.Close, "Cerrar") { })
+                actions.add(BeSmallActionModel("divider_v_1", Icons.Default.VerticalAlignBottom, "Divider") { }) 
+                
+                if (count > 1) {
+                    actions.add(BeSmallActionModel("compare_selected", Icons.AutoMirrored.Filled.CompareArrows, "Comparar", emoji = "⚖️") { })
+                    actions.add(BeSmallActionModel("divider_v_2", Icons.Default.VerticalAlignBottom, "Divider") { })
+                }
+
+                // Unificamos IDs para que PresupuestosScreen los capture globalmente
+                actions.add(BeSmallActionModel("select_all", Icons.Default.SelectAll, "Todos", emoji = "✅") { })
+                actions.add(BeSmallActionModel("mark_as_read", Icons.Default.DoneAll, "Leídos", emoji = "📖") { })
+                actions.add(BeSmallActionModel("divider_v_3", Icons.Default.VerticalAlignBottom, "Divider") { })
+                actions.add(BeSmallActionModel("delete_multi", Icons.Default.Delete, "Eliminar", tint = Color.Red) { })
+            }
+        } else {
+
+            when (context) {
+                HUDContext.TENDER_DETAILS -> {
+                    actions.add(
+                        BeSmallActionModel(
+                            id = "compare_all",
+                            icon = Icons.AutoMirrored.Filled.CompareArrows,
+                            label = "Comparar Todo",
+                            emoji = "⚖️",
+                            isDefault = true
+                        ) {
+                            // triggerAction se maneja en el LaunchedEffect de la Screen
+                        }
+                    )
+                }
+                else -> {}
+            }
+
+        }
+        actions
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // ==========================================================
+    // 4. MÉTODOS DE DELEGACIÓN (Acciones)
+    // ==========================================================
+    fun setSearchQuery(query: String) { _searchQueryFromBe.value = query }
+    fun setFilters(filters: Set<String>) { _activeFiltersFromBe.value = filters }
+    
+    fun updateMultiSelection(active: Boolean) {
+        _isMultiSelectionActive.value = active
+        if (!active) _selectedIds.value = emptySet()
+    }
+
+    fun toggleSelection(id: String) {
+        val current = _selectedIds.value.toMutableSet()
+        if (!current.add(id)) current.remove(id)
+        _selectedIds.value = current
+    }
+
+    fun selectAll(ids: List<String>) {
+        _selectedIds.value = ids.toSet()
+    }
+
+    // --- Lógica de Negocio ---
+    fun createTender(
+        title: String,
+        description: String,
+        category: String,
+        startDate: Long,
+        endDate: Long,
+        requiresVisit: Boolean,
+        requiresPaymentMethod: Boolean,
+        requiresWorkGuarantee: Boolean,
+        requiresProviderDoc: Boolean,
+        location: LocationOption?,
+        imageUrls: List<String> = emptyList()
+    ) {
         viewModelScope.launch {
+            val currentUserId = auth.currentUser?.uid ?: "user_demo_66"
+
+            val (addr, num, loc, type) = when (location) {
+                is LocationOption.Personal -> listOf(location.address, location.number, location.locality, "PERSONAL")
+                is LocationOption.Business -> listOf(location.address, location.number, location.locality, "BUSINESS")
+                else -> listOf(null, null, null, null)
+            }
+
             val newTender = TenderEntity(
                 tenderId = UUID.randomUUID().toString(),
+                clientId = currentUserId,
                 title = title,
                 description = description,
                 category = category,
-                endDate = endDate
+                startDate = startDate,
+                endDate = endDate,
+                requiresVisit = requiresVisit,
+                requiresPaymentMethod = requiresPaymentMethod,
+                requiresWorkGuarantee = requiresWorkGuarantee,
+                requiresProviderDoc = requiresProviderDoc,
+                locationAddress = addr as? String,
+                locationNumber = num as? String,
+                locationLocality = loc as? String,
+                locationType = type as? String,
+                imageUrls = imageUrls,
+                isActive = true
             )
             repository.createNewTender(newTender)
         }
     }
 
     /**
-     * Acepta el presupuesto y envía un mensaje automático al chat del prestador.
+     * Actualiza el estado de una licitación.
      */
-    fun acceptBudget(budget: BudgetEntity) {
+    fun updateTenderStatus(tenderId: String, newStatus: String) {
         viewModelScope.launch {
-            // 1. Actualizar estado en Room
-            repository.updateBudgetStatus(budget.budgetId, BudgetStatus.ACEPTADO)
-
-            // 2. Notificar al prestador por chat
-            sendDecisionMessage(
-                budget = budget,
-                text = "✅ ¡Hola! He ACEPTADO el presupuesto #${budget.budgetId.takeLast(4)}. Por favor, contactame para agendar la visita técnica."
-            )
+            val tender = allTenders.value.find { it.tenderId == tenderId }
+            tender?.let {
+                val updated = it.copy(
+                    status = newStatus,
+                    cancellationDate = if (newStatus == "CANCELADA") System.currentTimeMillis() else it.cancellationDate,
+                    isActive = when(newStatus) {
+                        "ABIERTA" -> it.budgetCount < 100
+                        else -> false
+                    }
+                )
+                repository.createNewTender(updated)
+            }
         }
     }
 
-    /**
-     * Rechaza el presupuesto y notifica al prestador.
-     */
-    fun rejectBudget(budget: BudgetEntity) {
-        viewModelScope.launch {
-            // 1. Actualizar estado en Room
-            repository.updateBudgetStatus(budget.budgetId, BudgetStatus.RECHAZADO)
-
-            // 2. Notificar al prestador por chat
-            sendDecisionMessage(
-                budget = budget,
-                text = "❌ Hola. He decidido RECHAZAR el presupuesto #${budget.budgetId.takeLast(4)} por el momento. Gracias por tu propuesta."
-            )
-        }
-    }
-
-    /**
-     * 🔥 [NUEVO] Marca un presupuesto como leído en la base de datos persistente.
-     */
-    fun markAsRead(budgetId: String) {
-        viewModelScope.launch {
-            repository.markBudgetAsRead(budgetId)
-        }
-    }
-
-    /**
-     * 🔥 Elimina una lista de licitaciones.
-     */
-    fun deleteTenders(ids: Set<String>) {
-        viewModelScope.launch {
-            ids.forEach { repository.removeTender(it) }
-
-        }
-    }
-
-    /**
-     * 🔥 Elimina una lista de presupuestos.
-     */
-    fun deleteBudgets(ids: Set<String>) {
-        viewModelScope.launch {
-            ids.forEach { repository.removeBudget(it) }
-        }
-    }
-
-    /**
-     * 🔥 Cancela una licitación activa.
-     */
     fun cancelTender(tender: TenderEntity) {
         viewModelScope.launch {
             val updated = tender.copy(
                 status = "CANCELADA",
-                cancellationDate = System.currentTimeMillis()
+                cancellationDate = System.currentTimeMillis(),
+                isActive = false
             )
-            repository.createNewTender(updated) // El DAO usa OnConflict.REPLACE
+            repository.createNewTender(updated)
+        }
+    }
+
+    fun markAsRead(ids: Set<String>) {
+        viewModelScope.launch {
+            ids.forEach { repository.markBudgetAsRead(it) }
+        }
+    }
+
+    fun deleteBudgets(ids: Set<String>) {
+        viewModelScope.launch {
+            ids.forEach { repository.removeBudget(it) }
+            updateMultiSelection(false)
+        }
+    }
+
+    fun deleteTenders(ids: Set<String>) {
+        viewModelScope.launch {
+            ids.forEach { repository.removeTender(it) }
+            updateMultiSelection(false)
+        }
+    }
+
+    fun acceptBudget(budget: BudgetEntity) {
+        viewModelScope.launch {
+            repository.updateBudgetStatus(budget.budgetId, BudgetStatus.ACEPTADO)
+            sendDecisionMessage(budget, "✅ ¡Hola! He ACEPTADO el presupuesto #${budget.budgetId.takeLast(4)}...")
+        }
+    }
+
+    fun rejectBudget(budget: BudgetEntity) {
+        viewModelScope.launch {
+            repository.updateBudgetStatus(budget.budgetId, BudgetStatus.RECHAZADO)
+            sendDecisionMessage(budget, "❌ Hola. He decidido RECHAZAR el presupuesto #${budget.budgetId.takeLast(4)}...")
         }
     }
 
@@ -168,67 +411,62 @@ class BudgetViewModel @Inject constructor(
         chatRepository.sendMessage(message)
     }
 
-    fun getBudgetsForTender(tenderId: String): StateFlow<List<BudgetEntity>> {
-        return repository.getBudgetsForTender(tenderId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    }
-
     // ==========================================================
-    // 3. MOTOR MATEMÁTICO (CÁLCULOS PESADOS EN BACKGROUND)
+    // 5. ANALÍTICA (Fase 5)
     // ==========================================================
+    private val _analyticsState = MutableStateFlow(AnalyticsState())
+    val analyticsState: StateFlow<AnalyticsState> = _analyticsState.asStateFlow()
 
-    /**
-     * Ejecuta sumatorias y detecciones de anomalías en Dispatchers.Default
-     * para NO bloquear la UI de Jetpack Compose.
-     */
     fun analyzeBudgets(budgets: List<BudgetEntity>) {
         viewModelScope.launch(Dispatchers.Default) {
             _analyticsState.value = _analyticsState.value.copy(isAnalyzing = true)
-
             if (budgets.isEmpty()) {
                 _analyticsState.value = AnalyticsState(isAnalyzing = false)
                 return@launch
             }
-
-            // 1. Mapeo y sumatorias
             val mapped = budgets.map { budget ->
-                // Las funciones itemsTotal() y servicesTotal() ya fueron agregadas
-                // como extensiones en BudgetAnalyticsScreen.kt, por lo que podemos usarlas aquí.
-                // Sin embargo, para mayor limpieza, hacemos el cálculo directo.
                 val mat = budget.items.sumOf { it.unitPrice * it.quantity }
                 val lab = budget.services.sumOf { it.total }
                 val tax = budget.taxAmount
                 val total = mat + lab + tax
-
-                // Filtro de Anomalías (Range Check idiomático)
                 val isIrr = total !in 15000.0..200000.0
                 ChartBudgetItem(budget, total, mat, lab, tax, isIrr, false)
             }
-
-            // 2. Cálculo de Promedios sobre datos VÁLIDOS (que no son irrisorios)
             val validItems = mapped.filter { !it.isIrrisory }
             val avg = if (validItems.isNotEmpty()) validItems.map { it.total }.average() else 0.0
-
-            // 3. Zona de Valor Óptimo (+/- 15%)
             val optMin = avg * 0.85
             val optMax = avg * 1.15
-
             val finalItems = mapped.map {
                 it.copy(isOptimal = !it.isIrrisory && it.total in optMin..optMax)
-            }.sortedBy { it.total } // Se entrega pre-ordenado para formar la Curva Visual
-
-            val minPrice = validItems.minOfOrNull { it.total } ?: 0.0
-            val maxPrice = validItems.maxOfOrNull { it.total } ?: 0.0
-
-            // 4. Emitir el nuevo estado procesado a la UI
+            }.sortedBy { it.total }
             _analyticsState.value = AnalyticsState(
-                items = finalItems,
-                avgTotal = avg,
-                minPrice = minPrice,
-                maxPrice = maxPrice,
-                validCount = validItems.size,
-                isAnalyzing = false
+                items = finalItems, avgTotal = avg,
+                minPrice = validItems.minOfOrNull { it.total } ?: 0.0,
+                maxPrice = validItems.maxOfOrNull { it.total } ?: 0.0,
+                validCount = validItems.size, isAnalyzing = false
             )
         }
     }
 }
+// Extensiones para la búsqueda inteligente, compartidas con otros ViewModels.
+private val REGEX_UNACCENT = "\\p{InCombiningDiacriticalMarks}+".toRegex()
+fun String.prepareForSearch(): String {
+    val temp = java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
+    return REGEX_UNACCENT.replace(temp, "").lowercase().trim()
+}
+fun String.wordStartsWith(query: String): Boolean {
+    if (query.isEmpty()) return false
+    val normalizedText = this.prepareForSearch()
+    return normalizedText.split(" ").any { it.startsWith(query) }
+}
+
+fun String.matchesSmart(query: String): Boolean {
+    if (query.isEmpty()) return false
+    val normalizedText = this.prepareForSearch()
+    val queryWords = query.prepareForSearch().split(" ").filter { it.isNotEmpty() }
+    val textWords = normalizedText.split(" ").filter { it.isNotEmpty() }
+    return queryWords.all { qw ->
+        textWords.any { tw -> tw.startsWith(qw) }
+    }
+}
+fun CategoryEntity.matches(normalizedQuery: String): Boolean = this.name.prepareForSearch().wordStartsWith(normalizedQuery)

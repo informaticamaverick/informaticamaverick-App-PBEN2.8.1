@@ -90,6 +90,8 @@ fun BeAssistantSearchFab(
     showSmallActions: Boolean = false,
     requestKeyboard: Boolean = false,
     isMultiSelectionActive: Boolean = false, // 🔥 NUEVO: Estado de multiselección
+    shouldShowBottomBar: Boolean = true, // 🔥 NUEVO: Visibilidad de la barra de navegación
+    toolboxKey: String = "default", // 🔥 NUEVO: Clave de animación de bloque
     // Callbacks de acción
     onSearchQueryChange: (String) -> Unit = {},
     onSearchStateChange: (Boolean) -> Unit = {},
@@ -233,15 +235,15 @@ fun BeAssistantSearchFab(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp) 
+                    .height(140.dp)
                     .align(Alignment.TopCenter)
-                    .blur(15.dp) 
+                    .blur(15.dp)
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.98f), 
+                                Color.Black.copy(alpha = 0.98f),
                                 Color.Black.copy(alpha = 0.7f),
-                                Color.Transparent               
+                                Color.Transparent
                             )
                         )
                     )
@@ -255,13 +257,17 @@ fun BeAssistantSearchFab(
                 // 1. Barra Extendida (BeBuild): Solo si se mantiene presionado
                 BeSmallActionsBuilder(
                     isVisible = showSmallActions,
-                    actions = currentActions.filter { !it.isDefault }
+                    actions = currentActions.filter { !it.isDefault },
+                    shouldShowBottomBar = shouldShowBottomBar,
+                    toolboxKey = toolboxKey // 🔥 CONEXIÓN PARA ANIMACIÓN
                 )
 
                 // 2. Barra por Defecto (Fast, Lic, Fav): Solo si NO está la extendida
                 BeDefaultActionsBand(
                     isVisible = !showSmallActions,
-                    actions = currentActions.filter { it.isDefault }
+                    actions = currentActions.filter { it.isDefault },
+                    shouldShowBottomBar = shouldShowBottomBar,
+                    toolboxKey = toolboxKey // 🔥 CONEXIÓN PARA ANIMACIÓN
                 )
             }
         }
@@ -312,7 +318,7 @@ fun BeAssistantSearchFab(
                     modifier = Modifier.fillMaxSize().offset(y = floatY.dp).size(assistantSize).scale(if (isDormido) 0.8f else 1f).alpha(alpha),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isDormido) { Text("💤", fontSize = 18.sp) } 
+                    if (isDormido) { Text("💤", fontSize = 18.sp) }
                     else {
                         if (isDragging) { Box(modifier = Modifier.offset(x = 5.dp, y = 5.dp).size(54.dp).scale(1.2f).alpha(floatingAuraAlpha).background(Color(0xFF22D3EE), CircleShape).blur(8.dp)) }
                         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -348,11 +354,11 @@ fun BeAssistantSearchFab(
                         }
                     }
                 }
-                
+
                 if (badgeScale > 0.01f && currentMessage != null && !isSearchActive) {
                     Box(modifier = Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-14).dp).wrapContentSize(unbounded = true).graphicsLayer { scaleX = badgeScale; scaleY = badgeScale; rotationZ = wiggleRotation }.zIndex(20f).background(Color(0xFF05070A), CircleShape).border(2.5.dp, currentMessage.bubbleColor, CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { state = BeState.TALKING }.padding(6.dp), contentAlignment = Alignment.Center) { Text(text = currentMessage.icon, fontSize = 16.sp) }
                 }
-                
+
                 BeBubbleComic(isVisible = state == BeState.TALKING && !isSearchActive, isDraggedToLeft = isDraggedToLeft, message = currentMessage, allMessagesSize = contextMessages.size, currentIndex = currentTipIndex, onCloseClick = { state = BeState.IDLE }, onPrevClick = { if (currentTipIndex > 0) currentTipIndex-- }, onNextClick = { if (currentTipIndex < contextMessages.size - 1) currentTipIndex++ }, onActionClick = { state = BeState.IDLE; onBubbleActionClick() })
             }
         }

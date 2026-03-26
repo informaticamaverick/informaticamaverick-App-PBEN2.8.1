@@ -1,57 +1,67 @@
 package com.example.myapplication.data.model
 
+import com.example.myapplication.data.model.AddressClient
+import com.example.myapplication.data.model.CompanyClient
+
 /**
- * --- MODELO DE USUARIO (User) ---
- * 
- * Este es el modelo principal del CLIENTE.
- * Se sincroniza con la colección 'users' en Firestore.
+ * --- MODELO DE DOMINIO: User (PERFIL DEL DUEÑO) ---
+ *
+ * Este objeto se utiliza en la capa de UI y lógica de negocio.
+ * Representa la proyección de los datos del dueño de la app (cliente).
+ * Se han eliminado campos de perfil profesional y campos planos redundantes.
  */
 data class User(
     val uid: String = "",
     val email: String = "",
     val displayName: String = "",
     
-    // Datos Personales
+    // --- DATOS PERSONALES ---
     var name: String = "",
     var lastName: String = "",
     var phoneNumber: String = "",
-    
-    // Listas de contacto
+    var bio: String = "",
+    var photoUrl: String? = null,
+    var bannerImageUrl: String? = null,
+    val galleryImages: List<String> = emptyList(), // Galería personal del usuario
+
+    // --- CONTACTOS ADICIONALES ---
     val additionalEmails: List<String> = emptyList(),
     val additionalPhones: List<String> = emptyList(),
 
-    // Perfil Profesional
-    var matricula: String? = null,
-    var titulo: String? = null,
-    
-    // Multimedia
-    val photoUrl: String? = null,
-    val bannerImageUrl: String? = null,
-    val galleryImages: List<String> = emptyList(),
-
-    // --- UBICACIONES (Usando modelo AddressClient) ---
+    // --- DIRECCIONES PERSONALES ---
+    // Soporta múltiples direcciones (Casa, Oficina, etc.)
     val personalAddresses: List<AddressClient> = emptyList(),
 
-    // --- EMPRESAS (Usando modelo CompanyClient) ---
-    // 🔥 FIREBASE: Al guardar esto, se debe verificar si se crea un documento espejo en 'prestadores'
-    val companies: List<CompanyClient> = emptyList(),
-
-    // Estados
-    val hasCompanyProfile: Boolean = false,
-    val isSubscribed: Boolean = false,
-    val isVerified: Boolean = false,
-    val isOnline: Boolean = false,
+    // --- GESTIÓN DE NEGOCIOS (EMPRESAS) ---
+    var hasCompanyProfile: Boolean = false, // Habilita la sección de empresas
+    val companies: List<CompanyClient> = emptyList(), // Lista de empresas con sus sucursales
     
-    // Social / Prestador
-    val isFavorite: Boolean = false,
-    val rating: Float = 0f,
-    val favoriteProviderIds: List<String> = emptyList(),
+    // --- ESTADOS Y BANDERAS ---
+    var isProfileComplete: Boolean = false,
+    var isSubscribed: Boolean = false,
+    var isVerified: Boolean = false,
+    var isOnline: Boolean = false,
+    val notificationsEnabled: Boolean = false,
+    val isPublicProfile: Boolean = false,
+    
+    // --- SOCIAL Y REPUTACIÓN ---
+    val rating: Float = 0f, // Ranking otorgado por prestadores
+    val favoriteProviderIds: List<String> = emptyList(), // Prestadores favoritos
 
+    // --- GEOLOCALIZACIÓN Y FECHAS ---
+    var latitude: Double = 0.0,
+    var longitude: Double = 0.0,
     val createdAt: Long = System.currentTimeMillis()
 ) {
+    /**
+     * Nombre completo calculado
+     */
     val fullName: String
         get() = if (name.isNotBlank() || lastName.isNotBlank()) "$name $lastName" else displayName
         
+    /**
+     * Dirección principal
+     */
     val mainAddress: AddressClient?
         get() = personalAddresses.firstOrNull()
 }

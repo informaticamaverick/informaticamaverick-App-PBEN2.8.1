@@ -9,10 +9,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdsClick
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,12 +38,6 @@ import kotlinx.coroutines.delay
 
 /**
  * Componente que representa un banner publicitario horizontal.
- * Proporciona una estructura premium y placeholders para integrar Google AdMob.
- *
- * NOTA PARA IMPLEMENTACIÓN REAL (Google Ads):
- * 1. Agregar dependencia: implementation("com.google.android.gms:play-services-ads:23.x.x")
- * 2. Inicializar MobileAds en la Activity o Application.
- * 3. Reemplazar el contenido visual por un AndroidView que cargue un AdView de Google.
  */
 @Composable
 fun AdBannerItem(item: AccordionBanner) {
@@ -50,37 +46,17 @@ fun AdBannerItem(item: AccordionBanner) {
             .fillMaxSize()
             .border(1.dp, Color.Black.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F3F4)), // Tono gris estándar de anuncios
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F3F4)),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            
-            // ========================================================================
-            // --- BLOQUE PARA INTEGRACIÓN DE GOOGLE ADS (ADMOB) ---
-            // ========================================================================
-            /*
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    com.google.android.gms.ads.AdView(context).apply {
-                        setAdSize(com.google.android.gms.ads.AdSize.BANNER)
-                        adUnitId = "ca-app-pub-3940256099942544/6300978111" // ID de prueba
-                        loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
-                    }
-                }
-            )
-            */
-            // ========================================================================
-
-            // --- REPRESENTACIÓN VISUAL PLACEHOLDER ---
             
             if (item.imageUrl != null) {
                 AsyncImage(
                     model = item.imageUrl,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    alpha = 0.2f
+                    modifier = Modifier.fillMaxSize().alpha(0.3f),
+                    contentScale = ContentScale.Crop
                 )
             }
 
@@ -121,7 +97,6 @@ fun AdBannerItem(item: AccordionBanner) {
                 )
             }
 
-            // Etiqueta distintiva de AD (Requerido por Google)
             Surface(
                 color = Color(0xFFFFC107),
                 shape = RoundedCornerShape(bottomEnd = 12.dp),
@@ -144,28 +119,29 @@ fun AdBannerItem(item: AccordionBanner) {
 // ==========================================================================================
 
 /**
- * Componente de Anuncio Vertical Premium con integración para Google AdMob.
- * Incluye un temporizador de 10 segundos antes de permitir el cierre manual.
- *
- * @param show Controla la visibilidad del anuncio.
- * @param onDismiss Callback ejecutado cuando el usuario cierra el anuncio.
- * @param modifier Modificador para personalizar el layout.
- * @param adUnitId ID del bloque de anuncios de Google.
+ * Componente de Anuncio Vertical Premium con apariencia real.
  */
 @Composable
 fun GoogleVerticalInterstitialAd(
     show: Boolean,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    adUnitId: String = "ca-app-pub-3940256099942544/6300978111" // ID de prueba de Google
+    adUnitId: String = "ca-app-pub-3940256099942544/6300978111"
 ) {
     if (!show) return
 
-    // --- ESTADO DEL TEMPORIZADOR ---
     var timeLeft by remember { mutableIntStateOf(10) }
     var isClosable by remember { mutableStateOf(false) }
 
-    // --- LÓGICA DE CUENTA REGRESIVA ---
+    // Simulación de carga de anuncio real con imágenes de alta calidad
+    val adData = remember {
+        listOf(
+            Triple("https://images.unsplash.com/photo-1599305090598-fe179d501227?q=80&w=1080", "Transforma tu Hogar con Inteligencia", "Descubre la nueva línea de dispositivos BeSmart. Tecnología que entiende tu ritmo."),
+            Triple("https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1080", "Maverick Pro: Herramientas de Elite", "Suscripción premium para profesionales exigentes. Duplica tus licitaciones hoy."),
+            Triple("https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1080", "Aumenta tus Ventas en un 40%", "Nuevas estrategias de marketing digital para prestadores locales.")
+        ).random()
+    }
+
     LaunchedEffect(show) {
         if (show) {
             timeLeft = 10
@@ -189,163 +165,171 @@ fun GoogleVerticalInterstitialAd(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.95f))
+                .background(Color.Black.copy(alpha = 0.98f))
         ) {
-            // --- CONTENEDOR PRINCIPAL DEL ANUNCIO (ESTILO M3) ---
+            // Fondo con efecto blur (simulado con imagen de fondo oscura)
+            AsyncImage(
+                model = adData.first,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().alpha(0.15f),
+                contentScale = ContentScale.Crop
+            )
+
             Card(
                 modifier = Modifier
-                    .fillMaxHeight(0.85f)
-                    .fillMaxWidth(0.9f)
+                    .fillMaxHeight(0.88f)
+                    .fillMaxWidth(0.92f)
                     .align(Alignment.Center),
-                shape = RoundedCornerShape(32.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(16.dp)
+                elevation = CardDefaults.cardElevation(20.dp)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     
-                    // ========================================================================
-                    // 🔥 INTEGRACIÓN REAL DE GOOGLE ADMOB 🔥
-                    // ========================================================================
-                    /*
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { context ->
-                            com.google.android.gms.ads.AdView(context).apply {
-                                setAdSize(com.google.android.gms.ads.AdSize.MEDIUM_RECTANGLE)
-                                this.adUnitId = adUnitId
-                                loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Imagen Principal del Anuncio
+                        Box(modifier = Modifier.weight(1.2f).fillMaxWidth()) {
+                            AsyncImage(
+                                model = adData.first,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                            
+                            // Botón de Play Flotante (Simula Video)
+                            Surface(
+                                modifier = Modifier.align(Alignment.Center).size(64.dp),
+                                shape = CircleShape,
+                                color = Color.Black.copy(alpha = 0.6f),
+                                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)
+                            ) {
+                                Icon(
+                                    Icons.Default.PlayArrow,
+                                    null,
+                                    tint = Color.White,
+                                    modifier = Modifier.padding(16.dp).size(32.dp)
+                                )
+                            }
+
+                            // Badge de Tiempo en video
+                            Surface(
+                                color = Color.Black.copy(0.7f),
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
+                            ) {
+                                Text("0:15", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(4.dp))
                             }
                         }
-                    )
-                    */
-                    // ========================================================================
 
-                    // --- UI DE PLACEHOLDER PROFESIONAL ---
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color(0xFFFFFFFF), Color(0xFFF1F3F4))
+                        // Contenido de Texto
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .background(Color.White)
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    modifier = Modifier.size(40.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF1A73E8)
+                                ) {
+                                    Icon(Icons.Default.AdsClick, null, tint = Color.White, modifier = Modifier.padding(8.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = "Be Ecosystem",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
                                 )
-                            )
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                            shape = CircleShape,
-                            modifier = Modifier.size(100.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AdsClick,
-                                contentDescription = null,
-                                modifier = Modifier.padding(24.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(32.dp))
-                        
-                        Text(
-                            text = "Contenido Patrocinado",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF1A73E8), // Azul Google
-                            textAlign = TextAlign.Center
-                        )
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Text(
-                            text = "Disfruta de ofertas exclusivas de nuestros socios comerciales.\nEl anuncio real se cargará en este espacio.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            color = Color.Gray,
-                            lineHeight = 24.sp
-                        )
-                        
-                        Spacer(modifier = Modifier.weight(1f))
-                        
-                        Button(
-                            onClick = { /* Simular clic en anuncio */ },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Text("MÁS INFORMACIÓN", fontWeight = FontWeight.Bold)
-                        }
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
                             Text(
-                                text = if (isClosable) "Puedes cerrar el anuncio ahora" else "Espera $timeLeft segundos...",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (isClosable) Color(0xFF34A853) else Color.Gray
+                                text = adData.second,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF1A73E8),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 28.sp
                             )
+                            
                             Spacer(modifier = Modifier.height(12.dp))
-                            LinearProgressIndicator(
-                                progress = { (10f - timeLeft).toFloat() / 10f },
-                                modifier = Modifier
-                                    .fillMaxWidth(0.8f)
-                                    .height(8.dp)
-                                    .clip(CircleShape),
-                                color = if (isClosable) Color(0xFF34A853) else MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            
+                            Text(
+                                text = adData.third,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                                color = Color.DarkGray,
+                                lineHeight = 20.sp
                             )
+                            
+                            Spacer(modifier = Modifier.weight(1f))
+                            
+                            Button(
+                                onClick = { /* Simular clic */ },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A73E8))
+                            ) {
+                                Text("PROBAR AHORA", fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            }
                         }
                     }
                     
+                    // Badge de Anuncio
                     Surface(
                         color = Color(0xFFFFC107),
                         shape = RoundedCornerShape(bottomEnd = 16.dp),
                         modifier = Modifier.align(Alignment.TopStart)
                     ) {
                         Text(
-                            text = "ANUNCIO",
-                            fontSize = 10.sp,
+                            text = "ANUNCIO PATROCINADO",
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.Black,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
                 }
             }
 
+            // Controles de Cierre
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 32.dp, end = 24.dp)
+                    .padding(top = 24.dp, end = 16.dp)
             ) {
-                Crossfade(targetState = isClosable, label = "CloseBtnTransition") { canClose ->
-                    if (canClose) {
-                        FilledIconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(48.dp),
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = Color.White,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Cerrar publicidad")
-                        }
-                    } else {
-                        Box(contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(
-                                progress = { timeLeft.toFloat() / 10f },
-                                modifier = Modifier.size(48.dp),
-                                color = Color.White,
-                                strokeWidth = 4.dp,
-                                trackColor = Color.White.copy(alpha = 0.2f)
-                            )
-                            Text(
-                                text = timeLeft.toString(),
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp
-                            )
-                        }
+                if (isClosable) {
+                    FilledIconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(44.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = Color.White.copy(0.2f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar")
+                    }
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            progress = { timeLeft.toFloat() / 10f },
+                            modifier = Modifier.size(44.dp),
+                            color = Color.White,
+                            strokeWidth = 3.dp,
+                            trackColor = Color.White.copy(alpha = 0.2f)
+                        )
+                        Text(
+                            text = timeLeft.toString(),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }

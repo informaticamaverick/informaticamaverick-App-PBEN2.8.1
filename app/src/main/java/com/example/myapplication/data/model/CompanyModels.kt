@@ -4,20 +4,18 @@ import java.util.UUID
 
 /**
  * --- MODELOS DE EMPRESA Y SUCURSALES ---
- *
- * Estructura solicitada:
- * > Mis Negocios ( puede tener 1 o mas negocios)
- *   - Nombre de la Empresa
- *   - Razon Social
- *   - CUIT
- *   - Sucursal (Puede Tener mas de 1 por empresa)
+ * 
+ * Estructura:
+ * - Una empresa puede tener múltiples sucursales.
+ * - Cada sucursal tiene su propia dirección, equipo de trabajo y galería.
  */
 data class CompanyClient(
     val id: String = UUID.randomUUID().toString(),
-    val name: String = "",
+    val name: String = "", // Nombre Comercial
     val razonSocial: String = "",
     val cuit: String = "",
-    // Imágenes a nivel Empresa (opcional pero recomendado para el header)
+    val email: String = "",
+    val phoneNumber: String = "",
     val bannerImageUrl: String? = null,
     val photoUrl: String? = null,
     val branches: List<BranchClient> = emptyList()
@@ -25,30 +23,26 @@ data class CompanyClient(
 
 /**
  * Modelo de Sucursal
- * Estructura solicitada:
- * - Descripcion de la sucursal (Nombre)
- * - Direccion Completa (AddressClient)
- * - Persona Acargo de la sucursal (RepresentativeClient)
+ * - Cada sucursal tiene UNA ÚNICA dirección principal.
+ * - Cada sucursal tiene un equipo de trabajo (representantes).
+ * - Cada sucursal tiene su propia galería de fotos.
  */
 data class BranchClient(
     val id: String = UUID.randomUUID().toString(),
-    val name: String = "", // "Descripcion de la sucursal"
-    val address: AddressClient = AddressClient(),
-    // Se mantiene como lista por flexibilidad, aunque la UI puede mostrar solo 1
-    val representatives: List<RepresentativeClient> = emptyList()
+    val name: String = "", // "Sucursal Centro", "Casa Central", etc.
+    val isMainBranch: Boolean = false, // Para identificar la "Casa Central"
+    val address: AddressClient = AddressClient(), // UNA SOLA DIRECCIÓN
+    val representatives: List<RepresentativeClient> = emptyList(), // Equipo de trabajo
+    val galleryImages: List<String> = emptyList() // Galería de la sucursal
 )
 
 /**
- * Modelo de Representante / Persona a Cargo
- * Estructura solicitada:
- * - Nombre
- * - Cargo
- * - Foto o imagen
+ * Modelo de Representante / Equipo de Trabajo
  */
 data class RepresentativeClient(
     val id: String = UUID.randomUUID().toString(),
     val nombre: String = "",
     val apellido: String = "",
     val cargo: String = "",
-    val photoUrl: String? = null // Nueva propiedad para la foto del representante
+    val photoUrl: String? = null
 )

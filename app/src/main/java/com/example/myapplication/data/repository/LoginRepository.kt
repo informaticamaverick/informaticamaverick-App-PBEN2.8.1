@@ -3,7 +3,6 @@ package com.example.myapplication.data.repository
 import com.example.myapplication.data.local.TokenManager
 import com.example.myapplication.data.model.LoginResquest
 import com.example.myapplication.data.model.LoginResponse
-import com.example.myapplication.data.model.UserRole
 import com.example.myapplication.data.remote.ApiService
 import javax.inject.Inject
 import com.example.myapplication.data.local.UserDao
@@ -20,10 +19,10 @@ class LoginRepository @Inject constructor(
      * Si tiene éxito, guarda el token automáticamente.
      * @return Result<LoginResponse> para manejar éxito o error.
     */
-    suspend fun login(email: String, pass: String, role: UserRole): Result<LoginResponse> {
+    suspend fun login(email: String, pass: String): Result<LoginResponse> {
         return try {
             // 1- Crea el paquete de datos
-            val request = LoginResquest(email, pass, role)
+            val request = LoginResquest(email, pass)
 
             // 2- Llama al servidor
             val response = apiService.login(request)

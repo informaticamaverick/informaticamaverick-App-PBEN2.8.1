@@ -2,7 +2,6 @@ package com.example.myapplication.presentation.client
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
@@ -10,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.local.BudgetEntity
 import com.example.myapplication.data.local.CategoryEntity
 import com.example.myapplication.data.local.TenderEntity
+import com.example.myapplication.data.local.UserEntity
 import com.example.myapplication.presentation.components.BeEmotion
 import com.example.myapplication.presentation.components.BeMessage
 import com.example.myapplication.presentation.components.BeSmallActionModel
@@ -33,7 +33,15 @@ import javax.inject.Inject
 /** * --- ENUM DE CONTEXTO DEL HUD ---
  * Define en qué sección de la app se encuentra el usuario. */
 enum class HUDContext {
-    HOME, BUDGETS, BUDGETS_TENDERS, BUDGETS_DIRECT, CHAT, CALENDAR, PROMO, TENDER_DETAILS, UNKNOWN
+    HOME, BUDGETS, BUDGETS_TENDERS, BUDGETS_DIRECT, CHAT, CALENDAR, PROMO, TENDER_DETAILS, PROFILE, UNKNOWN
+}
+
+/** * --- MODELO DE UBICACIÓN GLOBAL ---
+ * Centralizado en el cerebro para que todas las pantallas compartan la misma referencia. */
+sealed class LocationOption {
+    data class Gps(val address: String, val locality: String) : LocationOption()
+    data class Personal(val address: String, val number: String, val locality: String) : LocationOption()
+    data class Business(val companyName: String, val branchName: String, val address: String, val number: String, val locality: String) : LocationOption()
 }
 
 /** * --- MODELO DE DATOS ESTABLE PARA SUPER CATEGORÍAS ---
@@ -49,6 +57,15 @@ data class SuperCategory(
  * El "Cerebro" de Be. Gestiona estados, contexto HUD y lógica de interacción. */
 @HiltViewModel
 class BeBrainViewModel @Inject constructor() : ViewModel() {
+
+    // 🔥 CENTRALIZACIÓN DE DATOS DE USUARIO Y UBICACIÓN
+    // El cerebro ahora es el guardián de quién es el usuario y dónde está.
+    private val _userState = MutableStateFlow<UserEntity?>(null)
+    val userState: StateFlow<UserEntity?> = _userState.asStateFlow()
+
+    private val _selectedLocation = MutableStateFlow<LocationOption?>(null)
+    val selectedLocation: StateFlow<LocationOption?> = _selectedLocation.asStateFlow()
+
     // --- ESTADOS DE DATOS RAW (Para búsqueda contextual e inteligencia de filtros) ---
     private val _allCategoriesRaw = MutableStateFlow<List<CategoryEntity>>(emptyList())
     private val _allBudgetsRaw = MutableStateFlow<List<BudgetEntity>>(emptyList())
@@ -60,6 +77,7 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
     // Estado de filtros global
     private val _activeSortFilters = MutableStateFlow<Set<String>>(emptySet())
     val activeSortFilters: StateFlow<Set<String>> = _activeSortFilters.asStateFlow()
+    
     // --- ESTADOS DE BE Y VISIBILIDAD ---
     private val _showBe = MutableStateFlow(true)
     val showBe: StateFlow<Boolean> = _showBe.asStateFlow()
@@ -67,8 +85,12 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
     val isBeDormido: StateFlow<Boolean> = _isBeDormido.asStateFlow()
     private val _showBeTools = MutableStateFlow(false)
     val showBeTools: StateFlow<Boolean> = _showBeTools.asStateFlow()
+    
+    // 🔥 Canal de Acciones Personalizadas (FASE 1)
+    private val _customActions = MutableStateFlow<List<BeSmallActionModel>>(emptyList())
     private val _currentActions = MutableStateFlow<List<BeSmallActionModel>>(emptyList())
     val currentActions: StateFlow<List<BeSmallActionModel>> = _currentActions.asStateFlow()
+
     private val _isBottomBarVisible = MutableStateFlow(true)
     val isBottomBarVisible: StateFlow<Boolean> = _isBottomBarVisible.asStateFlow()
     private val _actionEvent = MutableSharedFlow<String>()
@@ -89,7 +111,7 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // --- ESTADO DE MULTISELECCIÓN ---
+    // --- ESTADO DE MULTISELECCIÓN (Delegado a especialistas para lógica fina) ---
     private val _isMultiSelectionActive = MutableStateFlow(false)
     val isMultiSelectionActive: StateFlow<Boolean> = _isMultiSelectionActive.asStateFlow()
     
@@ -145,14 +167,17 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
     private val _resetBePositionTrigger = MutableStateFlow(0)
     val resetBePositionTrigger: StateFlow<Int> = _resetBePositionTrigger.asStateFlow()
 
-    private val _beMessages = MutableStateFlow<List<BeMessage>>(BeDictionary.DefaultMessages)
+    private val _beMessages = MutableStateFlow<List<BeMessage>>(emptyList())
     val beMessages: StateFlow<List<BeMessage>> = _beMessages.asStateFlow()
+
+    // 🔥 NUEVO: Identificador de la caja de herramientas actual para animaciones de bloque
+    private val _toolboxKey = MutableStateFlow("home_default")
+    val toolboxKey: StateFlow<String> = _toolboxKey.asStateFlow()
 
     private val _requestKeyboard = MutableStateFlow(false)
     val requestKeyboard = _requestKeyboard.asStateFlow()
 
     // 🔥 FILTRADO INTELIGENTE DE CATEGORÍAS POR CONTEXTO 🔥
-    // Centraliza qué categorías se muestran en el menú Tornado basándose en los datos visibles
     val dynamicCategories: StateFlow<List<ControlItem>> = combine(
         _currentContext,
         _allCategoriesRaw,
@@ -182,10 +207,24 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
     private val _activeFilters = MutableStateFlow<Set<String>>(emptySet())
     val activeFilters: StateFlow<Set<String>> = _activeFilters.asStateFlow()
 
+
+    // ======================================================================================
+    // 🔥 LÓGICA DE CENTRALIZACIÓN DE DATOS (Perfil y Ubicación)
+    // ======================================================================================
+
+    /** Actualiza el estado del usuario en el cerebro. */
+    fun updateProfile(user: UserEntity?) {
+        _userState.value = user
+    }
+
+    /** Actualiza la ubicación seleccionada globalmente. */
+    fun updateLocation(location: LocationOption?) {
+        _selectedLocation.value = location
+    }
+
     // ======================================================================================
     // 2. BÚSQUEDA CONTEXTUAL CENTRALIZADA
     // ======================================================================================
-/** Corazón del filtrado dinámico. Reacciona a la query y al contexto de la pantalla. */
     val searchResults = combine(
         _searchQuery,
         _currentContext,
@@ -214,23 +253,21 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
                 } else {
                     val matchedSupers = allSuper
                         .filter { it.title.prepareForSearch().wordStartsWith(normalizedQuery) }
-                        .sortedBy { it.title.lowercase() } // 🔥 ORDENADO
+                        .sortedBy { it.title.lowercase() }
 
                     val matchedCategories = allCategoriesRaw
                         .filter { it.matches(normalizedQuery) }
-                        .sortedBy { it.name.lowercase() } // 🔥 ORDENADO
+                        .sortedBy { it.name.lowercase() }
                     SearchResult.GlobalMatch(superCategories = matchedSupers, categories = matchedCategories)
                 }
             }
             HUDContext.BUDGETS, HUDContext.BUDGETS_TENDERS -> {
-                // Filtro por nombre de licitación (Coincidencia exacta por palabra/prefijo)
                 val filteredTenders = allTendersRaw.filter { tender ->
                     tender.title.matchesSmart(normalizedQuery)
                 }
                 SearchResult.TenderMatch(filteredTenders)
             }
             HUDContext.BUDGETS_DIRECT, HUDContext.TENDER_DETAILS -> {
-                // Filtro por nombre prestador, empresa, monto y número (ID) con coincidencia por palabra
                 val filteredBudgets = allBudgetsRaw.filter { budget ->
                     budget.providerName.matchesSmart(normalizedQuery) ||
                             (budget.providerCompanyName?.matchesSmart(normalizedQuery) ?: false) ||
@@ -243,7 +280,6 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SearchResult.Empty)
 
-    // Clase sellada para manejar los diferentes tipos de resultados que devuelve Be
     sealed class SearchResult {
         object Empty : SearchResult()
         data class CategoryMatch(val categories: List<CategoryEntity>) : SearchResult()
@@ -251,6 +287,7 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
         data class BudgetMatch(val budgets: List<BudgetEntity>) : SearchResult()
         data class TenderMatch(val tenders: List<TenderEntity>) : SearchResult()
     }
+
     // ======================================================================================
     // 1. GESTIÓN DE CATEGORÍAS Y DATOS
     // ======================================================================================
@@ -274,16 +311,15 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
             filters.contains("sort_nombre_desc") -> grouped.sortedByDescending { it.title }
             else -> grouped
         }
-            // 🔥 ORDENAMOS las Supercategorías por título de A a Z
             .sortedBy { it.title.lowercase() }
         _superCategories.value = sorted
     }
     fun updateBudgets(budgets: List<BudgetEntity>) {
         _allBudgetsRaw.value = budgets
     }
-    // --- MÉTODOS PARA ALIMENTAR A BE ---
     fun updateAllCategories(categories: List<CategoryEntity>) { _allCategoriesRaw.value = categories }
     fun updateTenders(tenders: List<TenderEntity>) { _allTendersRaw.value = tenders }
+
     // ======================================================================================
     // 3. LÓGICA DE GESTOS Y VISIBILIDAD DE BE
     // ======================================================================================
@@ -335,6 +371,21 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
         _selectedItemIds.value = emptySet()
         closeKeyboard()
     }
+
+    fun setShowBeTools(visible: Boolean) {
+        _showBeTools.value = visible
+        if (visible) {
+            updateActionsForContext(_currentContext.value)
+        }
+        updateToolboxKey()
+    }
+
+    private fun updateToolboxKey() {
+        val context = _currentContext.value.name.lowercase()
+        val mode = if (_showBeTools.value) "tools" else "default"
+        _toolboxKey.value = "${context}_${mode}"
+    }
+
     fun onBeLongClick() {
         if (!_isBeDormido.value) {
             val nextToolsState = !_showBeTools.value
@@ -347,296 +398,185 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
                     _isResultadoVisible.value = false
                 }
                 _showBeTools.value = true
-                updateActionsForContext(_currentContext.value) // 🔥 Actualizamos las acciones antes de mostrar
+                updateActionsForContext(_currentContext.value)
             } else { _showBeTools.value = false }
         }
+        updateToolboxKey()
     }
     fun onBeDoubleClick() {
         _isBeDormido.value = !_isBeDormido.value
         if (_isBeDormido.value) cerrarBeAssistantCompleto()
     }
+
     // ======================================================================================
     // 4. SENSOR DE CONTEXTO Y NAVEGACIÓN
     // ======================================================================================
+
     fun onRouteChanged(route: String?) {
         val currentRoute = route ?: return
-        
-        // 🔥 AL CAMBIAR DE PANTALLA: Cerramos todo y damos la orden de volver a casa
-        if (!_isBeDormido.value) {
-            cerrarBeAssistantCompleto()
-            _resetBePositionTrigger.value++ // Incrementamos para avisar al Composable
-        }
 
-        _currentContext.value = when {
+        // A. Detectamos el nuevo contexto basado en la ruta de forma limpia
+        val newContext = when {
             currentRoute.contains("home") -> HUDContext.HOME
             currentRoute.contains("presupuestos") -> HUDContext.BUDGETS
             currentRoute.contains("chat") -> HUDContext.CHAT
             currentRoute.contains("calendar") -> HUDContext.CALENDAR
+            currentRoute.contains("perfil_cliente") -> HUDContext.PROFILE
             else -> HUDContext.UNKNOWN
         }
+
+        // B. Si el contexto cambió, hacemos un reset profundo
+        if (_currentContext.value != newContext) {
+            _currentContext.value = newContext
+
+            // Al cambiar de pantalla, borramos acciones de especialistas inmediatamente
+            _customActions.value = emptyList()
+
+            if (!_isBeDormido.value) {
+                // Cerramos cualquier búsqueda o herramienta abierta al navegar
+                cerrarBeAssistantCompleto()
+                clearFilters()
+                _resetBePositionTrigger.value++
+            }
+        }
+
+        // C. Sincronizamos visibilidad y mensajes
         _showBe.value = !(currentRoute == "login" || currentRoute == "register")
         _isResultadoVisible.value = false
-        _showBeTools.value = false
-        updateActionsForContext(_currentContext.value)
+        _showBeTools.value = false // Empezar siempre cerrado al cambiar de pantalla
+
+        // D. IMPORTANTE: Actualizamos las acciones para el nuevo contexto (especialmente para HOME)
+        updateActionsForContext(newContext)
         updateBeContextMessages(currentRoute)
+        updateToolboxKey()
     }
 
+    // 2. Agrega protección a setHUDContext para evitar sobrescrituras accidentales:
     fun setHUDContext(context: HUDContext) {
-        // 🔥 AL CAMBIAR EL ESTADO O CONTEXTO: Cerramos el asistente si estaba abierto
+        // PROTECCIÓN: Si ya estamos en HOME o en otra pantalla principal definida por el NavHost,
+        // no permitimos que un componente interno (como el Pager) cambie el contexto global
+        // a uno antiguo durante la transición.
+        if (_currentContext.value == HUDContext.HOME ||
+            _currentContext.value == HUDContext.CHAT ||
+            _currentContext.value == HUDContext.CALENDAR) {
+            if (context != _currentContext.value) return
+        }
+
         if (_currentContext.value != context) {
             cerrarBeAssistantCompleto()
+            clearFilters()
         }
         _currentContext.value = context
         updateActionsForContext(context)
+        updateToolboxKey()
+    }
+
+    // 3. Mejora syncMultiSelection para ignorar señales de pantallas muertas:
+    fun syncMultiSelection(active: Boolean, selectedIds: Set<String>) {
+        // Si estamos en HOME, ignoramos señales de "desactivación" que vengan de Presupuestos
+        if (_currentContext.value == HUDContext.HOME && !active) {
+            _isMultiSelectionActive.value = false
+            _selectedItemIds.value = emptySet()
+            return
+        }
+
+        val wasActive = _isMultiSelectionActive.value
+        _isMultiSelectionActive.value = active
+        _selectedItemIds.value = selectedIds
+
+        if (active && !wasActive) {
+            _showBeTools.value = true
+        } else if (!active && wasActive) {
+            _showBeTools.value = false
+        }
+        updateActionsForContext(_currentContext.value)
+        updateToolboxKey()
+    }
+
+    // 4. Mejora setCustomActions para no pisar las acciones de la Home:
+    fun setCustomActions(actions: List<BeSmallActionModel>) {
+        if (_currentContext.value == HUDContext.HOME) return
+        _customActions.value = actions
+        updateActionsForContext(_currentContext.value)
     }
 
     private fun updateActionsForContext(context: HUDContext) {
         val actions = mutableListOf<BeSmallActionModel>()
-        val selectedCount = _selectedItemIds.value.size
-        val isMultiActive = _isMultiSelectionActive.value
 
-        // 🔥 LÓGICA DE HERRAMIENTAS DINÁMICAS SEGÚN CONTEXTO 🔥
-        when (context) {
-            HUDContext.HOME -> {
-                actions.add(
-                    BeSmallActionModel(
-                        "sim_chat",
-                        Icons.AutoMirrored.Filled.Chat,
-                        "Sim Chat",
-                        emoji = "💬",
-                        isDefault = false
-                    ) { triggerAction("sim_chat") })
-                actions.add(
-                    BeSmallActionModel(
-                        "sim_tender",
-                        Icons.Default.Gavel,
-                        "Sim Licit",
-                        emoji = "⚖️",
-                        isDefault = false
-                    ) { triggerAction("sim_tender") })
-                actions.add(
-                    BeSmallActionModel(
-                        "fast",
-                        Icons.Default.FlashOn,
-                        "Fast",
-                        emoji = "⚡",
-                        isDefault = true
-                    ) { triggerAction("fast") })
-                actions.add(
-                    BeSmallActionModel(
-                        "licit",
-                        Icons.Default.Gavel,
-                        "Licitación",
-                        emoji = "⚖️",
-                        isDefault = true
-                    ) { triggerAction("licit") })
-                actions.add(
-                    BeSmallActionModel(
-                        "fav",
-                        Icons.Default.Favorite,
-                        "Favoritos",
-                        emoji = "❤️",
-                        isDefault = true
-                    ) { triggerAction("fav") })
-                actions.add(
-                    BeSmallActionModel(
-                        "share",
-                        Icons.Default.Share,
-                        "Compartir",
-                        emoji = "📤"
-                    ) { })
+        // 🔥 FASE 1: Solo maneja HOME directamente. Los demás vienen delegados vía setCustomActions.
+        if (context == HUDContext.HOME) {
+            actions.add(
+                BeSmallActionModel(
+                    "sim_chat",
+                    Icons.AutoMirrored.Filled.Chat,
+                    "Sim Chat",
+                    emoji = "💬"
+                ) { triggerAction("sim_chat") })
+            actions.add(
+                BeSmallActionModel(
+                    "sim_tender",
+                    Icons.Default.Gavel,
+                    "Sim Licit",
+                    emoji = "⚖️"
+                ) { triggerAction("sim_tender") })
+            actions.add(
+                BeSmallActionModel(
+                    "fast",
+                    Icons.Default.FlashOn,
+                    "Fast",
+                    emoji = "⚡",
+                    isDefault = true
+                ) { triggerAction("fast") })
+            actions.add(
+                BeSmallActionModel(
+                    "licit",
+                    Icons.Default.Gavel,
+                    "Licitación",
+                    emoji = "⚖️",
+                    isDefault = true
+                ) { triggerAction("licit") })
+            actions.add(
+                BeSmallActionModel(
+                    "fav",
+                    Icons.Default.Favorite,
+                    "Favoritos",
+                    emoji = "❤️",
+                    isDefault = true
+                ) { triggerAction("fav") })
+            actions.add(
+                BeSmallActionModel(
+                    "share",
+                    Icons.Default.Share,
+                    "Compartir",
+                    emoji = "📤"
+                ) { })
+        }
+
+
+        else if (context == HUDContext.PROFILE) {
+            // --- LÓGICA DINÁMICA DE PERFIL ---
+            if (_customActions.value.isNotEmpty()) {
+                // Si el ProfileViewModel envió acciones (como GUARDAR/CANCELAR o EDITAR/AJUSTES)
+                // las agregamos tal cual vienen delegadas.
+                // 🔥 MODIFICACIÓN: Envolvemos las acciones para que disparen triggerAction y respondan al Screen
+                actions.addAll(_customActions.value.map { action ->
+                    if (action.id.contains("divider_v")) action
+                    else action.copy(onClick = { triggerAction(action.id) })
+                })
+            } else {
+                // ACCIONES POR DEFECTO: Solo si por alguna razón la lista está vacía al entrar
+                // Marcamos como isDefault = true para que aparezcan por defecto sin long press
+                actions.add(BeSmallActionModel("edit_profile", Icons.Default.Edit, "Editar", emoji = "✏️", isDefault = true) {
+                    triggerAction("edit_profile")
+                })
+                actions.add(BeSmallActionModel("settings_profile", Icons.Default.Settings, "Ajustes", emoji = "⚙️", isDefault = true) {
+                    triggerAction("settings_profile")
+                })
             }
+        }
 
-            HUDContext.BUDGETS, HUDContext.BUDGETS_TENDERS -> {
-                // 🔥 ACCIÓN DE CANCELAR (X) AL PRINCIPIO SI HAY MULTISELECCIÓN 🔥
-                if (isMultiActive) {
-                    actions.add(
-                        BeSmallActionModel(
-                            "cancel",
-                            Icons.Default.Close,
-                            "Cerrar",
-                            isDefault = false
-                        ) { toggleMultiSelection() })
-                }
-
-                // Por defecto: Historial
-                actions.add(
-                    BeSmallActionModel(
-                        "historial",
-                        Icons.Default.History,
-                        "Historial",
-                        emoji = "📜",
-                        isDefault = true
-                    ) { triggerAction("historial") })
-
-                if (isMultiActive && selectedCount > 0) {
-                    // PEQUEÑO DIVIDER VERTICAL ANTES DE ELIMINAR
-                    actions.add(BeSmallActionModel("divider_v", Icons.Default.Remove, "", isVisible = true) {})
-
-                    actions.add(
-                        BeSmallActionModel(
-                            "delete_multi",
-                            icon=Icons.Default.Delete,
-                            "Eliminar",
-                            emoji = "🗑️",
-                            tint = Color.Red
-                        ) { triggerAction("delete_multi") })
-                    if (selectedCount == 1) {
-                        actions.add(
-                            BeSmallActionModel(
-                                "view_detail",
-                                icon= Icons.Default.Info,
-                                "Detalle",
-                                emoji = "🔍"
-                            ) { triggerAction("view_detail") })
-                    }
-                }
-            }
-
-            HUDContext.BUDGETS_DIRECT -> {
-                if (isMultiActive) {
-                    // 1. CERRAR
-                    actions.add(
-                        BeSmallActionModel(
-                            "cancel",
-                            Icons.Default.Close,
-                            "Cerrar",
-                            isDefault = false
-                        ) { toggleMultiSelection() })
-
-                    // 🔥 NUEVO: SELECCIONAR TODO 🔥
-                    actions.add(
-                        BeSmallActionModel(
-                            "select_all_budgets",
-                            Icons.Default.SelectAll,
-                            "Todo",
-                            emoji = "✅",
-                            isDefault = false
-                        ) { triggerAction("select_all_budgets") })
-
-                    // 🔥 NUEVO: MARCAR COMO LEÍDO 🔥
-                    if (selectedCount > 0) {
-                        actions.add(
-                            BeSmallActionModel(
-                                "mark_as_read_multi",
-                                Icons.Default.DoneAll,
-                                "Leídos",
-                                emoji = "📖",
-                                isDefault = false
-                            ) { triggerAction("mark_as_read_multi") })
-                    }
-
-                    // 2. COMPARAR (Solo si hay 2 o más)
-                    if (selectedCount >= 2) {
-                        actions.add(
-                            BeSmallActionModel(
-                                "compare",
-                                Icons.AutoMirrored.Filled.CompareArrows,
-                                "Comparar",
-                                emoji = "⚖️"
-                            ) { triggerAction("comparar_multi") })
-                    }
-
-                    // 3. PEQUEÑO DIVIDER VERTICAL
-                    actions.add(BeSmallActionModel("divider_v", Icons.Default.Remove, "", isVisible = true) {})
-
-                    // 4. ELIMINAR (Si hay al menos 1 seleccionado)
-                    if (selectedCount > 0) {
-                        actions.add(
-                            BeSmallActionModel(
-                                "delete",
-                                Icons.Default.Delete,
-                                "Eliminar",
-                                emoji = "🗑️",
-                                tint = Color.Red
-                            ) { triggerAction("delete_multi") })
-                    }
-                }
-            }
-
-            HUDContext.TENDER_DETAILS -> {
-                if (isMultiActive) {
-                    // 1. CERRAR (CANCELAR)
-                    actions.add(
-                        BeSmallActionModel(
-                            "cancel_select",
-                            Icons.Default.Close,
-                            "Cerrar",
-                            emoji = "✖️"
-                        ) {
-                            toggleMultiSelection()
-                        })
-
-                    // 🔥 NUEVO: SELECCIONAR TODO 🔥
-                    actions.add(
-                        BeSmallActionModel(
-                            "select_all_budgets",
-                            Icons.Default.SelectAll,
-                            "Todo",
-                            emoji = "✅",
-                            isDefault = false
-                        ) { triggerAction("select_all_budgets") })
-
-                    // 🔥 NUEVO: MARCAR COMO LEÍDO 🔥
-                    if (selectedCount > 0) {
-                        actions.add(
-                            BeSmallActionModel(
-                                "mark_as_read_multi",
-                                Icons.Default.DoneAll,
-                                "Leídos",
-                                emoji = "📖",
-                                isDefault = false
-                            ) { triggerAction("mark_as_read_multi") })
-                    }
-                    
-                    // 2. COMPARAR (Solo si hay al menos 2 seleccionados)
-                    if (selectedCount >= 2) {
-                        actions.add(
-                            BeSmallActionModel(
-                                "compare_selected",
-                                Icons.AutoMirrored.Filled.CompareArrows,
-                                "Comparar",
-                                emoji = "⚖️",
-                                isDefault = false // 🔥 Debe ser false para aparecer en herramientas BeBuild
-                            ) {
-                                triggerAction("compare_selected")
-                            })
-                    }
-                    
-                    // 3. PEQUEÑO DIVIDER VERTICAL
-                    actions.add(BeSmallActionModel("divider_v", Icons.Default.Remove, "", isVisible = true) {})
-
-                    // 4. ELIMINAR (Si hay al menos 1 seleccionado)
-                    if (selectedCount > 0) {
-                        actions.add(
-                            BeSmallActionModel(
-                                "delete_selected",
-                                Icons.Default.Delete,
-                                "Eliminar",
-                                emoji = "🗑️",
-                                tint = Color.Red
-                            ) {
-                                triggerAction("delete_selected")
-                            })
-                    }
-                } else {
-                    // Acción normal cuando no hay selección
-                    actions.add(
-                        BeSmallActionModel(
-                            "compare_all",
-                            Icons.AutoMirrored.Filled.CompareArrows,
-                            "Comparar Todo",
-                            emoji = "⚖️",
-                            isDefault = true
-                        ) {
-                            triggerAction("compare_all")
-                        })
-                }
-            }
-            HUDContext.CHAT -> {
-                actions.add(BeSmallActionModel("share", Icons.Default.Share, "Compartir", emoji = "📤") { })
-            }
-            else -> {}
+        else {
+            actions.addAll(_customActions.value)
         }
         _currentActions.value = actions
     }
@@ -644,21 +584,14 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
     fun toggleMultiSelection() {
         val newState = !_isMultiSelectionActive.value
         _isMultiSelectionActive.value = newState
-
-       // if (newState) {
-            // Al activar: Abrimos la barra de herramientas para mostrar Borrar/Comparar
         if (newState) {
-            //_selectedItemIds.value = emptySet()
             _showBeTools.value = true
-            //updateActionsForContext(_currentContext.value)
         } else {
-            // Al desactivar: Limpiamos y cerramos barra
             _selectedItemIds.value = emptySet()
-           // _showBeTools.value = false
             _showBeTools.value = true
-            //updateActionsForContext(_currentContext.value)
         }
         updateActionsForContext(_currentContext.value)
+        updateToolboxKey()
     }
 
     fun toggleItemSelection(id: String) {
@@ -680,6 +613,7 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
         if (currentHour >= 21 || currentHour < 6) {
             finalMessages.add(BeMessage("🌙", "Es tarde. Si tienes una urgencia, usa Maverick FAST.", "PROBAR FAST", Color(0xFFF59E0B), emotion = BeEmotion.SURPRISED))
         }
+        // Usar diccionario externo (FASE 1)
         val baseFromDictionary = when {
             route.contains("home") -> BeDictionary.HomeMessages
             route.contains("presupuestos") -> BeDictionary.BudgetMessages
@@ -690,9 +624,7 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
         finalMessages.addAll(baseFromDictionary)
         _beMessages.value = finalMessages
     }
-// ======================================================================================
-// 5. UTILIDADES DE FILTRO
-// ======================================================================================
+
     fun toggleFilter(filterId: String) {
         val current = _activeFilters.value.toMutableSet()
         if (!current.add(filterId)) current.remove(filterId)
@@ -709,39 +641,7 @@ class BeBrainViewModel @Inject constructor() : ViewModel() {
         }.toSet()
     }
 
-    // 🔥 Este método ahora solo actualiza la lista base para los flujos inteligentes 🔥
     fun updateDynamicCategories(categories: List<CategoryEntity>) {
         _allCategoriesRaw.value = categories
-    }
-}
-
-
-
-// ======================================================================================
-// UTILIDADES DE BÚSQUEDA (EXTENSIONES) PARA FILTRADO DE TEXTO MAYUS, MINUS, ASENTO, ETC
-// ======================================================================================
-private val REGEX_UNACCENT = "\\p{InCombiningDiacriticalMarks}+".toRegex()
-fun String.prepareForSearch(): String {
-    val temp = java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
-    return REGEX_UNACCENT.replace(temp, "").lowercase().trim()
-}
-fun String.wordStartsWith(query: String): Boolean {
-    if (query.isEmpty()) return false
-    val normalizedText = this.prepareForSearch()
-    return normalizedText.split(" ").any { it.startsWith(query) }
-}
-fun CategoryEntity.matches(normalizedQuery: String): Boolean = this.name.wordStartsWith(normalizedQuery)
-
-
-// ... Nueva extensión de búsqueda inteligente al final del archivo ...
-fun String.matchesSmart(query: String): Boolean {
-    if (query.isEmpty()) return false
-    val normalizedText = this.prepareForSearch()
-    val queryWords = query.prepareForSearch().split(" ").filter { it.isNotEmpty() }
-    val textWords = normalizedText.split(" ").filter { it.isNotEmpty() }
-
-    // Cada palabra de la consulta debe ser el inicio de alguna palabra del texto
-    return queryWords.all { qw ->
-        textWords.any { tw -> tw.startsWith(qw) }
     }
 }

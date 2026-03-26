@@ -62,10 +62,12 @@ fun ResultadoLicitacionOverlay(
     onAvatarClick: (BudgetEntity) -> Unit,
     isMultiSelectionActive: Boolean,
     selectedItemIds: Set<String>,
+    onToggleItemSelection: (String) -> Unit,
     onToggleMultiSelection: () -> Unit,
     onAnalyticsClick: (TenderEntity, List<BudgetEntity>) -> Unit,
     onDeleteBudgets: (Set<String>) -> Unit,
     onMarkAsReadMulti: (Set<String>) -> Unit = {},
+    onSetContext: (HUDContext) -> Unit,
     showDeleteConfirmDialog: (String, () -> Unit) -> Unit
 ) {
     // Backup para mantener la UI estable durante la animación de salida
@@ -77,6 +79,17 @@ fun ResultadoLicitacionOverlay(
     LaunchedEffect(selectedTender) {
         if (selectedTender != null) {
             beBrainViewModel.setHUDContext(HUDContext.TENDER_DETAILS)
+            onSetContext(HUDContext.TENDER_DETAILS)
+        }
+    }
+
+    // Al cerrar, debemos restaurar el contexto (usando DisposableEffect)
+    DisposableEffect(selectedTender) {
+        onDispose {
+            if (selectedTender == null) {
+                // Solo si realmente se cerró, volvemos al estado de lista
+                onSetContext(HUDContext.BUDGETS_TENDERS)
+            }
         }
     }
 
@@ -89,7 +102,7 @@ fun ResultadoLicitacionOverlay(
         lastSelectedTenderForExit?.let { tender ->
             BackHandler(enabled = isMultiSelectionActive || selectedTender != null) {
                 if (isMultiSelectionActive) {
-                    beBrainViewModel.toggleMultiSelection()
+                    onToggleMultiSelection()
                 } else {
                     onClose()
                 }
@@ -103,6 +116,14 @@ fun ResultadoLicitacionOverlay(
                     when (actionId) {
                         "compare_all" -> {
                             onAnalyticsClick(tender, budgets.sortedBy { it.providerName.lowercase(Locale.getDefault()) })
+
+                            //***************** 🔥 REQUERIMIENTO: Al tocar el botón de Be, comparamos TODOS los presupuestos
+                            // Usamos la lista 'budgets' que ya viene del Flow de esta licitación
+                          //  if (budgets.isNotEmpty()) {
+                           //     onAnalyticsClick(tender, budgets.sortedBy { it.providerName.lowercase() })
+                           // }
+                        //****************************************************************************
+
                         }
                         "compare_selected" -> {
                             val selectedBudgets = budgets.filter { it.budgetId in selectedItemIds }
@@ -113,17 +134,14 @@ fun ResultadoLicitacionOverlay(
                         "delete_selected" -> {
                             showDeleteConfirmDialog("¿Deseas eliminar las ofertas seleccionadas de esta licitación?") {
                                 onDeleteBudgets(selectedItemIds)
-                                beBrainViewModel.toggleMultiSelection()
                             }
                         }
                         "select_all_budgets" -> {
-                            val allIds = budgets.map { it.budgetId }
-                            beBrainViewModel.selectAllItems(allIds)
+                            // Este ID es legado, ahora se usa select_all desde PresupuestosScreen
                         }
                         "mark_as_read_multi" -> {
                             if (selectedItemIds.isNotEmpty()) {
                                 onMarkAsReadMulti(selectedItemIds)
-                                beBrainViewModel.toggleMultiSelection()
                             }
                         }
                     }
@@ -169,7 +187,7 @@ fun ResultadoLicitacionOverlay(
                 onClearSort = onClearSort,
                 onBack = {
                     if (isMultiSelectionActive) {
-                        beBrainViewModel.toggleMultiSelection()
+                        onToggleMultiSelection()
                     } else {
                         onClose()
                     }
@@ -179,7 +197,7 @@ fun ResultadoLicitacionOverlay(
                 onAvatarClick = { onAvatarClick(it) },
                 isMultiSelectionActive = isMultiSelectionActive,
                 selectedItemIds = selectedItemIds,
-                onToggleItemSelection = { beBrainViewModel.toggleItemSelection(it) },
+                onToggleItemSelection = onToggleItemSelection,
                 onToggleMultiSelection = onToggleMultiSelection,
                 onAnalyticsClick = {
                     onAnalyticsClick(tender, budgets.sortedBy { it.providerName.lowercase(Locale.getDefault()) })

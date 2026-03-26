@@ -1,53 +1,62 @@
-
 package com.example.myapplication.presentation.profile
 
+import com.example.myapplication.data.model.AddressClient
+import com.example.myapplication.data.model.CompanyClient
+
+/**
+ * --- PROFILE UI STATE ---
+ * 
+ * Representa el estado de la interfaz de usuario para la gestión del perfil del dueño.
+ * Alineado con la nueva estructura de UserEntity.
+ */
 data class ProfileUiState(
-    val uid: String = "", // <--- AGREGA ESTO PRIMERO PARA CONECTAR CON EL CHAT
+    val uid: String = "",
     val displayName: String = "",
+    val name: String = "",
+    val lastName: String = "",
     val email: String = "",
     val phoneNumber: String = "",
-    val password: String = "",
+    val password: String = "", // Solo para validaciones o re-autenticación
+    val bio: String = "",
+    val photoUrl: String = "",
+    val coverPhotoUrl: String = "",
+    
+    // --- CAMPOS TEMPORALES PARA FORMULARIO DE DIRECCIÓN (CompleteProfile) ---
     val address: String = "",
-    val addressHome: String = "",
-    val addressWork: String = "",
-    val cityHome: String ="",
-    val stateHome: String= "",
-    val zipCodeHome: String = "",
-    val cityWork: String ="",
-    val stateWork: String ="",
-    val zipCodeWork: String = "",
     val city: String = "",
     val state: String = "",
     val zipCode: String = "",
-    val photoUrl: String = "",
-    val coverPhotoUrl: String = "",
+
+    // --- ESTRUCTURAS DE DATOS SEGÚN NUEVA UserEntity ---
+    val personalAddresses: List<AddressClient> = emptyList(),
+    val additionalEmails: List<String> = emptyList(),
+    val additionalPhones: List<String> = emptyList(),
+    val galleryImages: List<String> = emptyList(),
+    
+    // --- GESTIÓN DE EMPRESAS ---
+    val isEmpresa: Boolean = false, // Vinculado a hasCompanyProfile
+    val companies: List<CompanyClient> = emptyList(),
+
+    // --- ESTADOS Y BANDERAS ---
+    val isOnline: Boolean = false,
+    val isSubscribed: Boolean = false,
+    val isVerified: Boolean = false,
+    val notificationsEnabled: Boolean = false,
+    val isPublicProfile: Boolean = false,
+    val isProfileComplete: Boolean = false,
+    
+    // --- SOCIAL Y REPUTACIÓN ---
+    val rating: Float = 0f,
+    val favoriteProviderIds: List<String> = emptyList(),
+
+    // --- ESTADOS DE CONTROL DE UI ---
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
     val isComplete: Boolean = false,
-    val notificationsEnabled: Boolean = false,
-    val isPublicProfile: Boolean = false,
-//********************************************************************************************************************
-//             DATOS DE PRUEBA PERFIL USUARIO DATOS EMPRESA APP CLIENTE
-//********************************************************************************************************************
-    val isEmpresa: Boolean = false,
-    val nameComercialEmpresa: String = "Maverick Informatica",
-    val nameRazonSocialEmpresa: String = "Maverick Developers",
-    val numberCuitEmpresa: String = "343270675",
-    val emailEmpresa: String = "informaticamaverick@gmail.com",
-    val phoneNumberEmpresa: String = "3815444511111",
 
-    val addressEmpresa: String = "B. Matienzo 1339",
-    val cityEmpresa: String = "San Miguel de tucuman",
-    val stateEmpresa: String = "Tucuman",
-    val zipCodeEmpresa: String = "4000",
-    val addressEmpresaSucursal1: String = " Siempre viva 123",
-    val cityEmpresaSucursal1: String = "San Miguel de Tucuman",
-    val stateEmpresaSucursal1: String = "asdf",
-    val zipCodeEmpresaSucursal1: String = "4000",
-    val addressEmpresaSucursal2: String = "fasdfdsfd 1213",
-    val cityEmpresaSucursal2: String = "asdfadsfasdf",
-    val stateEmpresaSucursal2: String = "sadfsdafdsafdsfasdff",
-    val zipCodeEmpresaSucursal2: String = "4500",
-
+    // ==========================================
+    // SECCIÓN NUEVA: MODO EDICIÓN
+    // ==========================================
+    val isEditMode: Boolean = false
 )

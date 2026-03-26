@@ -44,6 +44,7 @@ import com.example.myapplication.data.local.CalendarEventEntity
 import com.example.myapplication.data.local.EventType
 import com.example.myapplication.data.local.VisitStatus
 import com.example.myapplication.presentation.components.*
+import com.example.myapplication.presentation.profile.ProfileViewModel
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import java.text.SimpleDateFormat
 import java.util.*
@@ -68,17 +69,12 @@ fun CalendarScreen(
     onBack: () -> Unit,
     onChatClick: (String) -> Unit = {},
     viewModel: CalendarViewModel = hiltViewModel(),
-    profileViewModel: ProfileSharedViewModel = hiltViewModel() // AGREGAMOS EL VIEWMODEL DEL PERFIL
+    profileViewModel: ProfileViewModel = hiltViewModel() // 🔥 USAMOS EL NUEVO CEREBRO
 ) {
-    // 1. OBTENER EVENTOS DESDE ROOM EN TIEMPO REAL
     val dbEvents by viewModel.allEvents.collectAsStateWithLifecycle()
-
-    // Obtenemos el usuario real logueado en la app
     val userState by profileViewModel.userState.collectAsStateWithLifecycle()
-    // Si por algún motivo no cargó, usamos el de fallback para no crashear
     val currentUserId = userState?.email ?: "user_demo_66"
 
-    // 2. PASAR LOS DATOS Y CALLBACKS A LA UI STATELESS
     CalendarScreenContent(
         events = dbEvents,
         onBack = onBack,

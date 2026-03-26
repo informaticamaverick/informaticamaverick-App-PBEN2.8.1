@@ -13,15 +13,33 @@ data class TenderEntity(
     @PrimaryKey
     val tenderId: String,          // ID único generado (usualmente vendrá de Firebase)
     val title: String,             // Título: "Arreglo de techo", "Instalación A/C"
+    val clientId: String,          // Tu ID de usuario
     val description: String,       // Detalle de lo que el cliente necesita
     val category: String,          // Categoría: "Plomero", "Electricista"
     val status: String = "ABIERTA", // Estado: ABIERTA, CERRADA, ADJUDICADA, CANCELADA
+    val isActive: Boolean = true,  // 🔥 [NUEVO] Indica si la licitación está activa o no( para en prestador) se enviara notificacion al prestador cuando sea false , o llegue a los 100, presupuestos, o cambie el estado a cerrado(vencido) , cancelado o
     val dateTimestamp: Long = System.currentTimeMillis(),
-    val endDate: Long = 0,       // Fecha de fin de la licitación
+    val startDate: Long = System.currentTimeMillis(), // Fecha de inicio
+    val endDate: Long = 0,         // Fecha de fin de la licitación
     val budgetCount: Int = 0,       // Cuántos presupuestos ha recibido esta licitación
-    val cancellationDate: Long? = null, // 🔥 Fecha en la que se canceló
-    val awardedProviderId: String? = null, // 🔥 [NUEVO] ID del prestador adjudicado
-    val awardedProviderName: String? = null // 🔥 [NUEVO] Nombre del prestador adjudicado
+    val cancellationDate: Long? = null, // Fecha en la que se canceló
+    val awardedProviderId: String? = null, // ID del prestador adjudicado
+    val awardedProviderName: String? = null, // Nombre del prestador adjudicado
+
+    // --- CLÁUSULAS Y REQUISITOS (Premium) ---
+    val requiresVisit: Boolean = false,
+    val requiresPaymentMethod: Boolean = false,
+    val requiresWorkGuarantee: Boolean = false,
+    val requiresProviderDoc: Boolean = false,
+
+    // --- UBICACIÓN ---
+    val locationAddress: String? = null,
+    val locationNumber: String? = null,
+    val locationLocality: String? = null,
+    val locationType: String? = null, // PERSONAL o BUSINESS
+
+    // --- MULTIMEDIA ---
+    val imageUrls: List<String> = emptyList()
 )
 
 /**

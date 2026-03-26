@@ -1,5 +1,6 @@
 package com.example.myapplication.presentation.client
 
+import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
@@ -89,11 +90,12 @@ fun AppNavigation(
     val isDormido by hudViewModel.isBeDormido.collectAsStateWithLifecycle()
     val showBeTools by hudViewModel.showBeTools.collectAsStateWithLifecycle()
     val requestKeyboard by hudViewModel.requestKeyboard.collectAsStateWithLifecycle() // 🔥 CONEXIÓN: Recolectamos el estado del teclado del ViewModel
-    
+
     // 🔥 SUSCRIPCIÓN AL DISPARADOR DE RESETEO 🔥
     val resetBeTrigger by hudViewModel.resetBePositionTrigger.collectAsStateWithLifecycle()
 
     val isMultiSelectionActive by hudViewModel.isMultiSelectionActive.collectAsStateWithLifecycle() // 🔥 NUEVO: Estado de multiselección
+    val toolboxKey by hudViewModel.toolboxKey.collectAsStateWithLifecycle() // 🔥 NUEVO: Clave de animación de bloque
 
 
     AppNavigationContent(
@@ -112,6 +114,7 @@ fun AppNavigation(
         isBottomBarVisible = isBottomBarVisible,
         resetBeTrigger = resetBeTrigger, // 🔥 PASAMOS EL TRIGGER
         isMultiSelectionActive = isMultiSelectionActive, // 🔥 PASAMOS EL ESTADO
+        toolboxKey = toolboxKey, // 🔥 PASAMOS LA CLAVE
         onRouteChanged = { hudViewModel.onRouteChanged(it) },
         onToggleFavorite = { id, isFav -> providerViewModel.toggleFavoriteStatus(id, isFav) },
         onBeClick = { hudViewModel.onBeClick() },
@@ -139,6 +142,7 @@ fun AppNavigationContent(
     isBottomBarVisible: Boolean,
     resetBeTrigger: Int, // 🔥 AGREGAMOS PARÁMETRO
     isMultiSelectionActive: Boolean, // 🔥 NUEVO
+    toolboxKey: String, // 🔥 NUEVO
     onRouteChanged: (String?) -> Unit,
     onToggleFavorite: (String, Boolean) -> Unit,
     onBeClick: () -> Unit,
@@ -223,7 +227,7 @@ fun AppNavigationContent(
                 composable(route = Screen.Home.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) {
                     HomeScreenComplete(navController = navController, bottomPadding = innerPadding, beViewModel = beViewModel)
                 }
-                
+
                 composable(route = Screen.Chat.route, arguments = listOf(navArgument("providerId") { type = NavType.StringType; nullable = true; defaultValue = null }), enterTransition = mainEnterTransition, exitTransition = mainExitTransition) { backStackEntry ->
                     val providerId = backStackEntry.arguments?.getString("providerId")
                     ChatScreen(onBack = { navController.popBackStack() }, initialProviderId = providerId)
@@ -231,7 +235,13 @@ fun AppNavigationContent(
                 composable(route = Screen.Calendar.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) { CalendarScreen(onBack = { navController.popBackStack() }) }
                 composable(route = Screen.Promo.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) { PromoScreen(navController = navController, onBack = { navController.popBackStack() }) }
                 composable(route = Screen.CrearLicitacion.route) { CrearLicScreen(onBack = { navController.popBackStack() }) }
-                composable(route = Screen.PerfilCliente.route) { PerfilUsuarioScreen(onNavigateBack = { navController.popBackStack() }, onLogout = { }) }
+                composable(route = Screen.PerfilCliente.route) {
+                    PerfilUsuarioScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onLogout = { },
+                        beViewModel = beViewModel // 🔥 PASAMOS LA INSTANCIA GLOBAL AQUÍ
+                    )
+                }
                 composable(route = Screen.ResultBusqueda.route, arguments = listOf(navArgument("category") { type = NavType.StringType })) { backStackEntry ->
                     val category = backStackEntry.arguments?.getString("category") ?: ""
                     ResultBusquedaCategoriaScreen(categoryName = category, onBack = { navController.popBackStack() }, onNavigateToProviderProfile = { pid -> navController.navigate("perfil_prestador/$pid") }, onNavigateToChat = { pid -> navController.navigate("chat?providerId=$pid") })
@@ -246,7 +256,7 @@ fun AppNavigationContent(
                 composable(route = Screen.Login.route, enterTransition = secondaryEnterTransition, exitTransition = secondaryExitTransition) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Login Screen Placeholder") }
                 }
-                
+
                 // --- RUTA UNIFICADA DE PRESUPUESTOS CON CONEXIÓN BE ---
                 composable(route = Screen.Presupuestos.route, enterTransition = mainEnterTransition, exitTransition = mainExitTransition) {
                     PresupuestosScreen(
@@ -268,7 +278,7 @@ fun AppNavigationContent(
             onProviderClick = { pid -> navController.navigate("perfil_prestador/$pid") },
             allCategories = allCategories,
             favoriteProviders = favorites,
-            onCategoryClick = { cat -> beViewModel.setResultadoVisible(false); navController.navigate("result_busqueda/$cat") },
+            onCategoryClick = { cat -> beViewModel.setResultadoVisible(false); navController.navigate("result_busqueda/${Uri.encode(cat)}") },
             onSuperCategoryClick = { beViewModel.setResultadoVisible(false) }
         )
         // --- COMPONENTE BE ASSISTANT GLOBAL (OVERLAY SUPERIOR) ---
@@ -321,6 +331,8 @@ fun AppNavigationContent(
                         requestKeyboard = requestKeyboard,
                         resetTrigger = resetBeTrigger, // 🔥 CONEXIÓN FINAL REALIZADA AQUÍ
                         isMultiSelectionActive = isMultiSelectionActive, // 🔥 NUEVO
+                        shouldShowBottomBar = shouldShowBottomBar, // 🔥 PASAMOS ESTADO DE NAV BAR
+                        toolboxKey = toolboxKey, // 🔥 NUEVO: CLAVE DE ANIMACIÓN
                         onToggleSearch = onBeClick,
                         onToggleActions = onBeLongClick,
                         onToggleSleep = onBeDoubleClick
@@ -391,7 +403,7 @@ fun AppBottomNavigationBar(navController: NavHostController, allItems: List<Scre
                         rotation.animateTo(12f, tween(50, easing = LinearEasing))
                         rotation.animateTo(-12f, tween(50, easing = LinearEasing))
                         rotation.animateTo(0f, tween(50, easing = LinearEasing))
-                        
+
                         val baseRoute = screen.route.split("?").first()
                         navController.navigate(baseRoute) {
                             navController.graph.findStartDestination().let { startDest ->

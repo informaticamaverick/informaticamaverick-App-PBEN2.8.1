@@ -50,7 +50,7 @@ fun ChatScreen(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = appColors.accentBlue)
         }
-        LaunchedEffect(Unit) { profileViewModel.loadUserProfile() }
+        //LaunchedEffect(Unit) { profileViewModel.loadUserProfile() }
     } else {
         val currentUserId = profileState.uid
         val chatRepository = remember { 

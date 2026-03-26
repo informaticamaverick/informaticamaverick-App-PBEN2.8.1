@@ -1,5 +1,6 @@
 package com.example.myapplication.presentation.client
 
+import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
@@ -52,6 +53,7 @@ import com.example.myapplication.data.local.CategoryEntity
 import com.example.myapplication.data.local.UserEntity
 import com.example.myapplication.data.model.Provider
 import com.example.myapplication.presentation.components.*
+import com.example.myapplication.presentation.profile.ProfileViewModel // 🔥 NUEVO CEREBRO UNIFICADO
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import java.util.Calendar
 import java.util.Locale
@@ -66,13 +68,13 @@ import kotlin.math.sin
 @Composable
 fun FastScreen(
     navController: NavHostController,
-    profileViewModel: ProfileSharedViewModel = hiltViewModel(),
+    profileViewModel: ProfileViewModel = hiltViewModel(), // 🔥 MIGRADO AL CEREBRO UNICO
     providerViewModel: ProviderViewModel = hiltViewModel(),
     categoryViewModel: CategoryViewModel = hiltViewModel(),
     fastViewModel: FastViewModel = hiltViewModel(),
-    weatherViewModel: WeatherViewModel = hiltViewModel() // Inyectamos el clima para la alerta contextual
+    weatherViewModel: WeatherViewModel = hiltViewModel() 
 ) {
-    val userState by profileViewModel.userState.collectAsState()
+    val userState by profileViewModel.userState.collectAsStateWithLifecycle()
     val allProviders by providerViewModel.providers.collectAsStateWithLifecycle()
     val allCategories by categoryViewModel.categories.collectAsStateWithLifecycle()
     val weatherDesc by weatherViewModel.weatherDescription.collectAsState()
@@ -268,7 +270,7 @@ fun FastScreenContent(
                     },
                     onNavigateToNormalSearch = { catName ->
                         try {
-                            navController.navigate("result_busqueda/$catName") { launchSingleTop = true }
+                            navController.navigate("result_busqueda/${Uri.encode(catName)}") { launchSingleTop = true }
                         } catch (e: Exception) { e.printStackTrace() }
                     }
                 )
@@ -876,15 +878,15 @@ fun FastScreenPreview() {
         name = "Juan",
         lastName = "Pérez",
         phoneNumber = "123456789",
-        matricula = null,
-        titulo = null,
+        //matricula = null,
+        //titulo = null,
         photoUrl = null,
         bannerImageUrl = null,
         hasCompanyProfile = false,
         isSubscribed = false,
         isVerified = true,
         isOnline = true,
-        isFavorite = false,
+        //isFavorite = false,
         rating = 4.5f,
         createdAt = System.currentTimeMillis()
     )
