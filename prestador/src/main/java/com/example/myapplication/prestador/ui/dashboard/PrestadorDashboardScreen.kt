@@ -38,6 +38,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.example.myapplication.prestador.viewmodel.AvailabilityViewModel
 import com.example.myapplication.prestador.viewmodel.PresupuestoViewModel
+import com.example.myapplication.prestador.viewmodel.NotificacionesViewModel
+import com.example.myapplication.prestador.ui.notifications.NotificacionesScreen
 
 
 
@@ -62,7 +64,8 @@ fun PrestadorDashboardScreen(
     onNavigateToPromotionList: () -> Unit = {},
     onNavigateToThemeDemo: () -> Unit = {},
     chatSimulationViewModel: com.example.myapplication.prestador.viewmodel.ChatSimulationViewModel,
-    fastSimulationViewModel: com.example.myapplication.prestador.viewmodel.FastSimulationViewModel = hiltViewModel()
+    fastSimulationViewModel: com.example.myapplication.prestador.viewmodel.FastSimulationViewModel = hiltViewModel(),
+    notificacionesViewModel: NotificacionesViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
     var selectedTab by rememberSaveable { mutableStateOf(2) }
@@ -72,6 +75,7 @@ fun PrestadorDashboardScreen(
     var triggerCalendarCreate by remember { mutableStateOf(false) }
     val serviceType by chatSimulationViewModel.serviceType.collectAsState()
     val isProfessional = serviceType.equals("PROFESSIONAL", ignoreCase = true)
+    val unreadCount by notificacionesViewModel.unreadCount.collectAsState()
 
     Scaffold(
         floatingActionButton = {
@@ -112,6 +116,7 @@ fun PrestadorDashboardScreen(
                 PrestadorBottomNavigationBar(
                     selectedTab = selectedTab,
                     isProfessional = isProfessional,
+                    unreadCount = unreadCount,
                     onTabSelected = { selectedTab = it }
                 )
             }
@@ -217,7 +222,10 @@ fun PrestadorDashboardScreen(
                             initialChatUserId = targetChatUserId
                         )
                     }
-                    4 -> NotificacionesContent()
+                    4 -> NotificacionesScreen(
+                        onNavigateBack = { selectedTab = 2 },
+                        onAccion = { /* navegación futura */ }
+                    )
                 }
             }
         }
@@ -228,6 +236,7 @@ fun PrestadorDashboardScreen(
 fun PrestadorBottomNavigationBar(
     selectedTab: Int,
     isProfessional: Boolean,
+    unreadCount: Int,
     onTabSelected: (Int) -> Unit
 ) {
     val colors = getPrestadorColors()
@@ -318,8 +327,8 @@ fun PrestadorBottomNavigationBar(
                 label = "Alertas",
                 isSelected = selectedTab == 4,
                 onClick = { onTabSelected(4) },
-                showBadge = true,
-                badgeCount = 5
+                showBadge = unreadCount > 0,
+                badgeCount = unreadCount
             )
         }
     }

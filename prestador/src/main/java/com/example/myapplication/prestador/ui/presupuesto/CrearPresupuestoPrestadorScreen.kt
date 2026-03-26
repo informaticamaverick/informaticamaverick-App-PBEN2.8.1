@@ -132,37 +132,37 @@ fun CrearPresupuestoPrestadorScreen(
     var pendingPresupuesto by remember { mutableStateOf<com.example.myapplication.prestador.data.local.entity.PresupuestoEntity?>(null) }
     val presupuestos by viewModel.presupuestos.collectAsState()
     val clientes by viewModel.clientes.collectAsState()
-    val savedArticleItems = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.itemsJson.isBlank()) emptyList()
-            else p.itemsJson.split("|").mapNotNull { s ->
-                val parts = s.split(";")
-                if (parts.size >= 4) BudgetItem(
-                    id = 0L, code = parts[0], description = parts[1],
-                    quantity = parts[2].toIntOrNull() ?: 1,
-                    unitPrice = parts[3].toDoubleOrNull() ?: 0.0,
-                    taxPercentage = parts.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
-                    discountPercentage = parts.getOrNull(5)?.toDoubleOrNull() ?: 0.0
-                ) else null
-            }
+    val articleCatalog by viewModel.articleCatalog.collectAsState()
+    val serviceCatalog by viewModel.serviceCatalog.collectAsState()
+    val feeCatalog by viewModel.feeCatalog.collectAsState()
+    val savedArticleItems = remember(articleCatalog) {
+        val json = articleCatalog?.itemsJson ?: ""
+        if (json.isBlank()) emptyList()
+        else json.split("|").mapNotNull { s ->
+            val parts = s.split(";")
+            if (parts.size >= 4) BudgetItem(
+                id = 0L, code = parts[0], description = parts[1],
+                quantity = parts[2].toIntOrNull() ?: 1,
+                unitPrice = parts[3].toDoubleOrNull() ?: 0.0,
+                taxPercentage = parts.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
+                discountPercentage = parts.getOrNull(5)?.toDoubleOrNull() ?: 0.0
+            ) else null
         }.distinctBy { it.description }
     }
-    val savedServiceItems = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.serviciosJson.isBlank()) emptyList()
-            else p.serviciosJson.split("|").mapNotNull { s ->
-                val parts = s.split(";")
-                if (parts.size >= 2) BudgetService(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
-            }
+    val savedServiceItems = remember(serviceCatalog) {
+        val json = serviceCatalog?.serviciosJson ?: ""
+        if (json.isBlank()) emptyList()
+        else json.split("|").mapNotNull { s ->
+            val parts = s.split(";")
+            if (parts.size >= 2) BudgetService(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
         }.distinctBy { it.description }
     }
-    val savedFeeItems = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.honorariosJson.isBlank()) emptyList()
-            else p.honorariosJson.split("|").mapNotNull { s ->
-                val parts = s.split(";")
-                if (parts.size >= 2) BudgetProfessionalFee(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
-            }
+    val savedFeeItems = remember(feeCatalog) {
+        val json = feeCatalog?.honorariosJson ?: ""
+        if (json.isBlank()) emptyList()
+        else json.split("|").mapNotNull { s ->
+            val parts = s.split(";")
+            if (parts.size >= 2) BudgetProfessionalFee(id = 0L, code = parts[0], description = parts[1], total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
         }.distinctBy { it.description }
     }
     var pendingSimPresupuestoId by remember { mutableStateOf("") }
@@ -568,23 +568,8 @@ fun CrearPresupuestoPrestadorScreen(
                                 sheetType = SheetType.Article
                             },
                             quickAddSlot = {
-                                val suggItems = remember(presupuestos) {
-                                    presupuestos.flatMap { p ->
-                                        if (p.itemsJson.isBlank()) emptyList()
-                                        else p.itemsJson.split("|").mapNotNull { s ->
-                                            val parts = s.split(";")
-                                            if (parts.size >= 4) BudgetItem(
-                                                id = 0L, code = parts[0], description = parts[1],
-                                                quantity = parts[2].toIntOrNull() ?: 1,
-                                                unitPrice = parts[3].toDoubleOrNull() ?: 0.0,
-                                                taxPercentage = parts.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
-                                                discountPercentage = parts.getOrNull(5)?.toDoubleOrNull() ?: 0.0
-                                            ) else null
-                                        }
-                                    }.distinctBy { it.description }
-                                }
                                 ArticleAutoCompleteFields(
-                                    suggestions = suggItems,
+                                    suggestions = savedArticleItems,
                                     onAdd = { items.add(it.copy(id = System.currentTimeMillis())); isArticlesExpanded = true }
                                 )
                             }

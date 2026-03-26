@@ -16,6 +16,7 @@ interface PresupuestoRepository {
     fun getPresupuestosByEstado(estado: String): Flow<List<PresupuestoEntity>>
     fun getPresupuestosByAppointment(appointmentId: String): Flow<List<PresupuestoEntity>>
     suspend fun getPresupuestoById(id: String): PresupuestoEntity?
+    fun getCatalogPresupuesto(id: String): Flow<PresupuestoEntity?>
     suspend fun getLatestPresupuestoForAppointment(appointmentId: String): PresupuestoEntity?
     suspend fun insertPresupuesto(presupuesto: PresupuestoEntity)
     suspend fun updatePresupuesto(presupuesto: PresupuestoEntity)
@@ -54,6 +55,9 @@ class RoomPresupuestoRepository @Inject constructor(
 
     override suspend fun getPresupuestoById(id: String): PresupuestoEntity? =
         presupuestoDao.getPresupuestoById(id)
+
+    override fun getCatalogPresupuesto(id: String): Flow<PresupuestoEntity?> =
+        presupuestoDao.getPresupuestoByIdAsFlow(id)
 
     override suspend fun getLatestPresupuestoForAppointment(appointmentId: String): PresupuestoEntity? =
         presupuestoDao.getLatestPresupuestoForAppointment(appointmentId)

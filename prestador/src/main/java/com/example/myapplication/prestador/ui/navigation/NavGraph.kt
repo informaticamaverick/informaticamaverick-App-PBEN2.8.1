@@ -31,6 +31,7 @@ import com.example.myapplication.prestador.ui.presupuesto.CrearPresupuestoPresta
 import com.example.myapplication.prestador.ui.presupuesto.PresupuestosScreen
 import com.example.myapplication.prestador.ui.promotion.CreatePromotionScreen
 import com.example.myapplication.prestador.ui.promotion.PromotionListScreen
+import com.example.myapplication.prestador.ui.promotion.PromotionDetailScreen
 import com.example.myapplication.prestador.ui.profile.EditProfileScreenUnified
 import com.example.myapplication.prestador.ui.theme.ThemeDemoScreen
 import com.example.myapplication.prestador.ui.theme.getPrestadorColors
@@ -272,7 +273,40 @@ fun PrestadorNavGraph(
         
         composable(PrestadorRoutes.PromotionsList.route) {
             PromotionListScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onPromotionClick = { promotionId ->
+                    navController.navigate(PrestadorRoutes.PromotionDetail.createRoute(promotionId))
+                }
+            )
+        }
+
+        composable(
+            route = PrestadorRoutes.PromotionDetail.route,
+            arguments = listOf(
+                navArgument("promotionId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val promotionId = backStackEntry.arguments?.getString("promotionId") ?: return@composable
+            PromotionDetailScreen(
+                promotionId = promotionId,
+                onBack = { navController.popBackStack() },
+                onEdit = { id ->
+                    navController.navigate(PrestadorRoutes.EditPromotion.createRoute(id))
+                }
+            )
+        }
+
+        composable(
+            route = PrestadorRoutes.EditPromotion.route,
+            arguments = listOf(
+                navArgument("promotionId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val promotionId = backStackEntry.arguments?.getString("promotionId") ?: return@composable
+            CreatePromotionScreen(
+                promotionId = promotionId,
+                onBack = { navController.popBackStack() },
+                onPublish = { navController.popBackStack() }
             )
         }
     }

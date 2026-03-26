@@ -3,7 +3,6 @@ package com.example.myapplication.data.model.fake
 import androidx.compose.runtime.mutableStateListOf
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import kotlin.random.Random
 
 // Modelo de datos para representar un presupuesto
 data class PresupuestoFalso(
@@ -24,60 +23,7 @@ data class PresupuestoFalso(
 object PresupuestoSampleDataFalso {
     private val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 
-    // Lista mutable de presupuestos de ejemplo
     val presupuestos = mutableStateListOf<PresupuestoFalso>().apply {
-        // Generar datos basados en los prestadores existentes
-        val prestadores = SampleDataFalso.prestadores
-        
-        prestadores.forEachIndexed { index, prestador ->
-            val isLicitacion = index % 2 == 0
-            val category = if (isLicitacion) "Presupuestos de Licitaciones" else "Presupuestos Generales"
-            val service = prestador.services.firstOrNull() ?: "General"
-            
-            val daysAgo = Random.nextLong(0, 30)
-            val fecha = LocalDate.now().minusDays(daysAgo).format(formatter)
-            val precio = "$${Random.nextInt(1000, 50000)}"
-            
-            val nombrePresupuesto = if (isLicitacion) "Licitación para $service" else "Presupuesto de $service"
-            
-            var inicio: String? = null
-            var fin: String? = null
-            var status = "Pendiente"
-
-            if (isLicitacion) {
-                val daysStart = Random.nextLong(0, 5)
-                val daysEnd = Random.nextLong(5, 20)
-                inicio = LocalDate.now().minusDays(daysStart).format(formatter)
-                fin = LocalDate.now().plusDays(daysEnd).format(formatter)
-                
-                // Lógica simple para determinar estado
-                try {
-                    val fechaInicioDate = LocalDate.parse(inicio, formatter)
-                    val fechaFinDate = LocalDate.parse(fin, formatter)
-                    val ahora = LocalDate.now()
-                    status = if (!ahora.isBefore(fechaInicioDate) && !ahora.isAfter(fechaFinDate)) "Activa" else "Finalizada"
-                } catch (e: Exception) {
-                    status = "Desconocido"
-                }
-            }
-
-            add(PresupuestoFalso(
-                id = "presupuesto_${prestador.id}_$index",
-                nombre = nombrePresupuesto,
-                fecha = fecha,
-                categoria = category,
-                servicioCategoria = service,
-                empresaId = prestador.id,
-                empresaNombre = prestador.companyName ?: "${prestador.name} ${prestador.lastName}",
-                empresaImagenUrl = prestador.profileImageUrl,
-                precio = precio,
-                fechaInicioLicitacion = inicio,
-                fechaFinLicitacion = fin,
-                status = status
-            ))
-        }
-        
-        // Agregar algunos datos manuales específicos para variedad
         add(PresupuestoFalso(
             id = "p_manual_1",
             nombre = "Reparación de Techo",

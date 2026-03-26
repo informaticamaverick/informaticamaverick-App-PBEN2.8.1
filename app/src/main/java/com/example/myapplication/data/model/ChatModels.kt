@@ -17,7 +17,19 @@ data class Message(
     val locationAddress: String? = null,
     val appointmentDate: String? = null,
     val appointmentTime: String? = null,
-    val appointmentNotes: String? = null
+    val appointmentNotes: String? = null,
+    // Para mensajes de presupuesto (solo strings)
+    val budgetNumero: String? = null,
+    val budgetTotal: Double? = null,
+    val budgetSubtotal: Double? = null,
+    val budgetImpuestos: Double? = null,
+    val budgetItemsJson: String? = null,
+    val budgetServiciosJson: String? = null,
+    val budgetHonorariosJson: String? = null,
+    val budgetGastosJson: String? = null,
+    val budgetImpuestosJson: String? = null,
+    val budgetNotas: String? = null,
+    val budgetValidezDias: Int? = null
 )
 
 /**

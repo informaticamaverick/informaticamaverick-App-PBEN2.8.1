@@ -5,7 +5,74 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.example.myapplication.data.local.CategoryDao
+import com.example.myapplication.data.local.CategoryEntity
+import kotlinx.coroutines.flow.Flow
 
+
+class CategoryRepository @Inject constructor(
+    private val categoryDao: CategoryDao,
+    private val firestore: FirebaseFirestore
+) {
+    private val categoriesCollection = firestore.collection("categories")
+
+    val allCategories: Flow<List<CategoryEntity>> = categoryDao.getAllCategories()
+
+    suspend fun syncWithFirebase() {
+        // placeholder
+    }
+
+    suspend fun addCategory(category: Category): Result<String> {
+        return try {
+            val docRef = categoriesCollection.add(category).await()
+            Result.success(docRef.id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addCategories(categories: List<Category>): Result<Unit> {
+        return try {
+            val batch = firestore.batch()
+            categories.forEach { category ->
+                val docRef = categoriesCollection.document()
+                batch.set(docRef, category.copy(id = docRef.id))
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getAllCategories(): Result<List<Category>> {
+        return try {
+            val snapshot = categoriesCollection.orderBy("order").get().await()
+            val categories = snapshot.documents.mapNotNull { it.toObject(Category::class.java) }
+            Result.success(categories)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun searchCategories(query: String): Result<List<Category>> {
+        return try {
+            val snapshot = categoriesCollection.get().await()
+            val categories = snapshot.documents
+                .mapNotNull { it.toObject(Category::class.java) }
+                .filter { it.name.contains(query, ignoreCase = true) }
+            Result.success(categories)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}
+
+
+
+
+
+/**
 @Singleton
 class CategoryRepository @Inject constructor(
     private val firestore: FirebaseFirestore
@@ -73,4 +140,4 @@ class CategoryRepository @Inject constructor(
             Result.failure(e)
         }
     }
-}
+}**/

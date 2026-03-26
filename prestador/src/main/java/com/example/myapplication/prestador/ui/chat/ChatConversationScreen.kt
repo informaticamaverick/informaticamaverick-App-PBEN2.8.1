@@ -68,21 +68,26 @@ fun ChatConversationScreen(
 ) {
     val context = LocalContext.current
     val notificationHelper = remember { NotificationHelper(context) }
-    
+
+    val chatViewModel: com.example.myapplication.prestador.viewmodel.ChatViewModel = hiltViewModel()
+    val chatId = remember(userId, providerId) {
+        com.example.myapplication.prestador.utils.ChatIdHelper.generateChatId(userId, providerId)
+    }
+
     // Estado para saber si este chat está visible
     var isChatVisible by remember { mutableStateOf(true) }
-    
+
     // Detectar cuando el chat se muestra/oculta
     DisposableEffect(Unit) {
         isChatVisible = true
         println("🟢 ChatConversationScreen con $userName ahora VISIBLE")
-        
+
         onDispose {
             isChatVisible = false
             println("🔴 ChatConversationScreen con $userName ahora OCULTO (DESTRUIDO)")
         }
     }
-    
+
     //Solicitar permisos de notficaciones en Android 13+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -103,21 +108,54 @@ fun ChatConversationScreen(
         }
     }
 
-    
-
 
     val colors = getPrestadorColors()
-    
+
     // 🎯 OBSERVAR StateFlow inmutable del nuevo manager
-    val messages by com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager
-        .getMessagesFlow(userId)
-        .collectAsState()
-    
+
+    LaunchedEffect(chatId) { chatViewModel.loadMessagesByConversation(chatId) }
+    val messageEntities by chatViewModel.messages.collectAsState()
+    val messages = messageEntities.map { entity ->
+        val type = when (entity.messageType) {
+            "IMAGE" -> Message.MessageType.IMAGE
+            "AUDIO" -> Message.MessageType.AUDIO
+            "LOCATION" -> Message.MessageType.LOCATION
+            "DOCUMENT" -> Message.MessageType.DOCUMENT
+            "APPOINTMENT" -> Message.MessageType.APPOINTMENT
+            "BUDGET" -> Message.MessageType.BUDGET
+            else -> Message.MessageType.TEXT
+        }
+        Message(
+            id = entity.messageId,
+            text = if (type == Message.MessageType.IMAGE) null else entity.text ?: "",
+            imageUrl = if (type == Message.MessageType.IMAGE) entity.text else entity.imageUrl,
+            audioUrl = entity.audioUrl,
+            audioDuration = entity.audioDuration,
+            latitude = entity.latitude,
+            longitude = entity.longitude,
+            appointmentId = entity.appointmentId,
+            appointmentTitle = if (entity.appointmentTitle.isNullOrBlank()) "Solicitud de cita" else entity.appointmentTitle,
+            appointmentDate = entity.appointmentDate,
+            appointmentTime = entity.appointmentTime,
+            appointmentStatus = when (entity.appointmentStatus) {
+                "ACCEPTED" -> Message.AppointmentProposalStatus.ACCEPTED
+                "REJECTED" -> Message.AppointmentProposalStatus.REJECTED
+                else ->
+                    Message.AppointmentProposalStatus.PENDING
+            },
+            rejectionReason = entity.rejectionReason,
+            timestamp = entity.timestamp,
+            isFromCurrentUser = entity.isFromCurrentUser,
+            type = type
+        )
+    }
+
     var messageText by remember { mutableStateOf("") }
+    var zoomedImageUrl by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
-    
+
     // Estados para adjuntos y grabación
     var showAttachMenu by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
@@ -142,6 +180,7 @@ fun ChatConversationScreen(
                 com.example.myapplication.prestador.data.model.ServiceType.fromString(
                     (profileState as com.example.myapplication.prestador.viewmodel.ProfileState.Success).provider.serviceType
                 )
+
             else -> com.example.myapplication.prestador.data.model.ServiceType.PROFESSIONAL
         }
     }
@@ -149,11 +188,13 @@ fun ChatConversationScreen(
     // En algunos flujos, el providerId real para horarios es el del perfil (Room/Firebase),
     // no necesariamente el UID de Auth.
     val effectiveProviderId = remember(profileState, providerId) {
-        val fromProfile = (profileState as? com.example.myapplication.prestador.viewmodel.ProfileState.Success)?.provider?.id
+        val fromProfile =
+            (profileState as? com.example.myapplication.prestador.viewmodel.ProfileState.Success)?.provider?.id
         if (!fromProfile.isNullOrBlank()) fromProfile else providerId
     }
 
-    val provider = (profileState as? com.example.myapplication.prestador.viewmodel.ProfileState.Success)?.provider
+    val provider =
+        (profileState as? com.example.myapplication.prestador.viewmodel.ProfileState.Success)?.provider
     val providerDisplayName = provider?.displayCompanyOrFullName(businessEntity).orEmpty()
     val providerDisplayAddress = provider?.displayAddress(businessEntity).orEmpty()
     val rentalSpaces by rentalSpacesViewModel.rentalSpaces.collectAsState()
@@ -161,8 +202,7 @@ fun ChatConversationScreen(
         rentalSpaces.filter { it.isActive }.map { it.id to it.name }
     }
     LaunchedEffect(providerId, currentServiceType) {
-        if (currentServiceType == com.example.myapplication.prestador.data.model.ServiceType.RENTAL && providerId.isNotBlank())
-        {
+        if (currentServiceType == com.example.myapplication.prestador.data.model.ServiceType.RENTAL && providerId.isNotBlank()) {
             rentalSpacesViewModel.setProviderId(providerId)
         }
     }
@@ -177,22 +217,22 @@ fun ChatConversationScreen(
             else -> emptyList()
         }
     }
-    
+
     // Estado para guardar datos de cita temporalmente
     var pendingAppointmentDate by remember { mutableStateOf("") }
     var pendingAppointmentTime by remember { mutableStateOf("") }
-    
+
     // Estados para imágenes
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    
+
     // Estados para grabación de audio
     var mediaRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var audioFilePath by remember { mutableStateOf<String?>(null) }
 
     // Estado para rastrear propuestas pendientes y sus timers
     var pendingProposals by remember { mutableStateOf<Set<String>>(emptySet()) }
-    
+
     // Estado para mostrar indicador de "escribiendo..."
     var isClientTyping by remember { mutableStateOf(false) }
     var typingClientName by remember { mutableStateOf("") }
@@ -202,21 +242,54 @@ fun ChatConversationScreen(
         if (isChatVisible) {
             while (true) {
                 delay(1000) // Sincronizar cada segundo
-                com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.syncFromMock(userId)
+                com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.syncFromMock(
+                    userId
+                )
             }
         }
     }
 
     // ⚠️ NOTA: La lógica de auto-respuesta y mensajes espontáneos
     // ahora está en ChatScreen.kt para que persista al salir del chat
-    
-    // LaunchedEffect para contador de tiempo de grabación
+
+    // Función para detener grabación y enviar
+    fun stopRecordingAndSend() {
+        val pathToSend = audioFilePath
+        val duration = recordingTime
+
+        try {
+            mediaRecorder?.stop()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            mediaRecorder?.release()
+        } catch (e: Exception) { /* ignorar */
+        }
+        mediaRecorder = null
+        isRecording = false
+        recordingTime = 0
+        audioFilePath = null
+
+        pathToSend?.let { path ->
+            chatViewModel.sendAudioMessage(path, duration)
+            coroutineScope.launch {
+                listState.animateScrollToItem(0)
+            }
+        }
+    }
+
+    // LaunchedEffect para contador de tiempo de grabación (límite 60 segundos)
     LaunchedEffect(isRecording) {
         if (isRecording) {
             recordingTime = 0
             while (isRecording) {
                 delay(1000)
                 recordingTime++
+                if (recordingTime >= 60) {
+                    stopRecordingAndSend()
+                    break
+                }
             }
         } else {
             recordingTime = 0
@@ -228,7 +301,7 @@ fun ChatConversationScreen(
         delay(600)
         keyboardController?.show()
     }
-    
+
     // SideEffect para forzar el foco en el campo de texto
     DisposableEffect(Unit) {
         val job = coroutineScope.launch {
@@ -239,7 +312,7 @@ fun ChatConversationScreen(
             job.cancel()
         }
     }
-    
+
     // Crear URI temporal para la foto
     val tempPhotoUri = remember {
         val photoFile = File(
@@ -252,31 +325,22 @@ fun ChatConversationScreen(
             photoFile
         )
     }
-    
+
     // Launcher para tomar foto con la cámara
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
             cameraImageUri = tempPhotoUri
-            // Enviar la foto como mensaje
-            val newMessage = Message(
-                id = (messages.size + 1).toString(),
-                text = "",
-                imageUrl = tempPhotoUri.toString(),
-                timestamp = System.currentTimeMillis(),
-                isFromCurrentUser = true,
-                type = Message.MessageType.IMAGE
-            )
-            com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(userId, newMessage)
+            chatViewModel.sendImage(tempPhotoUri, context)
             cameraImageUri = null
-            
+
             coroutineScope.launch {
                 listState.animateScrollToItem(0)
             }
         }
     }
-    
+
     // Launcher para permisos de cámara
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -287,36 +351,27 @@ fun ChatConversationScreen(
             // Mostrar mensaje de error
         }
     }
-    
+
     // Launcher para galería
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             selectedImageUri = uri
-            // Enviar la imagen como mensaje
-            val newMessage = Message(
-                id = (messages.size + 1).toString(),
-                text = "",
-                imageUrl = uri.toString(),
-                timestamp = System.currentTimeMillis(),
-                isFromCurrentUser = true,
-                type = Message.MessageType.IMAGE
-            )
-            com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(userId, newMessage)
+            chatViewModel.sendImage(uri, context)
             selectedImageUri = null
-            
+
             coroutineScope.launch {
                 listState.animateScrollToItem(0)
             }
         }
     }
-    
+
     // Función para iniciar grabación
     fun startRecording() {
         val audioFile = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
         audioFilePath = audioFile.absolutePath
-        
+
         mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
         } else {
@@ -337,7 +392,7 @@ fun ChatConversationScreen(
             }
         }
     }
-    
+
     // Launcher para permisos de audio
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -346,14 +401,14 @@ fun ChatConversationScreen(
             startRecording()
         }
     }
-    
+
     // Launcher para permisos de calendario
     val calendarPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val readGranted = permissions[android.Manifest.permission.READ_CALENDAR] ?: false
         val writeGranted = permissions[android.Manifest.permission.WRITE_CALENDAR] ?: false
-        
+
         if (readGranted && writeGranted) {
             // Permisos concedidos, mostrar el diálogo
             showScheduleDialog = true
@@ -365,40 +420,30 @@ fun ChatConversationScreen(
             ).show()
         }
     }
-    
+
     // Launcher para permisos de ubicación
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val fineLocationGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseLocationGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-        
+        val fineLocationGranted =
+            permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted =
+            permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
         if (fineLocationGranted || coarseLocationGranted) {
             // Permiso concedido, obtener ubicación
-            val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
+            val fusedLocationClient =
+                com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(
+                    context
+                )
             try {
                 fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                     if (location != null) {
-                        val newMessage = Message(
-                            id = (messages.size + 1).toString(),
-                            text = "Mi ubicación",
-                            latitude = location.latitude,
-                            longitude = location.longitude,
-                            timestamp = System.currentTimeMillis(),
-                            isFromCurrentUser = true,
-                            type = Message.MessageType.LOCATION
-                        )
-                        com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(userId, newMessage)
-                        
+
+                        chatViewModel.sendLocation(location.latitude, location.longitude)
                         coroutineScope.launch {
                             listState.animateScrollToItem(0)
                         }
-                    } else {
-                        android.widget.Toast.makeText(
-                            context,
-                            "No se pudo obtener tu ubicación actual",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
                     }
                 }
             } catch (e: SecurityException) {
@@ -417,43 +462,7 @@ fun ChatConversationScreen(
             ).show()
         }
     }
-    
-    // Función para detener grabación y enviar
-    fun stopRecordingAndSend() {
-        try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
-            mediaRecorder = null
-            
-            audioFilePath?.let { path ->
-                val audioUri = Uri.fromFile(File(path))
-                val newMessage = Message(
-                    id = (messages.size + 1).toString(),
-                    text = "[Audio]",
-                    audioUrl = audioUri.toString(),
-                    timestamp = System.currentTimeMillis(),
-                    isFromCurrentUser = true,
-                    type = Message.MessageType.AUDIO
-                )
-                com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(userId, newMessage)
-                
-                coroutineScope.launch {
-                    listState.animateScrollToItem(0)
-                }
-            }
-            
-            isRecording = false
-            recordingTime = 0
-            audioFilePath = null
-        } catch (e: Exception) {
-            e.printStackTrace()
-            isRecording = false
-            recordingTime = 0
-        }
-    }
-    
+
     // Función para cancelar grabación
     fun cancelRecording() {
         try {
@@ -462,12 +471,12 @@ fun ChatConversationScreen(
                 release()
             }
             mediaRecorder = null
-            
+
             // Eliminar archivo de audio
             audioFilePath?.let { path ->
                 File(path).delete()
             }
-            
+
             isRecording = false
             recordingTime = 0
             audioFilePath = null
@@ -501,7 +510,7 @@ fun ChatConversationScreen(
                                 )
                             }
                         }
-                        
+
                         Column {
                             Text(
                                 text = userName,
@@ -563,7 +572,7 @@ fun ChatConversationScreen(
                             TypingIndicator(userName = typingClientName)
                         }
                     }
-                    
+
                     items(
                         messages.reversed(),
                         key = { message ->
@@ -575,360 +584,399 @@ fun ChatConversationScreen(
                             message = message,
                             isFromCurrentUser = message.isFromCurrentUser,
                             onReschedule = {
-                                // Abrir diálogo para reprogramar
                                 showScheduleDialog = true
+                            },
+                            onAccept = {
+                                chatViewModel.updateAppointmentStatus(message.id, "ACCEPTED")
+                            },
+
+                            onReject = {
+                                chatViewModel.updateAppointmentStatus(message.id, "REJECTED")
                             },
                             onVerPresupuesto = if (message.type == Message.MessageType.BUDGET) {
                                 { presupuestoMsgToView = message }
-                            } else null
+                            } else null,
+                            onImageClick = { url -> zoomedImageUrl = url }
                         )
                     }
-                }
-                
+                } // end LazyColumn
+
                 // Barra de entrada de mensajes
                 MessageInputBar(
-                    messageText = messageText,
-                    onMessageTextChange = { messageText = it },
-                    onSendMessage = {
-                        if (messageText.isNotBlank()) {
-                            val newMessage = Message(
-                                id = (messages.size + 1).toString(),
-                                text = messageText,
-                                timestamp = System.currentTimeMillis(),
-                                isFromCurrentUser = true,
-                                type = Message.MessageType.TEXT
-                            )
-                            com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(userId, newMessage)
-                            messageText = ""
-                            
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(0)
-                            }
-                        }
-                    },
-                    onAttachClick = { showAttachMenu = !showAttachMenu },
-                    onCameraClick = {
-                        // Verificar si ya tiene permisos de cámara
-                        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.CAMERA
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        ) {
-                            // Ya tiene permiso, abrir cámara directamente
-                            cameraLauncher.launch(tempPhotoUri)
-                        } else {
-                            // Solicitar permisos
-                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    },
-                    onMicClick = {
-                        if (isRecording) {
-                            // Ya está grabando, detener y enviar
-                            stopRecordingAndSend()
-                        } else {
-                            // Verificar permisos y empezar a grabar
-                            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.RECORD_AUDIO
-                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                            ) {
-                                // Ya tiene permiso, iniciar grabación directamente
-                                startRecording()
-                            } else {
-                                // Solicitar permisos
-                                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
-                        }
-                    },
-                    onCancelAudio = {
-                        cancelRecording()
-                    },
-                    isRecording = isRecording,
-                    recordingTime = recordingTime
-                )
-            }
-            
-            // Menú flotante de adjuntos - FUERA del flujo normal
-            AnimatedVisibility(
-                visible = showAttachMenu,
-                enter = scaleIn(
-                    animationSpec = tween(300),
-                    transformOrigin = TransformOrigin(0f, 1f)
-                ) + fadeIn(tween(200)),
-                exit = scaleOut(
-                    animationSpec = tween(200),
-                    transformOrigin = TransformOrigin(0f, 1f)
-                ) + fadeOut(tween(200)),
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(bottom = 16.dp, start = 5.dp)
-            ) {
-                AttachmentOptionsMenu(
-                    serviceType = currentServiceType,
-                    onDismiss = { showAttachMenu = false },
-                    onImageClick = {
-                        showAttachMenu = false
-                        galleryLauncher.launch("image/*")
-                    },
-                    onCameraClick = {
-                        showAttachMenu = false
-                        // Verificar si ya tiene permisos de cámara
-                        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.CAMERA
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        ) {
-                            // Ya tiene permiso, abrir cámara directamente
-                            cameraLauncher.launch(tempPhotoUri)
-                        } else {
-                            // Solicitar permisos
-                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    },
-                    onLocationClick = {
-                        showAttachMenu = false
-                        // Verificar permisos de ubicacion
-                        val hasFineLocation = androidx.core.content.ContextCompat.checkSelfPermission(
-                            context, 
-                            android.Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        
-                        val hasCoarseLocation = androidx.core.content.ContextCompat.checkSelfPermission(
-                            context,
-                            android.Manifest.permission.ACCESS_COARSE_LOCATION
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        
-                        if (hasFineLocation || hasCoarseLocation) {
-                            // Obtener ubicacion actual
-                            val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
-                            try {
-                                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                                    if (location != null) {
-                                        // Enviar mensaje con ubicacion
-                                        val newMessage = Message(
-                                            id = (messages.size + 1).toString(),
-                                            text = "Mi ubicación",
-                                            latitude = location.latitude,
-                                            longitude = location.longitude,
-                                            timestamp = System.currentTimeMillis(),
-                                            isFromCurrentUser = true,
-                                            type = Message.MessageType.LOCATION
-                                        )
-                                        com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(userId, newMessage)
-                                        coroutineScope.launch { 
-                                            listState.animateScrollToItem(0) 
-                                        }
+                            messageText = messageText,
+                            onMessageTextChange = { messageText = it },
+                            onSendMessage = {
+                                if (messageText.isNotBlank()) {
+                                    chatViewModel.sendMessage(messageText)
+                                    messageText = ""
+                                    coroutineScope.launch { listState.animateScrollToItem(0) }
+                                }
+                            },
+                            onAttachClick = { showAttachMenu = !showAttachMenu },
+                            onCameraClick = {
+                                // Verificar si ya tiene permisos de cámara
+                                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.CAMERA
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    // Ya tiene permiso, abrir cámara directamente
+                                    cameraLauncher.launch(tempPhotoUri)
+                                } else {
+                                    // Solicitar permisos
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                            },
+                            onMicClick = {
+                                if (isRecording) {
+                                    // Ya está grabando, detener y enviar
+                                    stopRecordingAndSend()
+                                } else {
+                                    // Verificar permisos y empezar a grabar
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.RECORD_AUDIO
+                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    ) {
+
+                                        // Ya tiene permiso, iniciar grabación directamente
+                                        startRecording()
                                     } else {
-                                        // No se pudo obtener la ubicación
+                                        // Solicitar permisos
+                                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                }
+                            },
+                            onCancelAudio = {
+                                cancelRecording()
+                            },
+                            isRecording = isRecording,
+                            recordingTime = recordingTime
+                        )
+                    }
+
+                    // Menú flotante de adjuntos - FUERA del flujo normal
+                    AnimatedVisibility(
+                        visible = showAttachMenu,
+                        enter = scaleIn(
+                            animationSpec = tween(300),
+                            transformOrigin = TransformOrigin(0f, 1f)
+                        ) + fadeIn(tween(200)),
+                        exit = scaleOut(
+                            animationSpec = tween(200),
+                            transformOrigin = TransformOrigin(0f, 1f)
+                        ) + fadeOut(tween(200)),
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(bottom = 16.dp, start = 5.dp)
+                    ) {
+                        AttachmentOptionsMenu(
+                            serviceType = currentServiceType,
+                            onDismiss = { showAttachMenu = false },
+                            onImageClick = {
+                                showAttachMenu = false
+                                galleryLauncher.launch("image/*")
+                            },
+                            onCameraClick = {
+                                showAttachMenu = false
+                                // Verificar si ya tiene permisos de cámara
+                                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.CAMERA
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    // Ya tiene permiso, abrir cámara directamente
+                                    cameraLauncher.launch(tempPhotoUri)
+                                } else {
+                                    // Solicitar permisos
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                            },
+                            onLocationClick = {
+                                showAttachMenu = false
+                                // Verificar permisos de ubicacion
+                                val hasFineLocation =
+                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.ACCESS_FINE_LOCATION
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                                val hasCoarseLocation =
+                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                                if (hasFineLocation || hasCoarseLocation) {
+                                    // Obtener ubicacion actual
+                                    val fusedLocationClient =
+                                        com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(
+                                            context
+                                        )
+                                    try {
+                                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                                            if (location != null) {
+
+                                                chatViewModel.sendLocation(
+                                                    location.latitude,
+                                                    location.longitude
+                                                )
+                                                coroutineScope.launch {
+                                                    listState.animateScrollToItem(0)
+                                                }
+                                            }
+                                        }
+                                    } catch (e: SecurityException) {
                                         android.widget.Toast.makeText(
-                                            context, 
-                                            "No se pudo obtener tu ubicación",
+                                            context,
+                                            "Error al obtener ubicación",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                     }
+                                } else {
+                                    // Solicitar permisos
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
                                 }
-                            } catch (e: SecurityException) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Error al obtener ubicación",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
+                            },
+                            onDocumentClick = {
+                                showAttachMenu = false
+                                showBudgetSheet = true
+                            },
+                            onScheduleClick = {
+                                showAttachMenu = false
+                                // Verificar permisos de calendario
+                                val hasReadPermission =
+                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.READ_CALENDAR
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                                val hasWritePermission =
+                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.WRITE_CALENDAR
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                                if (hasReadPermission && hasWritePermission) {
+                                    // Ya tiene permisos, mostrar diálogo
+                                    showScheduleDialog = true
+                                } else {
+                                    // Solicitar permisos
+                                    calendarPermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.READ_CALENDAR,
+                                            android.Manifest.permission.WRITE_CALENDAR
+                                        )
+                                    )
+                                }
                             }
-                        } else {
-                            // Solicitar permisos
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                                    android.Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
-                        }
-                    },
-                    onDocumentClick = {
-                        showAttachMenu = false
-                        showBudgetSheet = true
-                    },
-                    onScheduleClick = {
-                        showAttachMenu = false
-                        // Verificar permisos de calendario
-                        val hasReadPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                            context,
-                            android.Manifest.permission.READ_CALENDAR
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        
-                        val hasWritePermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                            context,
-                            android.Manifest.permission.WRITE_CALENDAR
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        
-                        if (hasReadPermission && hasWritePermission) {
-                            // Ya tiene permisos, mostrar diálogo
-                            showScheduleDialog = true
-                        } else {
-                            // Solicitar permisos
-                            calendarPermissionLauncher.launch(
-                                arrayOf(
-                                    android.Manifest.permission.READ_CALENDAR,
-                                    android.Manifest.permission.WRITE_CALENDAR
-                                )
-                            )
-                        }
+                        )
                     }
-                )
-            }
-        }
-        
-        // Diálogo de agendar cita
-        if (showScheduleDialog) {
-            com.example.myapplication.prestador.ui.appointments.CreateAppointmentDialog(
-                serviceType = currentServiceType,
-                onDismiss = { showScheduleDialog = false },
-                onRequestSlots = { date, duration ->
-                    if (effectiveProviderId.isNotBlank()) {
-                        println("🟠 Chat: loadAvailabilitySlots providerId=$effectiveProviderId date=$date duration=$duration")
-                        appointmentViewModel.loadAvailabilitySlots(effectiveProviderId, date, duration)
-                    } else {
-                        println("🔴 Chat: providerId vacío, no se pueden cargar turnos")
-                    }
-                },
-                slotsRequestKey = effectiveProviderId,
-                isSlotsLoading = slotsLoading,
-                onConfirm = { clientName, service, date, time, duration, rentalSpaceId, scheduleId, notes, assignedEmployeeIds, peopleCount ->
-                    showScheduleDialog = false
-                    val appointmentId= "apt_${userId}_${System.currentTimeMillis()}"
-                    val newAppointment = AppointmentEntity(
-                        id = appointmentId,
-                        clientId = userId,
-                        clientName = userName,
-                        providerId = effectiveProviderId,
-                        service = service,
-                        date = date,
-                        time = time,
-                        duration = duration,
-                    status = "pending",
-                        notes = notes,
-                        serviceType = currentServiceType.name,
-                        rentalSpaceId = rentalSpaceId,
-                        scheduleId = scheduleId,
-                        assignedEmployeeIds = assignedEmployeeIds,
-                        peopleCount = peopleCount
-                    )
-                    appointmentViewModel.saveAppointment(newAppointment)
+                }
 
-                    val newMessage = Message(
-                        id = "msg_appointment_${System.currentTimeMillis()}_${userId}", text = "Cita prpuesta",
-                        timestamp = System.currentTimeMillis(),
-                        isFromCurrentUser = true,
-                        type = Message.MessageType.APPOINTMENT,
-                        appointmentDate = date,
-                        appointmentTime = time,
-                        appointmentId = appointmentId,
-                        appointmentStatus = Message.AppointmentProposalStatus.PENDING,
-                        appointmentTitle = service
+                // Diálogo de agendar cita
+                if (showScheduleDialog) {
+                    com.example.myapplication.prestador.ui.appointments.CreateAppointmentDialog(
+                        serviceType = currentServiceType,
+                        onDismiss = { showScheduleDialog = false },
+                        onRequestSlots = { date, duration ->
+                            if (effectiveProviderId.isNotBlank()) {
+                                println("🟠 Chat: loadAvailabilitySlots providerId=$effectiveProviderId date=$date duration=$duration")
+                                appointmentViewModel.loadAvailabilitySlots(
+                                    effectiveProviderId,
+                                    date,
+                                    duration
+                                )
+                            } else {
+                                println("🔴 Chat: providerId vacío, no se pueden cargar turnos")
+                            }
+                        },
+                        slotsRequestKey = effectiveProviderId,
+                        isSlotsLoading = slotsLoading,
+                        onConfirm = { clientName, service, date, time, duration, rentalSpaceId, scheduleId, notes, assignedEmployeeIds, peopleCount ->
+                            showScheduleDialog = false
+                            val appointmentId = "apt_${userId}_${System.currentTimeMillis()}"
+                            val newAppointment = AppointmentEntity(
+                                id = appointmentId,
+                                clientId = userId,
+                                clientName = userName,
+                                providerId = effectiveProviderId,
+                                service = service,
+                                date = date,
+                                time = time,
+                                duration = duration,
+                                status = "pending",
+                                notes = notes,
+                                serviceType = currentServiceType.name,
+                                rentalSpaceId = rentalSpaceId,
+                                scheduleId = scheduleId,
+                                assignedEmployeeIds = assignedEmployeeIds,
+                                peopleCount = peopleCount
+                            )
+                            appointmentViewModel.saveAppointment(newAppointment)
+
+                            val newMessage = Message(
+                                id = "msg_appointment_${System.currentTimeMillis()}_${userId}",
+                                text = "Cita prpuesta",
+                                timestamp = System.currentTimeMillis(),
+                                isFromCurrentUser = true,
+                                type = Message.MessageType.APPOINTMENT,
+                                appointmentDate = date,
+                                appointmentTime = time,
+                                appointmentId = appointmentId,
+                                appointmentStatus = Message.AppointmentProposalStatus.PENDING,
+                                appointmentTitle = service
+                            )
+
+                            com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(
+                                userId,
+                                newMessage
+                            )
+                            coroutineScope.launch { listState.animateScrollToItem(0) }
+
+
+                        },
+                        colors = com.example.myapplication.prestador.ui.theme.getPrestadorColors(),
+                        availableSpaces = availableSpaces,
+                        availableSlots = availableSlots,
+                        availableEmployees = if (currentServiceType == com.example.myapplication.prestador.data.model.ServiceType.TECHNICAL)
+                            availableEmployees else emptyList(),
+                        initialClientName = userName
                     )
 
-                    com.example.myapplication.prestador.viewmodel.AppointmentRescheduleManager.addMessage(userId, newMessage)
-                    coroutineScope.launch { listState.animateScrollToItem(0) }
+                }
 
-
-                },
-                colors = com.example.myapplication.prestador.ui.theme.getPrestadorColors(),
-                availableSpaces = availableSpaces,
-                availableSlots = availableSlots,
-                availableEmployees = if (currentServiceType == com.example.myapplication.prestador.data.model.ServiceType.TECHNICAL)
-                    availableEmployees else emptyList(),
-                initialClientName = userName
-            )
-
-        }
-
-        // Sheet de presupuesto en el chat
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && showBudgetSheet) {
-            com.example.myapplication.prestador.ui.presupuesto.BudgetChatSheet(
-                userId = userId,
-                userName = userName,
-                onDismiss = { showBudgetSheet = false }
-            )
-        }
-
-        // Vista previa de presupuesto al hacer clic en "Ver presupuesto"
-        presupuestoMsgToView?.let { msg ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                fun parseItems(json: String?) = if (json.isNullOrBlank()) emptyList() else
-                    json.split("|").mapNotNull { s ->
-                        val p = s.split(";")
-                        if (p.size >= 4) BudgetItem(
-                            id = 0L, code = p[0], description = p[1],
-                            quantity = p[2].toIntOrNull() ?: 1,
-                            unitPrice = p[3].toDoubleOrNull() ?: 0.0,
-                            taxPercentage = p.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
-                            discountPercentage = p.getOrNull(5)?.toDoubleOrNull() ?: 0.0
-                        ) else null
-                    }
-                fun parseServices(json: String?) = if (json.isNullOrBlank()) emptyList() else
-                    json.split("|").mapNotNull { s ->
-                        val p = s.split(";")
-                        if (p.size >= 2) BudgetService(id = 0L, code = p[0], description = p[1], total = p.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
-                    }
-                fun parseFees(json: String?) = if (json.isNullOrBlank()) emptyList() else
-                    json.split("|").mapNotNull { s ->
-                        val p = s.split(";")
-                        if (p.size >= 2) BudgetProfessionalFee(id = 0L, code = p[0], description = p[1], total = p.getOrNull(2)?.toDoubleOrNull() ?: 0.0) else null
-                    }
-                fun parseMisc(json: String?) = if (json.isNullOrBlank()) emptyList() else
-                    json.split("|").mapNotNull { s ->
-                        val p = s.split(";")
-                        if (p.size >= 2) BudgetMiscExpense(id = 0L, description = p[0], amount = p[1].toDoubleOrNull() ?: 0.0) else null
-                    }
-                fun parseTaxes(json: String?) = if (json.isNullOrBlank()) emptyList() else
-                    json.split("|").mapNotNull { s ->
-                        val p = s.split(";")
-                        if (p.size >= 2) BudgetTax(id = 0L, description = p[0], amount = p[1].toDoubleOrNull() ?: 0.0) else null
-                    }
-
-                val prestador = remember(msg.id, provider?.id, providerDisplayName, providerDisplayAddress) {
-                    provider?.toPrestadorProfileFalso(businessEntity) ?: PPrestadorProfileFalso(
-                        id = effectiveProviderId.ifBlank { "demo" },
-                        name = providerDisplayName.ifBlank { "Prestador" },
-                        lastName = "",
-                        profileImageUrl = "",
-                        bannerImageUrl = null,
-                        rating = 0f,
-                        isVerified = false,
-                        isOnline = false,
-                        services = emptyList(),
-                        companyName = null,
-                        address = providerDisplayAddress,
-                        email = "",
-                        doesHomeVisits = false,
-                        hasPhysicalLocation = false,
-                        works24h = false,
-                        galleryImages = emptyList(),
-                        isFavorite = false,
-                        isSubscribed = false
+                // Sheet de presupuesto en el chat
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && showBudgetSheet) {
+                    com.example.myapplication.prestador.ui.presupuesto.BudgetChatSheet(
+                        userId = userId,
+                        userName = userName,
+                        onDismiss = { showBudgetSheet = false }
                     )
                 }
 
-                BudgetPreviewPDFDialog(
-                    prestador = prestador,
-                    items = parseItems(msg.budgetItemsJson),
-                    services = parseServices(msg.budgetServiciosJson),
-                    professionalFees = parseFees(msg.budgetHonorariosJson),
-                    miscExpenses = parseMisc(msg.budgetGastosJson),
-                    taxes = parseTaxes(msg.budgetImpuestosJson),
-                    grandTotal = msg.budgetTotal ?: 0.0,
-                    subtotal = msg.budgetSubtotal ?: 0.0,
-                    taxAmount = msg.budgetImpuestos ?: 0.0,
-                    discountAmount = 0.0,
-                    showSendButton = false,
-                    providerName = providerDisplayName,
-                    providerAddress = providerDisplayAddress,
-                    isProfessional = currentServiceType == com.example.myapplication.prestador.data.model.ServiceType.PROFESSIONAL,
-                    presupuestoNumero = msg.budgetNumero ?: "",
-                    onDismiss = { presupuestoMsgToView = null },
-                    onEnviar = { presupuestoMsgToView = null }
-                )
+                // Vista previa de presupuesto al hacer clic en "Ver presupuesto"
+                presupuestoMsgToView?.let { msg ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        fun parseItems(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                            json.split("|").mapNotNull { s ->
+                                val p = s.split(";")
+                                if (p.size >= 4) BudgetItem(
+                                    id = 0L, code = p[0], description = p[1],
+                                    quantity = p[2].toIntOrNull() ?: 1,
+                                    unitPrice = p[3].toDoubleOrNull() ?: 0.0,
+                                    taxPercentage = p.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
+                                    discountPercentage = p.getOrNull(5)?.toDoubleOrNull() ?: 0.0
+                                ) else null
+                            }
+
+                        fun parseServices(json: String?) =
+                            if (json.isNullOrBlank()) emptyList() else
+                                json.split("|").mapNotNull { s ->
+                                    val p = s.split(";")
+                                    if (p.size >= 2) BudgetService(
+                                        id = 0L,
+                                        code = p[0],
+                                        description = p[1],
+                                        total = p.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+                                    ) else null
+                                }
+
+                        fun parseFees(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                            json.split("|").mapNotNull { s ->
+                                val p = s.split(";")
+                                if (p.size >= 2) BudgetProfessionalFee(
+                                    id = 0L,
+                                    code = p[0],
+                                    description = p[1],
+                                    total = p.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+                                ) else null
+                            }
+
+                        fun parseMisc(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                            json.split("|").mapNotNull { s ->
+                                val p = s.split(";")
+                                if (p.size >= 2) BudgetMiscExpense(
+                                    id = 0L,
+                                    description = p[0],
+                                    amount = p[1].toDoubleOrNull() ?: 0.0
+                                ) else null
+                            }
+
+                        fun parseTaxes(json: String?) = if (json.isNullOrBlank()) emptyList() else
+                            json.split("|").mapNotNull { s ->
+                                val p = s.split(";")
+                                if (p.size >= 2) BudgetTax(
+                                    id = 0L,
+                                    description = p[0],
+                                    amount = p[1].toDoubleOrNull() ?: 0.0
+                                ) else null
+                            }
+
+                        val prestador = remember(
+                            msg.id,
+                            provider?.id,
+                            providerDisplayName,
+                            providerDisplayAddress
+                        ) {
+                            provider?.toPrestadorProfileFalso(businessEntity)
+                                ?: PPrestadorProfileFalso(
+                                    id = effectiveProviderId.ifBlank { "demo" },
+                                    name = providerDisplayName.ifBlank { "Prestador" },
+                                    lastName = "",
+                                    profileImageUrl = "",
+                                    bannerImageUrl = null,
+                                    rating = 0f,
+                                    isVerified = false,
+                                    isOnline = false,
+                                    services = emptyList(),
+                                    companyName = null,
+                                    address = providerDisplayAddress,
+                                    email = "",
+                                    doesHomeVisits = false,
+                                    hasPhysicalLocation = false,
+                                    works24h = false,
+                                    galleryImages = emptyList(),
+                                    isFavorite = false,
+                                    isSubscribed = false
+                                )
+                        }
+
+                        BudgetPreviewPDFDialog(
+                            prestador = prestador,
+                            items = parseItems(msg.budgetItemsJson),
+                            services = parseServices(msg.budgetServiciosJson),
+                            professionalFees = parseFees(msg.budgetHonorariosJson),
+                            miscExpenses = parseMisc(msg.budgetGastosJson),
+                            taxes = parseTaxes(msg.budgetImpuestosJson),
+                            grandTotal = msg.budgetTotal ?: 0.0,
+                            subtotal = msg.budgetSubtotal ?: 0.0,
+                            taxAmount = msg.budgetImpuestos ?: 0.0,
+                            discountAmount = 0.0,
+                            showSendButton = false,
+                            providerName = providerDisplayName,
+                            providerAddress = providerDisplayAddress,
+                            isProfessional = currentServiceType == com.example.myapplication.prestador.data.model.ServiceType.PROFESSIONAL,
+                            presupuestoNumero = msg.budgetNumero ?: "",
+                            onDismiss = { presupuestoMsgToView = null },
+                            onEnviar = { presupuestoMsgToView = null }
+                        )
+                    }
+                }
+
+                // Visor de imagen con zoom al tocar una imagen en el chat
+                zoomedImageUrl?.let { url ->
+                    ImageZoomDialog(
+                        imageUrl = url,
+                        onDismiss = { zoomedImageUrl = null }
+                    )
+                }
             }
         }
-    }
-}
+
+

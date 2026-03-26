@@ -52,6 +52,18 @@ class PresupuestoViewModel @Inject constructor(
                 initialValue = emptyList()
             )
 
+    val articleCatalog: StateFlow<PresupuestoEntity?> =
+        repository.getCatalogPresupuesto("__catalog_articles__")
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val serviceCatalog: StateFlow<PresupuestoEntity?> =
+        repository.getCatalogPresupuesto("__catalog_services__")
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val feeCatalog: StateFlow<PresupuestoEntity?> =
+        repository.getCatalogPresupuesto("__catalog_fees__")
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     fun insertPresupuesto(presupuesto: PresupuestoEntity) {
         viewModelScope.launch { repository.insertPresupuesto(presupuesto) }
     }

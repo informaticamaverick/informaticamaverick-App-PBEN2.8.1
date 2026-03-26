@@ -1,476 +1,384 @@
 package com.example.myapplication.data.model.fake
 
-import androidx.compose.runtime.mutableStateListOf
-import com.example.myapplication.R
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.myapplication.data.local.*
+import com.example.myapplication.data.model.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 import kotlin.random.Random
 
-object SampleDataFalso {
+/**
+ * --- GENERADOR DE DATOS DE PRUEBA MAESTRO (VERSIÓN FINAL INTERCONECTADA) ---
+ * Propósito: Poblar Room con un ecosistema completo y funcional de Prestadores, Licitaciones y Eventos de Agenda.
+ */
+object PrestadorSampleDataFalso {
 
-    val prestadores = mutableStateListOf<UserFalso>()
+    const val CLIENT_ID = "user_demo_66" // Hecho público para que CalendarScreen y ChatViewModel lo puedan leer
 
-    // El bloque init se ejecuta una sola vez cuando la app inicia
-    init {
-        // Limpiamos los IDs de las categorías para evitar duplicados en cada carga
-        CategorySampleDataFalso.categories.forEach {
-            it.providerIds.clear()
-        }
+    /**
+     * Función principal llamada desde AppDatabase.
+     * @param realCategories Lista de categorías obtenidas de la base de datos para sembrar prestadores.
+     */
+    fun generateAll(realCategories: List<CategoryEntity>): DataSeedBundle {
 
-        // 1. Añadimos al prestador principal "Maverick" (ID 1)
-        val maverick = UserFalso(
-            id = "1",
-            username = "Maxi",
-            name = "Maximiliano",
-            lastName = "Nanterne",
-            titulo = "Ingeniero en Sistemas",
-            matricula = "MP-327",
-            emails = mutableStateListOf("informaticamaverick@gmail.com", "contacto@maverick.com"),
-            phones = mutableStateListOf("343-1234567", "343-9998888"),
-            profileImageUrl = R.drawable.maverickprofile,
-            bannerImageUrl = R.drawable.myeasteregg,
-            rating = 100f,
-            isVerified = true,
-            isOnline = true,
-            isSubscribed = true,
-            isFavorite = true,
-            galleryImages = listOf(
-                "https://picsum.photos/seed/1_gal1/400/300",
-                "https://picsum.photos/seed/1_gal2/400/300"
-            ),
-            personalAddresses = mutableStateListOf(
-                Address(
-                    calle = "B. Matienzo 1339",
-                    localidad = "San Miguel de Tucuman ",
-                    provincia = "Tucuman",
-                    pais = "Argentina",
-                    zipCode = "4000"
-                )
-            ),
-            hasCompanyProfile = true,
-            companies = mutableStateListOf(
-                Company(
-                    name = "Maverick Informatica",
-                    razonSocial = "Maverick Ingeneri S.A.",
-                    cuit = "20-12345678-9",
-                    profileImageUrl = R.drawable.maverickprofile,
-                    doesHomeVisits = true,
-                    hasPhysicalLocation = true,
-                    works24h = false,
-                    acceptsAppointments = true,
-                    description = "Soluciones integrales en hardware y software. Reparación de PC, notebooks y configuración de redes corporativas. Venta de insumos informáticos.",
-                    productImages = listOf(
-                        "https://picsum.photos/seed/prod1/200/200",
-                        "https://picsum.photos/seed/prod2/200/200",
-                        "https://picsum.photos/seed/prod3/200/200"
-                    ),
-                    branches = mutableListOf(
-                        CompanyBranch(
-                            name = "Casa Central",
-                            address = Address(
-                                calle = "B. Matienzo 1339",
-                                localidad = "San Miguel de Tucuman",
-                                provincia = "Tucuman",
-                                pais = "Argentina"
-                            ),
-                            employees = mutableListOf(
-                                Employee(
-                                    name = "Juan",
-                                    lastName = "Perez",
-                                    photoUrl = "https://picsum.photos/seed/emp1/100/100",
-                                    position = "Técnico Senior",
-                                    detail = "Especialista en Hardware"
-                                ),
-                                Employee(
-                                    name = "Pedro",
-                                    lastName = "Albornoz",
-                                    photoUrl = "https://picsum.photos/seed/emp_pedro/100/100",
-                                    position = "Atención al Cliente",
-                                    detail = "Ventas"
-                                )
-                            )
-                        )
-                    ),
-                    services = mutableListOf(
-                        "Informatica",
-                        "Electricidad",
-                        "Reparación",
-                        "Camaras de Seguridad"
-                    )
-                ),
-                Company(
-                    name = "Maverick Developer",
-                    razonSocial = "Maverick Devs S.R.L.",
-                    cuit = "30-98765432-1",
-                    profileImageUrl = null,
-                    doesHomeVisits = true,
-                    hasPhysicalLocation = true,
-                    works24h = true,
-                    acceptsAppointments = true,
-                    description = "Desarrollo de software a medida, aplicaciones móviles y sitios web corporativos. Consultoría tecnológica.",
-                    productImages = listOf(
-                        "https://picsum.photos/seed/dev1/200/200",
-                        "https://picsum.photos/seed/dev2/200/200"
-                    ),
-                    branches = mutableListOf(
-                        CompanyBranch(
-                            name = "Oficina de Desarrollo",
-                            address = Address(
-                                calle = "San Martin 100",
-                                localidad = "San Miguel de Tucuman",
-                                provincia = "Tucuman",
-                                pais = "Argentina",
-                                zipCode = "4000"
-                            ),
-                            employees = mutableListOf(
-                                Employee(
-                                    name = "Carlos",
-                                    lastName = "Dev",
-                                    photoUrl = "https://picsum.photos/seed/dev_emp1/100/100",
-                                    position = "Lead Developer",
-                                    detail = "Full Stack"
-                                ),
-                                Employee(
-                                    name = "Ana",
-                                    lastName = "UI",
-                                    photoUrl = "https://picsum.photos/seed/dev_emp2/100/100",
-                                    position = "Diseñadora",
-                                    detail = "UX/UI"
-                                )
-                            )
-                        )
-                    ),
-                    services = mutableListOf("Desarrollo App", "Páginas Web", "Consultoría IT")
-                )
-            )
+        // PASO 1: Generar Prestadores (Ahora todos con empresa y sucursal y la NUEVA ESTRUCTURA)
+        val providers = generateProviders(realCategories)
+
+        // PASO 2: Generar Licitaciones de ejemplo
+        val tenders = generateTenders(realCategories)
+
+        // PASO 3: Generar Agenda Técnica (Visitas, Turnos, Envíos)
+        val calendarEvents = generateCalendarEvents(providers)
+
+        return DataSeedBundle(
+            providers = providers,
+            tenders = tenders,
+            budgets = emptyList(),
+            messages = emptyList(),
+            calendarEvents = calendarEvents
         )
+    }
 
-            /**
-            id = "1",
-            username = "maxinanterne",
-            name = "Maximiliano",
-            lastName = "Nanterne",
-            titulo = "Ingeniero en Sistemas",
-            matricula = "MP-8899",
-            emails = mutableStateListOf("informaticamaverick@gmail.com", "contacto@maverick.com"),
-            phones = mutableStateListOf("343-1234567", "343-9998888"),
-            profileImageUrl = R.drawable.maverickprofile,
-            bannerImageUrl = R.drawable.myeasteregg,
-            rating = 5.0f,
-            isVerified = true, isOnline = true, isSubscribed = true, isFavorite = true,
-            hasCompanyProfile = true,
-            companies = mutableStateListOf(
-                Company(
-                    name = "Maverick Informatica",
-                    razonSocial = "Maverick Tech S.A.",
-                    cuit = "20-12345678-9",
-                    services = mutableListOf("Informatica", "Electricidad", "Reparación", "Tecnico", "Camaras de Seguridad"),
-                    // ... otros datos de la empresa ...
-                ),
-                Company(
-                    name = "Maverick Developer",
-                    razonSocial = "Maverick Devs S.R.L.",
-                    cuit = "30-98765432-1",
-                    services = mutableListOf("Desarrollo Web", "Programador", "Diseño"),
-                    // ... otros datos de la empresa ...
-                )
-            )
-        )
-        **/
-        prestadores.add(maverick)
+    private fun generateProviders(realCategories: List<CategoryEntity>): List<ProviderEntity> {
+        val providers = mutableListOf<ProviderEntity>()
 
-        // Sincronizamos manualmente los servicios de Maverick con las categorías
-        maverick.companies.flatMap { it.services }.forEach { serviceName ->
-            CategorySampleDataFalso.categories.find { it.name == serviceName }?.let {
-                if (!it.providerIds.contains(maverick.id)) {
-                    it.providerIds.add(maverick.id)
+        // El prestador Maverick (ID 1001) es nuestra referencia de calidad absoluta. Carga COMPLETA.
+        providers.add(generateMaverickProvider())
+
+        realCategories.forEach { category ->
+            // Generamos entre 8 y 20 prestadores para CADA categoría
+            val countPerCategory = Random.nextInt(8, 21)
+
+            repeat(countPerCategory) { index ->
+                if (!(category.name == "Informatica" && index == 0)) {
+                    providers.add(generateRandomProvider(category.name, index))
                 }
             }
         }
+        return providers
+    }
 
-        // 2. Generamos aleatoriamente entre 6 y 19 prestadores para CADA categoría
-        var idCounter = 100 // Empezamos desde un ID alto para no chocar con los manuales
-        CategorySampleDataFalso.categories.forEach { category ->
-            val numberToGenerate = Random.nextInt(6, 20) // Genera un número entre 6 y 19
-            repeat(numberToGenerate) {
-                val currentId = idCounter++.toString()
-                val firstName = listOf("Juan", "Ana", "Pedro", "Maria", "Luis", "Sofia", "Carlos", "Laura", "Diego", "Elena").random()
-                val lastName = listOf("Gomez", "Perez", "Rodriguez", "Fernandez", "Lopez", "Martinez", "Gonzalez", "Diaz").random()
+    /**
+     * Genera una agenda activa con turnos en locales, visitas técnicas y envíos.
+     */
+    private fun generateCalendarEvents(providers: List<ProviderEntity>): List<CalendarEventEntity> {
+        val events = mutableListOf<CalendarEventEntity>()
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-                val newUser = UserFalso(
-                    id = currentId,
-                    username = "${firstName.lowercase()}$currentId",
-                    name = firstName,
-                    lastName = lastName,
-                    titulo = "Especialista en ${category.name}",
-                    rating = Random.nextDouble(3.5, 5.0).toFloat(),
-                    isVerified = Random.nextBoolean(),
-                    isOnline = Random.nextBoolean(),
-                    isSubscribed = Random.nextBoolean(),
-                    isFavorite = Random.nextBoolean(),
-                    galleryImages = listOf("https://picsum.photos/seed/${currentId}_gal1/400/300"),
-                    personalAddresses = mutableStateListOf(
-                        Address(
-                            calle = "Calle Falsa ${
-                                Random.nextInt(
-                                    1,
-                                    1000
-                                )
-                            }",
-                            localidad = "Ciudad",
-                            provincia = "Provincia",
-                            pais = "País",
-                            zipCode = "4000"
-                        )
-                    ),
+        val baseTime = System.currentTimeMillis()
+        val dayInMillis = 86400000L
 
-                    emails = mutableStateListOf("${firstName.lowercase()}.${lastName.lowercase()}@example.com"),
-                    profileImageUrl = "https://picsum.photos/seed/$currentId/200/200",
-                    bannerImageUrl = "https://picsum.photos/seed/${currentId}_banner/800/400",
-                    hasCompanyProfile = true,
-                    companies = mutableStateListOf(
-                        Company(
-                            name = "${category.name} $lastName",
-                            razonSocial = "$lastName Servicios S.R.L.",
-                            cuit = "20-${Random.nextLong(10000000, 99999999)}-${
-                                Random.nextInt(
-                                    0,
-                                    9
-                                )
-                            }",
-                            profileImageUrl = "https://picsum.photos/seed/${currentId}_comp/200/200",
-                            doesHomeVisits = true,
-                            hasPhysicalLocation = Random.nextBoolean(),
-                            works24h = Random.nextBoolean(),
-                            acceptsAppointments = true,
-                            description = "Servicio profesional de ${category.name} garantizado. Experiencia y calidad.",
-                            productImages = listOf("https://picsum.photos/seed/${currentId}_prod1/200/200"),
-                            branches = mutableListOf(
-                                CompanyBranch(
-                                    name = "Central",
-                                    address = Address(
-                                        calle = "Av. Principal ${
-                                            Random.nextInt(
-                                                1,
-                                                500
-                                            )
-                                        }",
-                                        localidad = "Ciudad",
-                                        provincia = "Provincia",
-                                        pais = "País",
-                                        zipCode = "4000"
-                                    ),
-                                    employees = mutableListOf()
-                                )
-                            ),
-                            services = mutableListOf(category.name) // El servicio principal es la categoría
-                        )
-                    )
-                )
-                prestadores.add(newUser)
+        val activeProvidersForCalendar = providers.shuffled().take(25)
 
-                // [LÓGICA CLAVE] Sincronizamos el ID del nuevo prestador en la categoría correcta
-                category.providerIds.add(currentId)
+        activeProvidersForCalendar.forEachIndexed { index, provider ->
+
+            // Extraemos la primera categoría (Como ahora es lista, usamos firstOrNull)
+            val mainCategory = provider.categories.firstOrNull() ?: "Servicios"
+            val catLower = mainCategory.lowercase()
+
+            val eventType = when {
+                catLower.contains("flete") || catLower.contains("transporte") || catLower.contains("envío") -> EventType.SHIPPING
+                catLower.contains("peluquería") || catLower.contains("cancha") || catLower.contains("salud") || catLower.contains("estética") -> EventType.APPOINTMENT
+                else -> listOf(EventType.VISIT, EventType.APPOINTMENT).random()
             }
-        }
-    }
 
-    // Funciones de utilidad (no cambian)
-    fun toggleFavorite(id: String) {
-        val index = prestadores.indexOfFirst { it.id == id }
-        if (index != -1) {
-            val current = prestadores[index]
-            prestadores[index] = current.copy(isFavorite = !current.isFavorite)
-        }
-    }
+            // Usamos la Casa Central si existe, si no, una dirección de prueba
+            val firstCompany = provider.companies.firstOrNull()
+            val branchAddress = firstCompany?.mainBranch?.address ?: firstCompany?.branches?.firstOrNull()?.address
 
-    fun getPrestadorById(id: String): UserFalso? {
-        return prestadores.find { it.id == id }
-    }
+            val address = if (eventType == ImageVector.Companion.hashCode().let { EventType.APPOINTMENT } && branchAddress != null) {
+                "${branchAddress.calle} ${branchAddress.numero}, ${branchAddress.localidad}"
+            } else {
+                "Barrio Matienzo 1339, San Miguel de Tucumán"
+            }
 
-    fun getPrestadorUserById(id: String): UserFalso? {
-        return getPrestadorById(id)
-    }
-}
+            val daysOffset = Random.nextInt(-2, 8)
+            val eventTimeMillis = baseTime + (daysOffset * dayInMillis)
+            val dateStr = dateFormat.format(Date(eventTimeMillis))
 
+            val hour = Random.nextInt(9, 18)
+            val minute = listOf("00", "15", "30", "45").random()
+            val timeStr = "${hour.toString().padStart(2, '0')}:$minute"
 
-/**
+            val title = when (eventType) {
+                EventType.VISIT -> "Revisión en domicilio - $mainCategory"
+                EventType.APPOINTMENT -> "Reserva de turno en local"
+                EventType.SHIPPING -> "Entrega de pedido"
+            }
 
-package com.example.myapplication.Client
+            val status = when {
+                daysOffset < 0 -> listOf(VisitStatus.CONFIRMED, VisitStatus.CANCELLED).random()
+                daysOffset == 0 -> VisitStatus.CONFIRMED
+                else -> listOf(VisitStatus.CONFIRMED, VisitStatus.PENDING).random()
+            }
 
-import androidx.compose.runtime.mutableStateListOf
-import com.example.myapplication.R
-import kotlin.random.Random
-
-object SampleDataFalso {
-
-    // LISTA UNIFICADA DE PRESTADORES (UserFalso)
-    val prestadores = mutableStateListOf<UserFalso>().apply {
-        
-        // 1. Prestador Principal "Maxi" (ID 1)
-        add(
-            UserFalso(
-                id = "1",
-                username = "maxinanterne",
-                name = "Maximiliano",
-                lastName = "Nanterne",
-                titulo = "Ingeniero en Sistemas",
-                matricula = "MP-8899",
-                emails = mutableStateListOf("informaticamaverick@gmail.com", "contacto@maverick.com"),
-                phones = mutableStateListOf("343-1234567", "343-9998888"),
-                profileImageUrl = R.drawable.maverickprofile,
-                bannerImageUrl = R.drawable.myeasteregg,
-                rating = 5.0f,
-                isVerified = true,
-                isOnline = true,
-                isSubscribed = true,
-                isFavorite = true,
-                galleryImages = listOf("https://picsum.photos/seed/1_gal1/400/300", "https://picsum.photos/seed/1_gal2/400/300"),
-                personalAddresses = mutableStateListOf(
-                    Address(calle = "B. Matienzo 1339", localidad = "Paraná", provincia = "Entre Ríos", pais = "Argentina", zipCode = "3100")
-                ),
-                hasCompanyProfile = true,
-                companies = mutableStateListOf(
-                    Company(
-                        name = "Maverick Informatica",
-                        razonSocial = "Maverick Tech S.A.",
-                        cuit = "20-12345678-9",
-                        profileImageUrl = R.drawable.maverickprofile,
-                        doesHomeVisits = true,
-                        hasPhysicalLocation = true,
-                        works24h = false,
-                        acceptsAppointments = true,
-                        description = "Soluciones integrales en hardware y software. Reparación de PC, notebooks y configuración de redes corporativas. Venta de insumos informáticos.",
-                        productImages = listOf("https://picsum.photos/seed/prod1/200/200", "https://picsum.photos/seed/prod2/200/200", "https://picsum.photos/seed/prod3/200/200"),
-                        branches = mutableListOf(
-                            CompanyBranch(
-                                name = "Casa Central",
-                                address = Address(calle = "B. Matienzo 1339", localidad = "Paraná", provincia = "Entre Ríos", pais = "Argentina"),
-                                employees = mutableListOf(
-                                    Employee(name = "Juan", lastName = "Perez", photoUrl = "https://picsum.photos/seed/emp1/100/100", position = "Técnico Senior", detail = "Especialista en Hardware"),
-                                    Employee(name = "Pedro", lastName = "Albornoz", photoUrl = "https://picsum.photos/seed/emp_pedro/100/100", position = "Atención al Cliente", detail = "Ventas")
-                                )
-                            )
-                        ),
-                        services = mutableListOf("Informatica", "Electricidad", "Reparación", "Camaras de Seguridad")
-                    ),
-                    Company(
-                        name = "Maverick Developer",
-                        razonSocial = "Maverick Devs S.R.L.",
-                        cuit = "30-98765432-1",
-                        profileImageUrl = null, 
-                        doesHomeVisits = false,
-                        hasPhysicalLocation = true,
-                        works24h = true,
-                        acceptsAppointments = true,
-                        description = "Desarrollo de software a medida, aplicaciones móviles y sitios web corporativos. Consultoría tecnológica.",
-                        productImages = listOf("https://picsum.photos/seed/dev1/200/200", "https://picsum.photos/seed/dev2/200/200"),
-                        branches = mutableListOf(
-                            CompanyBranch(
-                                name = "Oficina de Desarrollo",
-                                address = Address(calle = "San Martin 100", localidad = "Paraná", provincia = "Entre Ríos", pais = "Argentina"),
-                                employees = mutableListOf(
-                                    Employee(name = "Carlos", lastName = "Dev", photoUrl = "https://picsum.photos/seed/dev_emp1/100/100", position = "Lead Developer", detail = "Full Stack"),
-                                    Employee(name = "Ana", lastName = "UI", photoUrl = "https://picsum.photos/seed/dev_emp2/100/100", position = "Diseñadora", detail = "UX/UI")
-                                )
-                            )
-                        ),
-                        services = mutableListOf("Desarrollo App", "Páginas Web", "Consultoría IT")
-                    )
+            events.add(
+                CalendarEventEntity(
+                    id = UUID.randomUUID().toString(),
+                    date = dateStr,
+                    time = timeStr,
+                    type = eventType,
+                    title = title,
+                    provider = provider.displayName,
+                    providerId = provider.id,
+                    address = address,
+                    status = status,
+                    providerPhotoUrl = provider.photoUrl
                 )
             )
-        )
+        }
 
-        // 2. GENERACIÓN AUTOMÁTICA DE 5 PROFESIONALES POR CADA CATEGORÍA
-        // Obtenemos todas las categorías únicas de CategorySampleDataFalso (asumiendo que podemos acceder a ellas o definirlas aquí)
-        // Para asegurar independencia, definimos las categorías clave aquí para generar prestadores.
-        val categoriesToGenerate = listOf(
-            "Limpieza", "Jardinería", "Mudanzas", "Reparación", "Plomería", "Electricidad", "Carpintería", "Pintura de Casas", 
-            "Diseño de Interiores", "Fumigación", "Cerrajería", "Ensamblaje de Muebles", "Tutorías", "Clases de Baile", 
-            "Clases de Yoga", "Música", "Mascotas", "Belleza", "Cuidado", "Cuidado de Niños", "Cuidado de Ancianos", 
-            "Entrenamiento Personal", "Nutrición", "Fisioterapia", "Psicología", "Coaching de Vida", "Peluqueria", 
-            "Sastrería", "Masajes Terapéuticos", "Acupuntura", "Tecnología", "Desarrollo Web", "Reparación de Móviles", 
-            "Informatica", "Tecnico", "Redes", "Programador", "Fotografía", "Eventos", "Edición de Video", "Animación", 
-            "Locución", "DJ", "Bandas en Vivo", "Magia para Fiestas", "Stand-up Comedy", "Sonido para Fiestas", 
-            "Iluminación para Fiestas", "Bartender", "Planificación de Bodas", "Floristería", "Consultoría", "Diseño", 
-            "Traducción", "Asesoría Legal", "Contabilidad", "Marketing Digital", "Redacción", "Arquitectura", 
-            "Investigador Privado", "Abogado", "Contador", "Cocina", "Catering", "Repostería", "Lavado de Autos", 
-            "Mecánica", "Reparación de Bicicletas", "Seguridad", "Alarmas", "Camaras de Seguridad", "Astrología", 
-            "Lectura de Tarot", "Cancha Futbol 5", "Cancha Futbol", "Cancha de Padel", "Guía Turístico", "Zapatería", 
-            "Alquiler de Equipos"
-        )
-        
-        var idCounter = 100 // IDs generados comenzarán desde 100
+        return events
+    }
 
-        categoriesToGenerate.forEach { categoryName ->
-            repeat(5) { i ->
-                val currentId = idCounter++.toString()
-                val firstName = listOf("Juan", "Ana", "Pedro", "Maria", "Luis", "Sofia", "Carlos", "Laura", "Diego", "Elena").random()
-                val lastName = listOf("Gomez", "Perez", "Rodriguez", "Fernandez", "Lopez", "Martinez", "Gonzalez", "Diaz", "Sanchez", "Romero").random()
-                
-                add(
-                    UserFalso(
-                        id = currentId,
-                        username = "${firstName.lowercase()}${lastName.lowercase()}$currentId",
-                        name = firstName,
-                        lastName = lastName,
-                        titulo = "Profesional en $categoryName",
-                        matricula = if(Random.nextBoolean()) "MAT-${Random.nextInt(1000, 9999)}" else null,
-                        emails = mutableStateListOf("$firstName.$lastName@example.com".lowercase()),
-                        phones = mutableStateListOf("555-${Random.nextInt(100000, 999999)}"),
-                        profileImageUrl = "https://picsum.photos/seed/$currentId/200/200",
-                        bannerImageUrl = "https://picsum.photos/seed/${currentId}_banner/800/400",
-                        rating = Random.nextDouble(3.5, 5.0).toFloat(),
-                        isVerified = Random.nextBoolean(),
-                        isOnline = Random.nextBoolean(),
-                        isSubscribed = Random.nextBoolean(), // Para que algunos salgan en el banner de promos
-                        isFavorite = false,
-                        galleryImages = listOf("https://picsum.photos/seed/${currentId}_gal1/400/300"),
-                        personalAddresses = mutableStateListOf(
-                            Address(calle = "Calle Falsa ${Random.nextInt(1, 1000)}", localidad = "Ciudad", provincia = "Provincia", pais = "País")
-                        ),
-                        hasCompanyProfile = true,
-                        companies = mutableStateListOf(
-                            Company(
-                                name = "$categoryName ${lastName}",
-                                razonSocial = "$lastName Servicios S.A.",
-                                cuit = "20-${Random.nextLong(10000000, 99999999)}-${Random.nextInt(0, 9)}",
-                                profileImageUrl = "https://picsum.photos/seed/${currentId}_comp/200/200",
-                                doesHomeVisits = true,
-                                hasPhysicalLocation = Random.nextBoolean(),
-                                works24h = Random.nextBoolean(),
-                                acceptsAppointments = true,
-                                description = "Servicio profesional de $categoryName garantizado. Experiencia y calidad.",
-                                productImages = listOf("https://picsum.photos/seed/${currentId}_prod1/200/200"),
-                                branches = mutableListOf(
-                                    CompanyBranch(
-                                        name = "Central",
-                                        address = Address(calle = "Av. Principal ${Random.nextInt(1, 500)}", localidad = "Ciudad", provincia = "Provincia", pais = "País"),
-                                        employees = mutableListOf()
-                                    )
-                                ),
-                                services = mutableListOf(categoryName) // Asignar la categoría actual como servicio principal
+    private fun generateTenders(realCategories: List<CategoryEntity>): List<TenderEntity> {
+        val categoryNames = realCategories.map { it.name }.ifEmpty { listOf("Informatica", "Hogar", "Electricidad") }
+
+        val sampleTenders = listOf(
+            TenderEntity(
+                tenderId = "T-001",
+                title = "Reparación de Techo",
+                description = "Filtraciones en el techo del garaje. Requiere sellado urgente.",
+                category = categoryNames.random(),
+                status = "ABIERTA",
+                dateTimestamp = System.currentTimeMillis() - 86400000 * 1
+            ),
+            TenderEntity(
+                tenderId = "T-002",
+                title = "Instalación Eléctrica Local",
+                description = "Instalación completa de luminarias en local comercial nuevo.",
+                category = categoryNames.random(),
+                status = "ADJUDICADA",
+                dateTimestamp = System.currentTimeMillis() - 86400000 * 10
+            )
+        )
+        return sampleTenders.shuffled().take(Random.nextInt(1, 3))
+    }
+
+    /**
+     * 🔥 MAVERICK: EL GOLD STANDARD (Estructura COMPLETAMENTE cargada)
+     */
+    private fun generateMaverickProvider(): ProviderEntity {
+        return ProviderEntity(
+            id = "1001",
+            email = "MAVERICKINFORMATICA@maverick.com",
+            alternateEmail = "maximiliano.nanterne@gmail.com",
+            displayName = "Maverick Informática",
+            name = "Maximiliano",
+            lastName = "Nanterne",
+            phoneNumber = "381-1234567",
+            additionalPhones = listOf("381-7654321"),
+            matricula = "MP-9922",
+            titulo = "Ingeniero de Software & Tech Lead",
+            cuilCuit = "20-30405060-7", 
+
+            address = AddressProvider(
+                calle = "San Martín", numero = "450",
+                localidad = "San Miguel de Tucumán", provincia = "Tucumán",
+                pais = "Argentina", codigoPostal = "4000",
+                latitude = -26.830, longitude = -65.202
+            ),
+
+            works24h = true,
+            hasPhysicalLocation = true,
+            doesHomeVisits = true,
+            doesShipping = true,
+            acceptsAppointments = true,
+            isSubscribed = true, // Premium
+            isVerified = true,
+            isFavorite = true,
+            isOnline = true,
+
+            rating = 5.0f,
+            workingHours = "Lunes a Sábado: 09:00 a 20:00 hs", 
+            categories = listOf("Informatica", "Desarrollo Móvil", "Seguridad", "Redes"), 
+            description = "Especialistas en soluciones tecnológicas de alta complejidad. Desarrollo de software nativo y multiplataforma.",
+
+            hasCompanyProfile = true,
+            companies = listOf(
+                CompanyProvider(
+                    name = "Maverick Tech S.A.",
+                    razonSocial = "Maverick Soluciones Digitales S.R.L.",
+                    cuit = "30-12345678-9",
+                    description = "Nuestra misión es llevar la tecnología a cada negocio de Tucumán.",
+                    rating = 4.9f,
+                    categories = listOf("Consultoría IT", "Hardware", "Software"), 
+                    productImages = listOf(
+                        "https://images.unsplash.com/photo-1517694712202-14dd9538aa97",
+                        "https://images.unsplash.com/photo-1498050108023-c5249f4df085"
+                    ),
+                    photoUrl = "https://picsum.photos/seed/maverick_logo/200/200",
+                    bannerImageUrl = "https://picsum.photos/seed/maverick_corp_banner/800/400",
+                    workingHours = "Lunes a Viernes: 08:00 a 18:00 hs", 
+                    works24h = false,
+                    hasPhysicalLocation = true,
+                    doesHomeVisits = true,
+                    doesShipping = true,
+                    acceptsAppointments = true,
+                    isVerified = true,
+
+                    mainBranch = BranchProvider(
+                        name = "Sede Central Barrio Sur",
+                        address = AddressProvider(calle = "Lavalle", numero = "1500", localidad = "San Miguel de Tucumán"),
+                        works24h = true,
+                        hasPhysicalLocation = true,
+                        doesShipping = true,
+                        acceptsAppointments = true,
+                        workingHours = "Lunes a Sábado: 09:00 a 20:00 hs",
+                        galleryImages = listOf("https://images.unsplash.com/photo-1497366216548-37526070297c"),
+                        employees = listOf(
+                            EmployeeProvider(name = "Maximiliano", lastName = "Nanterne", position = "CEO & Founder", detail = "Fundador y líder técnico del proyecto.", photoUrl = "https://picsum.photos/seed/max/200/200"),
+                            EmployeeProvider(name = "Ana", lastName = "Gómez", position = "Líder de Soporte", detail = "Encargada de la experiencia del cliente.", photoUrl = "https://picsum.photos/seed/ana/200/200")
+                        )
+                    ),
+
+                    branches = listOf(
+                        BranchProvider(
+                            name = "Sucursal Yerba Buena",
+                            address = AddressProvider(calle = "Av. Aconquija", numero = "2000", localidad = "Yerba Buena"),
+                            works24h = false,
+                            hasPhysicalLocation = true,
+                            doesShipping = false,
+                            acceptsAppointments = true,
+                            workingHours = "Lunes a Viernes: 10:00 a 18:00 hs",
+                            galleryImages = listOf("https://images.unsplash.com/photo-1497215728101-856f4ea42174"),
+                            employees = listOf(
+                                EmployeeProvider(name = "Carlos", lastName = "López", position = "Gerente de Sucursal", detail = "Referente comercial local.", photoUrl = "https://picsum.photos/seed/carlos/200/200")
                             )
                         )
                     )
                 )
-            }
+            ),
+            photoUrl = "https://picsum.photos/seed/maverick/200/200",
+            bannerImageUrl = "https://picsum.photos/seed/maverick_banner/800/400",
+            galleryImages = listOf(
+                "https://images.unsplash.com/photo-1550751827-4bd374c3f58b",
+                "https://images.unsplash.com/photo-1518770660439-4636190af475"
+            ),
+            favoriteProviderIds = emptyList(),
+            createdAt = System.currentTimeMillis()
+        )
+    }
+
+    private fun generateRandomProvider(categoryName: String, index: Int): ProviderEntity {
+        val id = "auto_${categoryName.lowercase()}_$index"
+        val firstName = listOf("Carlos", "Luis", "Ana", "Marta", "Silvia", "Andrés", "Pedro", "Juan", "Bautista", "Emma", "Diego").random()
+        val lastName = listOf("Díaz", "Sosa", "Rodríguez", "Fernández", "Guzmán", "López", "Pérez", "García", "Martínez").random()
+        val isPremium = Random.nextDouble() < 0.4
+
+        val companyCount = if (Random.nextDouble() < 0.3) Random.nextInt(2, 4) else 1
+        val companies = (1..companyCount).map { generateRandomCompany(categoryName, lastName, it) }
+
+        return ProviderEntity(
+            id = id,
+            email = "pro_$index@maverick.com",
+            alternateEmail = null, 
+            displayName = "$firstName $lastName",
+            name = firstName,
+            lastName = lastName,
+            phoneNumber = "381-${Random.nextInt(4000000, 7000000)}",
+            additionalPhones = emptyList(),
+            matricula = if (isPremium) "REG-${Random.nextInt(1000, 9999)}" else null,
+            titulo = if (isPremium) "Especialista en $categoryName" else "Profesional $categoryName",
+            cuilCuit = "20-${Random.nextInt(10000000, 40000000)}-${Random.nextInt(0, 9)}", 
+
+            address = AddressProvider(calle = "Calle Falsa", numero = "123", localidad = "Tucumán"), 
+
+            works24h = Random.nextBoolean(),
+            hasPhysicalLocation = Random.nextBoolean(),
+            doesHomeVisits = true,
+            doesShipping = Random.nextBoolean(),
+            acceptsAppointments = true,
+            isSubscribed = isPremium,
+            isVerified = Random.nextBoolean(),
+            isOnline = Random.nextBoolean(),
+            isFavorite = false,
+
+            rating = (37 + Random.nextInt(13)).toFloat() / 10f,
+            workingHours = "09:00 a 18:00 hs", 
+            categories = listOf(categoryName), 
+            description = "Atención profesional en $categoryName para todo Tucumán.",
+
+            companies = companies,
+            hasCompanyProfile = true,
+
+            photoUrl = "https://i.pravatar.cc/150?u=$id",
+            bannerImageUrl = "https://picsum.photos/seed/$id/800/400",
+            galleryImages = listOf("https://picsum.photos/seed/${id}g1/400/300", "https://picsum.photos/seed/${id}g2/400/300"),
+            favoriteProviderIds = emptyList(),
+            createdAt = System.currentTimeMillis() - Random.nextLong(0, 31536000000L)
+        )
+    }
+
+    private fun generateRandomCompany(categoryName: String, ownerLastName: String, index: Int): CompanyProvider {
+        val branchCount = Random.nextInt(1, 4)
+        val allBranches = (1..branchCount).map { generateRandomBranch(it) }
+        val companyId = UUID.randomUUID().toString()
+
+        return CompanyProvider(
+            id = companyId,
+            name = "$ownerLastName $categoryName S.A. #$index",
+            razonSocial = "$ownerLastName Servicios Integrales S.R.L.",
+            cuit = "30-${Random.nextInt(20000000, 35000000)}-${Random.nextInt(0, 9)}",
+            description = "Brindamos servicios de $categoryName con seriedad y confianza.",
+            rating = 4.5f,
+            categories = listOf(categoryName, "Atención Personalizada", "Turnos"), 
+            productImages = listOf("https://picsum.photos/seed/${companyId}p1/400/300", "https://picsum.photos/seed/${companyId}p2/400/300"),
+            photoUrl = "https://picsum.photos/seed/${companyId}logo/200/200",
+            bannerImageUrl = "https://picsum.photos/seed/${companyId}banner/800/400",
+            workingHours = "08:00 a 20:00 hs", 
+            works24h = Random.nextBoolean(),
+            hasPhysicalLocation = true,
+            doesHomeVisits = true,
+            doesShipping = Random.nextBoolean(),
+            acceptsAppointments = true,
+            isVerified = Random.nextBoolean(),
+
+            mainBranch = allBranches.first(), 
+            branches = if (allBranches.size > 1) allBranches.drop(1) else emptyList()
+        )
+    }
+
+    private fun generateRandomBranch(index: Int): BranchProvider {
+        val branchId = UUID.randomUUID().toString()
+        val employees = (1..Random.nextInt(1, 4)).map {
+            EmployeeProvider(
+                name = listOf("Juan", "Pedro", "Santiago", "Agustín").random(),
+                lastName = listOf("Páez", "López", "García", "Martínez").random(),
+                position = listOf("Profesional", "Supervisor", "Asistente").random(),
+                detail = "Miembro calificado del equipo.",
+                photoUrl = "https://i.pravatar.cc/150?u=${UUID.randomUUID()}"
+            )
         }
+
+        return BranchProvider(
+            id = branchId,
+            name = "Sucursal ${listOf("Centro", "Norte", "Sur", "Yerba Buena").random()} #$index",
+            address = AddressProvider(
+                calle = listOf("Av. Aconquija", "San Martín", "Belgrano").random(),
+                numero = Random.nextInt(100, 3000).toString(),
+                localidad = "Tucumán"
+            ),
+            works24h = false,
+            hasPhysicalLocation = true,
+            doesHomeVisits = true,
+            doesShipping = false,
+            acceptsAppointments = true,
+            isVerified = true,
+            rating = 4.2f,
+            workingHours = "09:00 a 13:00 y 17:00 a 21:00 hs",
+            galleryImages = listOf("https://picsum.photos/seed/${branchId}g1/400/300", "https://picsum.photos/seed/${branchId}g2/400/300"),
+            employees = employees
+        )
     }
 
-    // Funciones de utilidad
-    fun toggleFavorite(id: String) {
-        val index = prestadores.indexOfFirst { it.id == id }
-        if (index != -1) {
-            val current = prestadores[index]
-            prestadores[index] = current.copy(isFavorite = !current.isFavorite)
-        }
-    }
-
-    fun getPrestadorById(id: String): UserFalso? {
-        return prestadores.find { it.id == id }
-    }
-
-    fun getPrestadorUserById(id: String): UserFalso? {
-        return getPrestadorById(id)
-    }
+    data class DataSeedBundle(
+        val providers: List<ProviderEntity>,
+        val tenders: List<TenderEntity>,
+        val budgets: List<BudgetEntity>,
+        val messages: List<MessageEntity>,
+        val calendarEvents: List<CalendarEventEntity>
+    )
 }
-**/

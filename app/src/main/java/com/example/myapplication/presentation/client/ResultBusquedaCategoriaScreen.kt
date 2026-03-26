@@ -1,296 +1,286 @@
 package com.example.myapplication.presentation.client
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.example.myapplication.presentation.components.GeminiSplitFAB
-import com.example.myapplication.presentation.components.PrestadorCard
-import com.example.myapplication.presentation.components.SmallFabTool
-import com.example.myapplication.presentation.components.geminiGradientEffect
-import com.example.myapplication.data.model.fake.CategorySampleDataFalso
-import com.example.myapplication.data.model.fake.SampleDataFalso
-import com.example.myapplication.data.model.fake.UserFalso
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.myapplication.data.local.CategoryEntity
+import com.example.myapplication.data.model.CompanyProvider
+import com.example.myapplication.data.model.Provider
+import com.example.myapplication.presentation.components.PrestadorCardVerticalV2
 import com.example.myapplication.ui.theme.MyApplicationTheme
+
 
 // ==================================================================================
 // --- SECCIÓN: PANTALLA RESULTADOS DE BÚSQUEDA ---
 // ==================================================================================
-
+/**
+ * Pantalla que muestra los prestadores filtrados por una categoría específica.
+ * Consume datos de Room a través del ProviderViewModel.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ResultBusquedaCategoriaScreen(
     categoryName: String,
     onBack: () -> Unit,
     onNavigateToProviderProfile: (String) -> Unit,
-    onNavigateToChat: (String) -> Unit
+    onNavigateToChat: (String) -> Unit,
+    providerViewModel: ProviderViewModel = hiltViewModel(),
+    categoryViewModel: CategoryViewModel = hiltViewModel(),
+    beViewModel: BeBrainViewModel = hiltViewModel() // 🔥 Agregado
 ) {
-    // Carga de la categoría y profesionales asociados
-    val category = CategorySampleDataFalso.categories.find { it.name == categoryName }
-    val professionals = remember(categoryName) {
-        category?.providerIds
-            ?.mapNotNull { SampleDataFalso.getPrestadorById(it) }
-            ?.distinctBy { it.id }
-            ?.shuffled() 
-            ?: emptyList()
-    }
+    // 🔥 [FLUJO DE DATOS REAL] - Obtenemos todos los prestadores desde Room
+    val allProviders by providerViewModel.providers.collectAsStateWithLifecycle()
+    val allCategories by categoryViewModel.categories.collectAsStateWithLifecycle()
+    val searchQuery by beViewModel.searchQuery.collectAsStateWithLifecycle() // 🔥 Escucha a Be
+    val isLoading by providerViewModel.isLoading.collectAsStateWithLifecycle()
 
-    // --- ESTADOS LOCALES ---
-    var isSearchActive by remember { mutableStateOf(false) } // Control de búsqueda
-    var searchQuery by remember { mutableStateOf("") } // Texto de búsqueda
-    val keyboardController = LocalSoftwareKeyboardController.current
+    ResultBusquedaCategoriaContent(
+        allProviders = allProviders,
+        allCategories = allCategories,
+        categoryName = categoryName,
+        searchQuery = searchQuery, // 🔥 Pasa la query real
+        isLoading = isLoading,
+        onBack = onBack,
+        onNavigateToProviderProfile = onNavigateToProviderProfile,
+        onNavigateToChat = onNavigateToChat,
+        isProvider24h = { provider -> providerViewModel.isProvider24h(provider) },
+        doesProviderHomeVisits = { provider -> providerViewModel.doesProviderHomeVisits(provider) },
+        hasProviderPhysicalLocation = { provider -> providerViewModel.hasProviderPhysicalLocation(provider) },
+        toggleFavoriteStatus = { id, isFav -> providerViewModel.toggleFavoriteStatus(id, isFav) }
+    )
+}
 
-    // Filtros de búsqueda (Estado)
-    var subscribedOnly by remember { mutableStateOf(true) }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ResultBusquedaCategoriaContent(
+    allProviders: List<Provider>,
+    allCategories: List<CategoryEntity>,
+    categoryName: String,
+    searchQuery: String, // 🔥 Recibe la query
+    isLoading: Boolean,
+    onBack: () -> Unit,
+    onNavigateToProviderProfile: (String) -> Unit,
+    onNavigateToChat: (String) -> Unit,
+    isProvider24h: (Provider) -> Boolean,
+    doesProviderHomeVisits: (Provider) -> Boolean,
+    hasProviderPhysicalLocation: (Provider) -> Boolean,
+    toggleFavoriteStatus: (String, Boolean) -> Unit
+) {
+    var subscribedOnly by remember { mutableStateOf(false) }
     var verifiedOnly by remember { mutableStateOf(false) }
     var works24hOnly by remember { mutableStateOf(false) }
     var homeVisitsOnly by remember { mutableStateOf(false) }
     var physicalLocationOnly by remember { mutableStateOf(false) }
-    var sortOrder by remember { mutableStateOf("Rating") } 
+    var sortOrder by remember { mutableStateOf("Rating") }
 
-    var isFabMenuExpanded by remember { mutableStateOf(false) } // Control del FAB expandido
-    
-    // Función para cerrar búsqueda
-    val closeSearch = {
-        isSearchActive = false
-        searchQuery = ""
-        keyboardController?.hide()
-        Unit
+    // 🔥 ESTADO ESTRELLA: Guarda el proveedor seleccionado para expandirlo en el Overlay
+    var expandedProvider by remember { mutableStateOf<Provider?>(null) }
+    val selectedCategory = remember(allCategories, categoryName) {
+        allCategories.find { it.name.equals(categoryName, ignoreCase = true) }
     }
+    // 🔥 [LÓGICA DE FILTRADO REAL ACTUALIZADA]
+    val filteredList = remember(allProviders, categoryName, searchQuery, subscribedOnly, verifiedOnly, works24hOnly, homeVisitsOnly, physicalLocationOnly, sortOrder) {
+        val normalizedQuery = searchQuery.prepareForSearch()
 
-    // Lógica de filtrado unificada
-    val filteredList = remember(professionals, searchQuery, subscribedOnly, verifiedOnly, works24hOnly, homeVisitsOnly, physicalLocationOnly, sortOrder) {
-        professionals
-            .filter { 
-                if (searchQuery.isNotEmpty()) {
-                    it.name.contains(searchQuery, ignoreCase = true) ||
-                    it.lastName.contains(searchQuery, ignoreCase = true) ||
-                    it.services.any { s -> s.contains(searchQuery, ignoreCase = true) }
-                } else true 
+        allProviders
+            .filter { p ->
+                // Filtro 1: Categoría
+                p.categories.any { it.equals(categoryName, ignoreCase = true) } ||
+                        p.companies.any { it.categories.any { s -> s.equals(categoryName, ignoreCase = true) } }
             }
-            .filter { if (subscribedOnly) it.isSubscribed else true }
-            .filter { if (verifiedOnly) it.isVerified else true }
-            .filter { if (works24hOnly) it.works24h else true }
-            .filter { if (homeVisitsOnly) it.doesHomeVisits else true }
-            .filter { if (physicalLocationOnly) it.hasPhysicalLocation else true }
-            .sortedByDescending { it.rating }
+            .filter { p ->
+                // Filtro 2: Búsqueda por texto usando la lógica de Be
+                if (normalizedQuery.isNotEmpty()) {
+                    p.name.prepareForSearch().wordStartsWith(normalizedQuery) ||
+                    p.lastName.prepareForSearch().wordStartsWith(normalizedQuery) ||
+                    p.companies.any { it.name.prepareForSearch().wordStartsWith(normalizedQuery) } ||
+                    p.companies.any { it.categories.any { s -> s.prepareForSearch().wordStartsWith(normalizedQuery) } }
+                } else true
+            }
+            .filter { p -> if (subscribedOnly) p.isSubscribed else true }
+            .filter { p -> if (verifiedOnly) p.isVerified else true }
+            .filter { p -> if (works24hOnly) isProvider24h(p) else true }
+            .filter { p -> if (homeVisitsOnly) doesProviderHomeVisits(p) else true }
+            .filter { p -> if (physicalLocationOnly) hasProviderPhysicalLocation(p) else true }
+            // Ordenamiento
+            .let { list ->
+                if (sortOrder == "Rating") list.sortedByDescending { it.rating }
+                else list.sortedBy { it.name }
+            }
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Box { 
-                // Header normal (Solo si no hay búsqueda)
-                if (!isSearchActive) {
-                    ResultHeaderSection(
-                        categoryName = categoryName,
-                        categoryIcon = category?.icon,
-                        onBack = onBack
-                    )
-                }
-
-                // Barra de búsqueda Gemini
-                AnimatedVisibility(
-                    visible = isSearchActive,
-                    enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
-                    exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
-                    modifier = Modifier.zIndex(20f)
-                ) {
-                    TopSearchBarResult(
-                        searchQuery = searchQuery,
-                        onSearchQueryChange = { searchQuery = it },
-                        onCancel = closeSearch
-                    )
-                }
-            }
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Indicador de tipo de resultados (Recomendados / Todos)
-                if (filteredList.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if(subscribedOnly) "Recomendados" else "Todos los resultados",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                            Text("${filteredList.size}", modifier = Modifier.padding(horizontal = 4.dp))
-                        }
-                    }
-                }
-
-                // Lista de prestadores
-                ProviderListContent(
-                    professionals = filteredList,
-                    onNavigateToProviderProfile = onNavigateToProviderProfile,
-                    onNavigateToChat = onNavigateToChat
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                ResultHeaderSection(
+                    category = selectedCategory,
+                    categoryName = categoryName,
+                    onBack = onBack
                 )
             }
-
-            // --- SECCIÓN: FAB DIVIDIDO GEMINI ---
+        ) { paddingValues ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 16.dp, end = 16.dp), // DISTANCIA DEL BORDE
-                contentAlignment = Alignment.BottomEnd 
+                    .padding(paddingValues)
             ) {
-                GeminiSplitFAB(
-                    isExpanded = isFabMenuExpanded,
-                    isSearchActive = isSearchActive,
-                    onToggleExpand = { isFabMenuExpanded = !isFabMenuExpanded },
-                    onActivateSearch = { isSearchActive = true },
-                    onCloseSearch = closeSearch,
-                    expandedTools = {
-                        // Herramientas de filtrado rápido
-                        SmallFabTool(
-                            label = if (subscribedOnly) "Top" else "Todos",
-                            icon = if (subscribedOnly) Icons.Default.WorkspacePremium else Icons.Default.Group,
-                            isSelected = subscribedOnly,
-                            onClick = { subscribedOnly = !subscribedOnly }
-                        )
-                        SmallFabTool(
-                            label = if (sortOrder == "Rating") "Rating" else "Nombre",
-                            icon = if (sortOrder == "Rating") Icons.Default.Star else Icons.AutoMirrored.Filled.Sort,
-                            isSelected = true,
-                            onClick = {
-                                sortOrder = if (sortOrder == "Rating") "Name" else "Rating"
+                // CAPA 1: FONDO Y GRILLA NORMAL
+                // ==========================================
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (filteredList.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (subscribedOnly) "Recomendados" else "Todos los resultados",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                                Text("${filteredList.size}", modifier = Modifier.padding(horizontal = 4.dp))
                             }
-                        )
+                        }
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                     }
-                )
-            }
-        }
-    }
-}
 
-// ==================================================================================
-// --- SECCIÓN: BARRA DE BÚSQUEDA CON ESTILO GEMINI ---
-// ==================================================================================
-
-@Composable
-fun TopSearchBarResult(
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    onCancel: () -> Unit
-) {
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboardController?.show()
-    }
-    
-    val rainbowBrush = geminiGradientEffect()
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(8.dp), // ESPACIADO EXTERNO
-        color = Color(0xFF121212), // FONDO OSCURO GEMINI
-        shape = RoundedCornerShape(28.dp), // FORMA REDONDEADA
-        shadowElevation = 12.dp,
-        border = BorderStroke(2.5.dp, rainbowBrush) // BORDE ARCOIRIS GEMINI
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp), // ALTURA DE LA BARRA
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Search, 
-                null, 
-                tint = Color.White.copy(0.8f), 
-                modifier = Modifier.padding(start = 20.dp).size(20.dp)
-            )
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                singleLine = true,
-                modifier = Modifier.weight(1f).padding(start = 12.dp).focusRequester(focusRequester),
-                textStyle = TextStyle(color = Color.White, fontSize = 17.sp), // TEXTO BLANCO
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { innerTextField ->
-                    Box(contentAlignment = Alignment.CenterStart) {
-                        if (searchQuery.isEmpty()) Text("Buscar en esta categoría...", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
-                        innerTextField()
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        ProviderListContent(
+                            professionals = filteredList,
+                            allCategories = allCategories,
+                            onNavigateToProviderProfile = onNavigateToProviderProfile,
+                            onNavigateToChat = onNavigateToChat,
+                            onToggleFavorite = { id, isFav -> toggleFavoriteStatus(id, isFav) },
+                            // 🔥 Pasamos la función que actualiza qué proveedor se debe expandir
+                            onExpandToggle = { provider -> expandedProvider = provider }
+                        )
                     }
                 }
-            )
-            IconButton(onClick = onCancel) {
-                Icon(Icons.Default.Close, "Cerrar", tint = Color.White)
+
+                // CAPA 2: OVERLAY ANIMADO (TARJETA FLOTANTE)
+                // ==========================================
+                AnimatedVisibility(
+                    visible = expandedProvider != null,
+                    enter = fadeIn(animationSpec = tween(400)) + scaleIn(
+                        initialScale = 0.8f, // Empieza pequeña como la de la grilla
+                        transformOrigin = TransformOrigin(0.5f, 0.5f),
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy, // Un poco de rebote premium
+                            stiffness = Spring.StiffnessLow
+                        )
+                    ),
+                    exit = fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 0.8f)
+                ) {
+                    // Fondo oscuro (Scrim)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.75f)) // Fondo oscuro casi opaco
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                // Cierra la tarjeta si el usuario toca la zona oscura
+                                expandedProvider = null
+                            },
+                        contentAlignment = Alignment.Center // 🔥 Centra la tarjeta en la pantalla
+                    ) {
+                        expandedProvider?.let { provider ->
+                                PrestadorCardVerticalV2(
+                                    provider = provider,
+                                    isExpanded = true, // 🔥 Siempre abierta en esta capa
+                                    onExpandToggle = { expandedProvider = null }, // La cerramos si la vuelven a tocar
+                                    columnIndex = 0, // En el centro no importa el offset lateral
+                                    onClick = {
+                                        expandedProvider = null // Cerramos overlay
+                                        onNavigateToProviderProfile(provider.id) // Navegamos al perfil
+                                    },
+                                    onChat = { onNavigateToChat(provider.id) },
+                                    onToggleFavorite = { id, isFav -> toggleFavoriteStatus(id, isFav) }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
-    }
-}
 
-// ==================================================================================
-// --- SECCIÓN: COMPONENTES DE SOPORTE (LISTA Y HEADER) ---
-// ==================================================================================
-
+// --- ACTUALIZACIÓN DE LA LISTA ---
 @Composable
 fun ProviderListContent(
-    professionals: List<UserFalso>,
+    professionals: List<Provider>,
+    allCategories: List<CategoryEntity>,
     onNavigateToProviderProfile: (String) -> Unit,
-    onNavigateToChat: (String) -> Unit
+    onNavigateToChat: (String) -> Unit,
+    onToggleFavorite: (String, Boolean) -> Unit,
+    onExpandToggle: (Provider) -> Unit // 🔥 Nuevo parámetro
 ) {
     if (professionals.isEmpty()) {
         EmptyStateMessage()
     } else {
-        LazyColumn(
-            contentPadding = PaddingValues(top = 8.dp, start = 12.dp, end = 12.dp, bottom = 100.dp),
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(4), // 4 Tarjetas
+            contentPadding = PaddingValues(top = 6.dp, start = 2.dp, end = 2.dp, bottom = 80.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxSize()
         ) {
-            items(professionals) { professional ->
-                Column {
-                    PrestadorCard(
-                        provider = professional,
-                        onClick = { onNavigateToProviderProfile(professional.id) },
-                        onChat = { onNavigateToChat(professional.id) }
-                    )
-                    // DIVISOR ENTRE TARJETAS
-                    HorizontalDivider(
-                        modifier = Modifier.padding(top = 1.dp, bottom = 16.dp), 
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f) 
-                    )
-                }
+            // 🔥 CAMBIO: Usamos itemsIndexed para calcular la columna
+            itemsIndexed(professionals, key = { _, p -> p.id }) { index, professional ->
+                val columnIndex = index % 4 // Calcula si es col 0, 1, 2 o 3
+
+                PrestadorCardVerticalV2(
+                    provider = professional,
+                    allCategories = allCategories,
+                    isExpanded = false, // 🔥 En la grilla SIEMPRE son compactas
+                    onExpandToggle = { onExpandToggle(professional) }, // Avisa al padre
+                    columnIndex = columnIndex, // 🔥 Pasa la posición
+                    onClick = { onNavigateToProviderProfile(professional.id) },
+                    onChat = { onNavigateToChat(professional.id) },
+                    onToggleFavorite = onToggleFavorite,
+
+                )
             }
         }
     }
@@ -298,8 +288,8 @@ fun ProviderListContent(
 
 @Composable
 fun ResultHeaderSection(
+    category: CategoryEntity?,
     categoryName: String,
-    categoryIcon: String?,
     onBack: () -> Unit
 ) {
     var showInfoDialog by remember { mutableStateOf(false) }
@@ -309,13 +299,13 @@ fun ResultHeaderSection(
             onDismissRequest = { showInfoDialog = false },
             icon = { Icon(Icons.Default.Info, contentDescription = null) },
             title = { Text(text = "Sobre esta pantalla") },
-            text = { 
+            text = {
                 Text(
                     "Aquí encontrarás una lista de profesionales verificados en la categoría seleccionada.\n\n" +
                     "• Usa la lupa para buscar por nombre.\n" +
                     "• Usa el menú de herramientas para filtrar por ubicación, horario y más.\n" +
                     "• Los prestadores 'Recomendados' aparecen primero."
-                ) 
+                )
             },
             confirmButton = {
                 TextButton(onClick = { showInfoDialog = false }) {
@@ -324,27 +314,102 @@ fun ResultHeaderSection(
             }
         )
     }
+    val baseColor = category?.let { Color(it.color) } ?: MaterialTheme.colorScheme.surface
 
-   Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
-        modifier = Modifier.fillMaxWidth().zIndex(10f)
+    Surface(
+        color = baseColor,
+        shadowElevation = 8.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .zIndex(10f)
     ) {
-        Row(
-            modifier = Modifier.statusBarsPadding().height(64.dp).padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(80.dp) // Un poco más alto para replicar el estilo de la tarjeta
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+            // 1. Gradiente de superposición (Replicado de CompactCategoryCard)
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(alpha = 0.99f)
+                .drawWithCache {
+                    val gradient = Brush.linearGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, size.height)
+                    )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(gradient, blendMode = BlendMode.Overlay)
+                    }
+                }
+            )
+            // 2. Gradiente horizontal oscuro para legibilidad
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(Color.Black.copy(alpha = 0.9f), Color.Transparent),
+                        startX = 600f,
+                        endX = 1200f
+                    )
+                )
+            )
+            // 3. Icono de categoría en el fondo (Derecha)
+            category?.icon?.let { iconEmoji ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 10.dp),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Text(
+                        text = iconEmoji,
+                        fontSize = 100.sp,
+                        modifier = Modifier
+                            .offset(x = 10.dp)
+                            .graphicsLayer(alpha = 1f)
+                    )
+                }
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(categoryName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.width(8.dp))
-            categoryIcon?.let { Text(it, fontSize = 24.sp) }
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = { showInfoDialog = true }) {
-                Icon(Icons.Default.Info, "Información")
-            }
+            // 4. Contenido Principal
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onBack,
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column {
+                    Text(
+                        text = categoryName.uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.2.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(30.dp)
+                            .height(2.dp)
+                            .background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(2.dp))
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+           }
         }
     }
 }
@@ -352,12 +417,116 @@ fun ResultHeaderSection(
 @Composable
 fun EmptyStateMessage() {
     Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Text("No hay resultados con estos filtros 🔍", textAlign = TextAlign.Center)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.SearchOff, null, tint = Color.Gray.copy(alpha = 0.4f), modifier = Modifier.size(64.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("No se encontraron prestadores", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+            Text("Intenta ajustar los filtros de búsqueda.", color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+        }
     }
 }
-
+// --- [SECCIÓN: HELPERS DE FILTRADO] ---
+fun isProvider24h(provider: Provider): Boolean =
+    provider.companies.any { it.works24h }
+fun doesProviderHomeVisits(provider: Provider): Boolean =
+    provider.companies.any { it.doesHomeVisits }
+fun hasProviderPhysicalLocation(provider: Provider): Boolean =
+    provider.companies.any { it.hasPhysicalLocation }
+//------------------------------------------------PREVIEW---------------------------------------------------
 @Preview(showBackground = true)
 @Composable
 fun ResultBusquedaCategoriaScreenPreview() {
-    MyApplicationTheme { ResultBusquedaCategoriaScreen("Electricidad", {}, {}, {}) }
+    val sampleProviders = listOf(
+        Provider(
+            uid = "1",
+            email = "provider1@example.com",
+            displayName = "Juan Perez",
+            name = "Juan",
+            lastName = "Perez",
+            phoneNumber = "123456789",
+            categories = listOf("Informatica"),
+            matricula = "12345",
+            titulo = "Técnico en PC",
+            cuilCuit = "20-12345678-9",
+            address = null,
+            photoUrl = "",
+            bannerImageUrl = "",
+            hasCompanyProfile = true,
+            isSubscribed = true,
+            isVerified = true,
+            isOnline = true,
+            isFavorite = false,
+            rating = 4.5f,
+            createdAt = System.currentTimeMillis(),
+            companies = listOf(
+                CompanyProvider(
+                    name = "PC Solutions",
+                    categories = listOf("Informatica", "Reparación de PC"),
+                    works24h = true,
+                    doesHomeVisits = true,
+                    hasPhysicalLocation = true
+                )
+            )
+        ),
+        Provider(
+            uid = "2",
+            email = "provider2@example.com",
+            displayName = "Maria Lopez",
+            name = "Maria",
+            lastName = "Lopez",
+            phoneNumber = "987654321",
+            categories = listOf("Informatica"),
+            matricula = "54321",
+            titulo = "Desarrolladora Web",
+            cuilCuit = "27-98765432-1",
+            address = null,
+            photoUrl = "",
+            bannerImageUrl = "",
+            hasCompanyProfile = true,
+            isSubscribed = false,
+            isVerified = true,
+            isOnline = false,
+            isFavorite = true,
+            rating = 4.8f,
+            createdAt = System.currentTimeMillis(),
+            companies = listOf(
+                CompanyProvider(
+                    name = "Web Experts",
+                    categories = listOf("Informatica", "Desarrollo Web"),
+                    works24h = false,
+                    doesHomeVisits = false,
+                    hasPhysicalLocation = true
+                )
+            )
+        )
+    )
+
+    MyApplicationTheme {
+        ResultBusquedaCategoriaContent(
+            allProviders = sampleProviders,
+            allCategories = listOf(
+                CategoryEntity(
+                    name = "Informatica",
+                    icon = "💻",
+                    color = 0xFF2197F5,
+                    superCategory = "Tecnología",
+                    providerIds = listOf("1", "2"),
+                    imageUrl = null,
+                    isNew = true,
+                    isNewPrestador = false,
+                    isAd = false
+                )
+            ),
+            categoryName = "Informatica",
+            searchQuery = "",
+            isLoading = false,
+            onBack = {},
+            onNavigateToProviderProfile = {},
+            onNavigateToChat = {},
+            isProvider24h = ::isProvider24h,
+            doesProviderHomeVisits = ::doesProviderHomeVisits,
+            hasProviderPhysicalLocation = ::hasProviderPhysicalLocation,
+            toggleFavoriteStatus = { _, _ -> }
+        )
+    }
 }

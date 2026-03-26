@@ -44,8 +44,7 @@ class UserRepository @Inject constructor(
     override suspend fun refreshUserFromRemote() {
         val currentUser = auth.currentUser
         if (currentUser == null) {
-            Log.d("UserRepository", "No hay usuario logueado en Firebase, limpiando datos locales.")
-            userDao.deleteUser()
+            Log.d("UserRepository", "No hay usuario autenticado al refrescar. Omitiendo actualización.")
             return
         }
 

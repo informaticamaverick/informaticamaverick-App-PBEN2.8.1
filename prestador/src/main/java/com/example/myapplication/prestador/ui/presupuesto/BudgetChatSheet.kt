@@ -93,6 +93,9 @@ fun BudgetChatSheet(
     var showIIBBDialog by remember { mutableStateOf(false) }
     var showTaxDetail by remember { mutableStateOf(false) }
     val presupuestos by viewModel.presupuestos.collectAsState()
+    val articleCatalog by viewModel.articleCatalog.collectAsState()
+    val serviceCatalog by viewModel.serviceCatalog.collectAsState()
+    val feeCatalog by viewModel.feeCatalog.collectAsState()
 
     // --- NOTES / VALIDITY ---
     var notes by remember { mutableStateOf("") }
@@ -122,71 +125,65 @@ fun BudgetChatSheet(
     val hasItems = items.isNotEmpty() || services.isNotEmpty() ||
             professionalFees.isNotEmpty() || miscExpenses.isNotEmpty()
 
-    // Suggestion items from saved templates
-    val suggestionItems = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.itemsJson.isBlank()) emptyList()
-            else p.itemsJson.split("|").mapNotNull { s ->
-                val parts = s.split(";")
-                if (parts.size >= 4) BudgetItem(
-                    id = 0L,
-                    code = parts[0],
-                    description = parts[1],
-                    quantity = parts[2].toIntOrNull() ?: 1,
-                    unitPrice = parts[3].toDoubleOrNull() ?: 0.0,
-                    taxPercentage = parts.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
-                    discountPercentage = parts.getOrNull(5)?.toDoubleOrNull() ?: 0.0
-                ) else null
-            }
+    // Suggestion items from catalog
+    val suggestionItems = remember(articleCatalog) {
+        val json = articleCatalog?.itemsJson ?: ""
+        if (json.isBlank()) emptyList()
+        else json.split("|").mapNotNull { s ->
+            val parts = s.split(";")
+            if (parts.size >= 4) BudgetItem(
+                id = 0L,
+                code = parts[0],
+                description = parts[1],
+                quantity = parts[2].toIntOrNull() ?: 1,
+                unitPrice = parts[3].toDoubleOrNull() ?: 0.0,
+                taxPercentage = parts.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
+                discountPercentage = parts.getOrNull(5)?.toDoubleOrNull() ?: 0.0
+            ) else null
         }.distinctBy { it.description }
     }
 
-    val suggServices = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.serviciosJson.isBlank()) emptyList()
-            else p.serviciosJson.split("|").mapNotNull { s ->
-                val parts = s.split(";")
-                if (parts.size >= 2) BudgetService(
-                    id = 0L, code = parts[0],
-                    description = parts[1],
-                    total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
-                ) else null
-            }
+    val suggServices = remember(serviceCatalog) {
+        val json = serviceCatalog?.serviciosJson ?: ""
+        if (json.isBlank()) emptyList()
+        else json.split("|").mapNotNull { s ->
+            val parts = s.split(";")
+            if (parts.size >= 2) BudgetService(
+                id = 0L, code = parts[0],
+                description = parts[1],
+                total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+            ) else null
         }.distinctBy { it.description }
     }
 
-    val suggFees = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.honorariosJson.isBlank()) emptyList()
-            else p.honorariosJson.split("|").mapNotNull { s ->
-                val parts = s.split(";")
-                if (parts.size >= 2) BudgetProfessionalFee(
-                    id = 0L, code = parts[0],
-                    description = parts[1],
-                    total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
-                ) else null
-            }
+    val suggFees = remember(feeCatalog) {
+        val json = feeCatalog?.honorariosJson ?: ""
+        if (json.isBlank()) emptyList()
+        else json.split("|").mapNotNull { s ->
+            val parts = s.split(";")
+            if (parts.size >= 2) BudgetProfessionalFee(
+                id = 0L, code = parts[0],
+                description = parts[1],
+                total = parts.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+            ) else null
         }.distinctBy { it.description }
     }
 
     // Descripciones ya guardadas en el catálogo (para detectar items nuevos)
-    val knownItemDescriptions = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.itemsJson.isBlank()) emptyList()
-            else p.itemsJson.split("|").mapNotNull { s -> s.split(";").getOrNull(1) }
-        }.toSet()
+    val knownItemDescriptions = remember(articleCatalog) {
+        val json = articleCatalog?.itemsJson ?: ""
+        if (json.isBlank()) emptySet()
+        else json.split("|").mapNotNull { s -> s.split(";").getOrNull(1) }.toSet()
     }
-    val knownServiceDescriptions = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.serviciosJson.isBlank()) emptyList()
-            else p.serviciosJson.split("|").mapNotNull { s -> s.split(";").getOrNull(1) }
-        }.toSet()
+    val knownServiceDescriptions = remember(serviceCatalog) {
+        val json = serviceCatalog?.serviciosJson ?: ""
+        if (json.isBlank()) emptySet()
+        else json.split("|").mapNotNull { s -> s.split(";").getOrNull(1) }.toSet()
     }
-    val knownFeeDescriptions = remember(presupuestos) {
-        presupuestos.flatMap { p ->
-            if (p.honorariosJson.isBlank()) emptyList()
-            else p.honorariosJson.split("|").mapNotNull { s -> s.split(";").getOrNull(1) }
-        }.toSet()
+    val knownFeeDescriptions = remember(feeCatalog) {
+        val json = feeCatalog?.honorariosJson ?: ""
+        if (json.isBlank()) emptySet()
+        else json.split("|").mapNotNull { s -> s.split(";").getOrNull(1) }.toSet()
     }
     val knownMiscDescriptions = remember(presupuestos) {
         presupuestos.flatMap { p ->

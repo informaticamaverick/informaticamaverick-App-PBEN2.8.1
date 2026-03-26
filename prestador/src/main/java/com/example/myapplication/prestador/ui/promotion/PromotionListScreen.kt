@@ -1,6 +1,7 @@
 package com.example.myapplication.prestador.ui.promotion
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,8 +26,9 @@ import com.example.myapplication.prestador.viewmodel.CreatePromotionViewModel
 @Composable
 fun PromotionListScreen(
     onBack: () -> Unit,
+    onPromotionClick: (String) -> Unit = {},
     viewModel: CreatePromotionViewModel = hiltViewModel()
-) {
+){
     val colors = getPrestadorColors()
     val providerId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val promotions by viewModel.getPromotions(providerId).collectAsState(initial = emptyList())
@@ -86,7 +88,9 @@ fun PromotionListScreen(
             ) {
                 items(promotions) { promotion ->
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPromotionClick(promotion.id) },
                         colors = CardDefaults.cardColors(containerColor = colors.surfaceColor),
                         shape = RoundedCornerShape(12.dp),
                         elevation = CardDefaults.cardElevation(4.dp)

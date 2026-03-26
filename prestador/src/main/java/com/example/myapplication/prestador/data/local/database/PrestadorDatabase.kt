@@ -33,6 +33,9 @@ import com.example.myapplication.prestador.data.local.dao.DireccionDao
 import com.example.myapplication.prestador.data.local.dao.ReferenteDao
 import com.example.myapplication.prestador.data.local.entity.DireccionEntity
 import com.example.myapplication.prestador.data.local.entity.ReferenteEntity
+import com.example.myapplication.prestador.data.local.dao.NotificacionDao
+import com.example.myapplication.prestador.data.local.entity.NotificacionEntity
+import androidx.room.migration.Migration
 
 
 /**
@@ -55,9 +58,10 @@ import com.example.myapplication.prestador.data.local.entity.ReferenteEntity
         PlantillaPresupuestoEntity::class,
         DireccionEntity::class,
         ReferenteEntity::class,
+        NotificacionEntity::class,
 
    ],
-    version = 29,
+    version = 30,
     exportSchema = true
 )
 abstract class PrestadorDatabase : RoomDatabase() {
@@ -78,4 +82,8 @@ abstract class PrestadorDatabase : RoomDatabase() {
 
     abstract fun direccionDao(): DireccionDao
     abstract fun referenteDao(): ReferenteDao
+    abstract fun noticacionDao(): NotificacionDao
 }
+
+
+

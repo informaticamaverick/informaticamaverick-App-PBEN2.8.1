@@ -55,7 +55,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.myapplication.ui.screens.client.home.HomeScreenComplete
 import com.example.myapplication.ui.screens.client.presupuesto.PresupuestosScreen
-import com.example.myapplication.ui.screens.client.chat.ChatScreen
+import com.example.myapplication.presentation.client.ChatScreen
 import com.example.myapplication.ui.screens.client.other.CalendarScreen
 import com.example.myapplication.ui.screens.client.promo.PromoScreen
 import com.example.myapplication.ui.screens.client.presupuesto.CrearLicScreen
@@ -100,9 +100,10 @@ fun AppNavigation() {
     val currentRoute = navBackStackEntry?.destination?.route
     
     val mainScreenRoutes = navItems.map { it.route.split("?").first() }
-    // Ocultar barra de navegación en chat conversation
-    val shouldShowBottomBar = currentRoute?.split("?")?.first() in mainScreenRoutes && 
-                              !isInConversation
+    val chatBaseRoute = Screen.Chat.route.split("?").first()
+    // Ocultar barra de navegación en cualquier pantalla de chat
+    val shouldShowBottomBar = currentRoute?.split("?")?.first() in mainScreenRoutes &&
+                              currentRoute?.split("?")?.first() != chatBaseRoute
 
     // --- NUEVO: Lógica para determinar el índice de la pantalla y la dirección de la animación ---
     fun getRouteIndex(route: String?): Int {
@@ -124,8 +125,9 @@ fun AppNavigation() {
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = Modifier.fillMaxSize()
-            //modifier = Modifier.padding(innerPadding)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
 
             // --- NUEVO: Animaciones de desplazamiento lateral (Left <-> Right) ---

@@ -424,7 +424,7 @@ open class ProfileViewModel @Inject constructor() : ViewModel() {
 
             try {
 
-                val currentUser = auth.currentUser
+                val currentUser = auth.currentUser // Aquí obtienes el usuario de Firebase
 
                 if (currentUser != null) {
 
@@ -444,6 +444,8 @@ open class ProfileViewModel @Inject constructor() : ViewModel() {
                         it.copy(
 
                             isLoading = false,
+
+                            uid = currentUser.uid, // <--- 🔥 AGREGA ESTA LÍNEA AQUÍ 🔥CONECTAMOS ID DEL CHAT
 
                             displayName = profile?.displayName ?: currentUser.displayName ?: "",
 

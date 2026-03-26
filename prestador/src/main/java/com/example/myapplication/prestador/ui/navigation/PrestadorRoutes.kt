@@ -19,5 +19,11 @@ sealed class PrestadorRoutes(val route: String) {
     object Presupuestos : PrestadorRoutes("presupuestos")
     object CreatePromotion : PrestadorRoutes("create_promotion")
     object PromotionsList : PrestadorRoutes("promotion_list")
+    object PromotionDetail : PrestadorRoutes("promotion_detail/{promotionId}") {
+        fun createRoute(promotionId: String) = "promotion_detail/$promotionId"
+    }
+    object EditPromotion : PrestadorRoutes("edit_promotion/{promotionId}") {
+        fun createRoute(promotionId: String) = "edit_promotion/$promotionId"
+    }
 }
 

@@ -17,12 +17,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
@@ -35,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -54,13 +58,24 @@ import com.example.myapplication.prestador.ui.theme.getPrestadorColors
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.modifier.modifierLocalProvider
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.work.WorkRequest
 
 @Composable
 fun MessageBubble(
     message: Message,
     isFromCurrentUser: Boolean,
+    senderAvatarUrl: String? = null,
     onReschedule: (() -> Unit)? = null,
-    onVerPresupuesto: (() -> Unit)? = null
+    onAccept: (() -> Unit)? = null,
+    onReject: (() -> Unit)? = null,
+    onVerPresupuesto: (() -> Unit)? = null,
+    onImageClick: ((String?) -> Unit)? = null
 ){
     val colors = getPrestadorColors()
     val bubbleColor = if (message.type == Message.MessageType.BUDGET) {
@@ -76,12 +91,20 @@ fun MessageBubble(
         colors.textPrimary
     }
     
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start
-    ) {
-        Surface(
-            modifier = Modifier.widthIn(max = 300.dp),
+    // Audio: renderizado especial con avatar fuera de la burbuja (estilo WhatsApp)
+    if (message.type == Message.MessageType.AUDIO) {
+        AudioMessageBubbleWA(
+            audioUrl = message.audioUrl,
+            duration = message.audioDuration ?: 0,
+            timestamp = message.timestamp,
+            isFromCurrentUser = isFromCurrentUser,
+            senderAvatarUrl = senderAvatarUrl
+        )
+        return
+    }
+
+    Surface(
+        modifier = Modifier.widthIn(max = 300.dp),
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,
@@ -104,45 +127,9 @@ fun MessageBubble(
                     Message.MessageType.IMAGE -> {
                         ImageMessageContent(
                             imageUrl = message.imageUrl,
-                            text = message.text
+                            text = message.text,
+                            onImageClick = { onImageClick?.invoke(message.imageUrl)}
                         )
-                    }
-                    Message.MessageType.AUDIO -> {
-                        // Audio con timestamp integrado en el mismo nivel
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            AudioMessageContent(
-                                audioUrl = message.audioUrl,
-                                duration = message.audioDuration ?: 0,
-                                modifier = Modifier.weight(1f)
-                            )
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            // Timestamp a la derecha, alineado abajo
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = formatMessageTime(message.timestamp),
-                                    fontSize = 11.sp,
-                                    color = textColor.copy(alpha = 0.7f)
-                                )
-                                
-                                if (isFromCurrentUser) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        Icons.Default.Done,
-                                        contentDescription = null,
-                                        tint = textColor.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
                     }
                     Message.MessageType.LOCATION -> {
                         LocationMessageContent(
@@ -166,12 +153,16 @@ fun MessageBubble(
                             time = message.appointmentTime ?: "",
                             status = message.appointmentStatus,
                             rejectionReason = message.rejectionReason,
-                            onReschedule = onReschedule
+                            isFromCurrentUser = isFromCurrentUser,
+                            onReschedule = onReschedule,
+                            onAccept = onAccept,
+                            onReject = onReject
                         )
                     }
                     Message.MessageType.BUDGET -> {
                         BudgetMessageContent(message = message, onVerPresupuesto = onVerPresupuesto)
                     }
+                    Message.MessageType.AUDIO -> { /* handled above with early return */ }
                 }
                 
                 // Timestamp y estado (excepto para AUDIO y BUDGET que tienen su propio layout)
@@ -202,7 +193,6 @@ fun MessageBubble(
                 }
             }
         }
-    }
 }
 
 // Contenido de mensaje de texto
@@ -258,24 +248,46 @@ fun TextMessageContent(
 @Composable
 fun ImageMessageContent(
     imageUrl: String?,
-    text: String?
+    text: String?,
+    onImageClick: () -> Unit = {}
 ) {
     Column {
         if (imageUrl != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(imageUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = "Imagen",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 300.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
+            val imageBitmap = remember(imageUrl) {
+                try {
+                    val bytes = android.util.Base64.decode(imageUrl, android.util.Base64.DEFAULT)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        ?.asImageBitmap()
+                } catch (e: Exception) { null }
+            }
+            if (imageBitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = imageBitmap,
+                    contentDescription = "Imagen",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onImageClick() },
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Imagen",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onImageClick() },
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
-        
+
         if (!text.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -287,113 +299,160 @@ fun ImageMessageContent(
     }
 }
 
-// Contenido de mensaje de audio
+// Burbuja de audio estilo WhatsApp (con avatar + dots progress)
 @Composable
-fun AudioMessageContent(
+fun AudioMessageBubbleWA(
     audioUrl: String?,
     duration: Int,
-    modifier: Modifier = Modifier
+    timestamp: Long,
+    isFromCurrentUser: Boolean,
+    senderAvatarUrl: String? = null
 ) {
-    val context = LocalContext.current
+    val colors = getPrestadorColors()
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0) }
-    var audioDuration by remember { mutableStateOf(duration) }
-    
-    // Actualizar posición mientras reproduce
+    var audioDuration by remember { mutableStateOf(if (duration > 0) duration * 1000 else 0) }
+
+    DisposableEffect(audioUrl) { onDispose { mediaPlayer?.release() } }
     LaunchedEffect(isPlaying) {
         while (isPlaying) {
-            mediaPlayer?.let {
-                if (it.isPlaying) {
-                    currentPosition = it.currentPosition
-                }
-            }
+            mediaPlayer?.let { currentPosition = it.currentPosition }
             delay(100)
         }
     }
-    
-    // Limpiar MediaPlayer cuando se destruye el composable
-    DisposableEffect(Unit) {
-        onDispose {
-            mediaPlayer?.release()
-        }
-    }
-    
-    fun togglePlayPause() {
-        if (isPlaying) {
-            // Pausar
-            mediaPlayer?.pause()
-            isPlaying = false
-        } else {
-            // Reproducir
+
+    fun togglePlay() {
+        if (isPlaying) { mediaPlayer?.pause(); isPlaying = false }
+        else {
             if (mediaPlayer == null && audioUrl != null) {
                 try {
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(audioUrl)
                         prepare()
                         audioDuration = this.duration
-                        setOnCompletionListener {
-                            isPlaying = false
-                            currentPosition = 0
-                        }
+                        setOnCompletionListener { isPlaying = false; currentPosition = 0 }
                         start()
                     }
                     isPlaying = true
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            } else {
-                mediaPlayer?.start()
-                isPlaying = true
-            }
+                } catch (e: Exception) { e.printStackTrace() }
+            } else { mediaPlayer?.start(); isPlaying = true }
         }
     }
-    
+
+    fun formatMs(ms: Int): String {
+        val s = ms / 1000
+        return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+    }
+
     Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
     ) {
-        // Botón de play/pause con padding para bajar
-        Box(
-            modifier = Modifier.padding(top = 6.dp)
-        ) {
-            IconButton(
-                onClick = { togglePlayPause() },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pausar" else "Reproducir",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
+        // Avatar con badge mic (solo mensajes recibidos)
+        if (!isFromCurrentUser) {
+            Box(modifier = Modifier.size(44.dp)) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    color = colors.primaryOrange.copy(alpha = 0.2f)
+                ) {
+                    if (senderAvatarUrl != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current).data(senderAvatarUrl).crossfade(true).build(),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Person, null, tint = colors.primaryOrange, modifier = Modifier.size(24.dp))
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .align(Alignment.BottomEnd)
+                        .background(Color(0xFF2A2F32), androidx.compose.foundation.shape.CircleShape)
+                        .border(1.5.dp, Color(0xFF111B21), androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(androidx.compose.material.icons.Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(10.dp))
+                }
             }
+            Spacer(Modifier.width(6.dp))
         }
-        
-        // Barra de progreso y tiempo
-        Column(
-            modifier = Modifier.weight(1f)
+
+        // Burbuja
+        Surface(
+            modifier = Modifier.widthIn(min = 220.dp, max = 290.dp),
+            shape = RoundedCornerShape(
+                topStart = 16.dp, topEnd = 16.dp,
+                bottomStart = if (isFromCurrentUser) 16.dp else 4.dp,
+                bottomEnd = if (isFromCurrentUser) 4.dp else 16.dp
+            ),
+            color = if (isFromCurrentUser) colors.primaryOrange else colors.surfaceElevated,
+            shadowElevation = 2.dp
         ) {
-            // Barra de progreso
-            LinearProgressIndicator(
-                progress = if (audioDuration > 0) currentPosition.toFloat() / audioDuration.toFloat() else 0f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp)),
-                color = Color.White,
-                trackColor = Color.White.copy(alpha = 0.3f)
-            )
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            // Tiempo abajo de la barra
-            Text(
-                text = formatAudioDuration(currentPosition),
-                fontSize = 10.sp,
-                color = Color.White.copy(alpha = 0.7f)
-            )
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) androidx.compose.material.icons.Icons.Default.Pause else androidx.compose.material.icons.Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp).clickable { togglePlay() }
+                    )
+                    Canvas(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(20.dp)
+                            .clickable {
+                                // seek on tap handled via pointerInput below
+                            }
+                    ) {
+                        val dotCount = 28
+                        val dotR = 2.5.dp.toPx()
+                        val scrubR = 5.5.dp.toPx()
+                        val spacing = size.width / dotCount
+                        val progress = if (audioDuration > 0) currentPosition.toFloat() / audioDuration else 0f
+                        val sx = (progress * size.width).coerceIn(0f, size.width)
+                        repeat(dotCount) { i ->
+                            val x = i * spacing + spacing / 2f
+                            drawCircle(
+                                color = if (x < sx) Color.White else Color.White.copy(0.35f),
+                                radius = dotR,
+                                center = Offset(x, size.height / 2f)
+                            )
+                        }
+                        drawCircle(Color.White, scrubR, Offset(sx.coerceIn(scrubR, size.width - scrubR), size.height / 2f))
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(formatMs(currentPosition), fontSize = 11.sp, color = Color.White.copy(0.75f))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp)),
+                            fontSize = 11.sp,
+                            color = Color.White.copy(0.75f)
+                        )
+                        if (isFromCurrentUser) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Done, null, tint = Color.White.copy(0.75f), modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -406,61 +465,97 @@ fun LocationMessageContent(
 ) {
     val context = LocalContext.current
     val colors = getPrestadorColors()
-    
+
     // Generar link de Google Maps
     val mapsUrl = "https://www.google.com/maps?q=$latitude,$longitude"
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
             .clickable {
-                val uri = Uri.parse(mapsUrl)
-                val intent = Intent(Intent.ACTION_VIEW, uri)
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(mapsUrl))
                 context.startActivity(intent)
             }
     ) {
-        // Icono de ubicación
+        //Preview del mapa (OpenStreetMap)
+        coil.compose.SubcomposeAsyncImage(
+            model = coil.request.ImageRequest.Builder(context)
+                .data("https://maps.wikimedia.org/img/osm-intl,15,$latitude, $longitude, 300x150.png")
+                .crossfade(true)
+                .build(),
+            contentDescription = "Mapa",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)),
+            contentScale = ContentScale.Crop,
+            error = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(Color(0xFF81C784), Color(0xFF388E3C))
+                        )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Text(
+                            text = "%.4f, %4f".format(latitude, longitude),
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                    }
+                }
+            }
+        )
+        // Footer con icono + texto
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    colors.surfaceElevated,
+                    RoundedCornerShape(
+                        bottomStart = 8.dp,
+                        bottomEnd = 8.dp
+                    )
+                )
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.LocationOn,
-                contentDescription = "Ubicación",
+                contentDescription = null,
                 tint = Color(0xFF10B981),
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
-            Text(
-                text = "Ubicación compartida",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textPrimary
-            )
+            Column {
+                Text(
+                    text = "Ubicación compartida",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = "Toca para abrir en Maps",
+                    fontSize = 11.sp,
+                    color = colors.textSecondary
+                )
+            }
         }
-        
-        Spacer(modifier = Modifier.height(4.dp))
-        
-        // Link clickeable
-        Text(
-            text = mapsUrl,
-            fontSize = 13.sp,
-            color = Color(0xFF3B82F6), // Azul para link
-            style = androidx.compose.ui.text.TextStyle(
-                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
-            )
-        )
-        
-        Spacer(modifier = Modifier.height(4.dp))
-        
-        // Coordenadas
-        Text(
-            text = "📍 ${String.format("%.6f", latitude)}, ${String.format("%.6f", longitude)}",
-            fontSize = 11.sp,
-            color = colors.textSecondary
-        )
     }
 }
+
+        
+
 
 // Contenido de mensaje de documento
 @Composable
@@ -524,7 +619,10 @@ fun AppointmentMessageContent(
     time: String,
     status: Message.AppointmentProposalStatus? = null,
     rejectionReason: String? = null,
-    onReschedule: (() -> Unit)? = null
+    isFromCurrentUser: Boolean = false,
+    onReschedule: (() -> Unit)? = null,
+    onAccept: (() -> Unit)? = null,
+    onReject: (() -> Unit)? = null
 ) {
     val colors = getPrestadorColors()
     
@@ -636,13 +734,49 @@ fun AppointmentMessageContent(
         
         when ( status) {
             Message.AppointmentProposalStatus.PENDING -> {
-                Text(
-                    text = "Esperando respuesta del cliente...",
-                    fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontWeight = FontWeight.Normal,
-                    textAlign = TextAlign.Center
-                )
+                if (!isFromCurrentUser) {
+                    //El cliente envió la solicitud el prestador puede aceptar o rechazar
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = { onAccept?.invoke() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                            modifier = Modifier.weight(1f).height(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Done,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Aceptar", fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = { onReject?.invoke() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                            modifier = Modifier.weight(1f).height(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Rechazar", fontSize = 12.sp)
+                        }
+
+                    }
+                } else {
+                    Text(
+                        text = "Esperando repuesta del cliente...",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Normal,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             Message.AppointmentProposalStatus.ACCEPTED -> {
@@ -930,3 +1064,83 @@ fun BudgetMessageContent(
         }
     }
 }
+
+@Composable
+fun ImageZoomDialog(
+    imageUrl: String,
+    onDismiss: () -> Unit
+) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        scale = (scale * zoomChange).coerceIn(1f, 6f)
+        offset += panChange
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            val imageBitmap = remember(imageUrl) {
+                try {
+                    val bytes = android.util.Base64.decode(imageUrl, android.util.Base64.DEFAULT)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                } catch (e: Exception) { null }
+            }
+            if (imageBitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = imageBitmap,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        )
+                        .transformable(transformableState),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(imageUrl).build(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        )
+                        .transformable(transformableState),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Cerrar",
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
+

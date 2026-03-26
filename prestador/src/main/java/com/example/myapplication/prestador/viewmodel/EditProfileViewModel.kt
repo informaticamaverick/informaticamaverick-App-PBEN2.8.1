@@ -12,7 +12,10 @@ import com.example.myapplication.prestador.utils.ServiceTypeConfig
 import com.example.myapplication.prestador.utils.getServiceTypeConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,13 +25,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
+import android.net.Uri
 
 @HiltViewModel
 class EditProfileViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val providerRepository: ProviderRepository,
     private val businessRepository: BusinessRepository,
     private val auth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val storage: FirebaseStorage
 ) : ViewModel() {
 
     private val _profileState = MutableStateFlow<ProfileState>(ProfileState.Loading)
@@ -45,12 +51,107 @@ class EditProfileViewModel @Inject constructor(
     private val _businessId = MutableStateFlow<String?>(null)
     val businessId: StateFlow<String?> = _businessId.asStateFlow()
 
+    private val _photoUploadState = MutableStateFlow<PhotoUploadState>(PhotoUploadState.Idle)
+    val photoUploadState: StateFlow<PhotoUploadState> = _photoUploadState.asStateFlow()
+
     private val _bussinesEntity = MutableStateFlow<com.example.myapplication.prestador.data.local.entity.BusinessEntity?>(null)
     val businessEntity: StateFlow<com.example.myapplication.prestador.data.local.entity.BusinessEntity?> = _bussinesEntity.asStateFlow()
     
     // Configuración de tipo de servicio
     private val _serviceTypeConfig = MutableStateFlow(getServiceTypeConfig(ServiceType.TECHNICAL))
     val serviceTypeConfig: StateFlow<ServiceTypeConfig> = _serviceTypeConfig.asStateFlow()
+
+
+    fun uploadProfilePhoto(uri: Uri) {
+        viewModelScope.launch {
+            _photoUploadState.value = PhotoUploadState.Loading
+            try {
+                val userId = auth.currentUser?.uid ?: throw Exception("Usuario no autenticado")
+
+                // Comprimir a 150x150 y convertir a Base64
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                val resized = android.graphics.Bitmap.createScaledBitmap(originalBitmap, 150, 150, true)
+                val outputStream = java.io.ByteArrayOutputStream()
+                resized.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+                val base64 = android.util.Base64.encodeToString(outputStream.toByteArray(), android.util.Base64.NO_WRAP)
+
+                // Guardar Base64 en Firestore
+                firestore.collection("usuarios")
+                    .document(userId)
+                    .update("imageBase64", base64)
+                    .await()
+
+                // Actualizar Room local
+                val currentProvider = providerRepository.getProviderById(userId).first()
+                currentProvider?.let {
+                    providerRepository.saveProvider(it.copy(imageUrl = base64))
+                }
+                _photoUploadState.value = PhotoUploadState.Success(base64)
+
+            } catch (e: Exception) {
+                _photoUploadState.value = PhotoUploadState.Error(e.message ?: "Error al subir foto")
+            }
+        }
+    }
+
+
+    /*STORAGE DESACTIVADO POR EL MOMENTO
+    fun uploadProfilePhoto(uri: Uri) {
+        viewModelScope.launch {
+            _photoUploadState.value = PhotoUploadState.Loading
+            try {
+                val userId = auth.currentUser?.uid
+                    ?: throw Exception("Usuario no autenticado")
+
+                // Comprimir a 150x150 y convertir a Base64
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                val resized = android.graphics.Bitmap.createScaledBitmap(originalBitmap, 150, 150, true)
+                val outputStream = java.io.ByteArrayOutputStream()
+                resized.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+                val base64 = android.util.Base64.encodeToString(outputStream.toByteArray(), android.util.Base64.NO_WRAP)
+
+                // Guardar Base64 en Firestore
+                firestore.collection("usuarios")
+                    .document(userId)
+                    .update("imageBase64", base64)
+                    .await()
+
+                // Actualizar Room local
+                val currentProvider = providerRepository.getProviderById(userId).first()
+                currentProvider?.let {
+                    providerRepository.saveProvider(it.copy(imageUrl = base64))
+                }
+                _photoUploadState.value = PhotoUploadState.Success(base64)
+
+            } catch (e: Exception) {
+                _photoUploadState.value = PhotoUploadState.Error(e.message ?: "Error al subir foto")
+            }
+        }
+    }
+
+    /* STORAGE - DESACTIVADO (requiere plan Blaze)
+    fun uploadProfilePhoto_Storage(uri: Uri) {
+        viewModelScope.launch {
+            _photoUploadState.value = PhotoUploadState.Loading
+            try {
+                val userId = auth.currentUser?.uid
+                    ?: throw Exception("Usuario no autenticado")
+                val ref = storage.reference.child("perfiles/$userId/foto_perfil.jpg")
+                ref.putFile(uri).await()
+                val downloadUrl = ref.downloadUrl.await().toString()
+                firestore.collection("usuarios").document(userId).update("imageUrl", downloadUrl).await()
+                val currentProvider = providerRepository.getProviderById(userId).first()
+                currentProvider?.let { providerRepository.saveProvider(it.copy(imageUrl = downloadUrl)) }
+                _photoUploadState.value = PhotoUploadState.Success(downloadUrl)
+            } catch (e: Exception) {
+                _photoUploadState.value = PhotoUploadState.Error(e.message ?: "Error al subir foto")
+            }
+        }
+    }
+    */
+     */
 
     init {
         loadProfile()
@@ -398,4 +499,11 @@ sealed class UpdateState {
     object Loading : UpdateState()
     object Success : UpdateState()
     data class Error(val message: String) : UpdateState()
+}
+
+sealed class PhotoUploadState {
+    object Idle : PhotoUploadState()
+    object Loading : PhotoUploadState()
+    data class Success(val url: String) : PhotoUploadState()
+    data class Error(val message: String) : PhotoUploadState()
 }

@@ -111,4 +111,5 @@ interface PromotionDao {
 
     @Query("DELETE FROM promotions WHERE expiresAt < :currentTime")
     suspend fun deleteExpiredPromotions(currentTime: Long)
+
 }

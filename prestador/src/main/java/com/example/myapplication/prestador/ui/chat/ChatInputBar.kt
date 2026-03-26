@@ -15,6 +15,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -224,6 +226,8 @@ fun MessageInputBar(
                 .fillMaxWidth()
                 .graphicsLayer { clip = false }
         ) {
+            val isTextEmpty = messageText.trim().isEmpty()
+
             // Crossfade entre UI normal y UI de grabación
             Crossfade(
                 targetState = isRecording,
@@ -235,7 +239,8 @@ fun MessageInputBar(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(8.dp),
+                            .padding(start = 8.dp, top = 8.dp, bottom = 8.dp,
+                                     end = if (isTextEmpty) 56.dp else 8.dp),
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -252,8 +257,6 @@ fun MessageInputBar(
                     }
                     
                     // Campo de texto con botones integrados
-                    val isTextEmpty = messageText.trim().isEmpty()
-                    
                     Surface(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(24.dp),
@@ -303,79 +306,8 @@ fun MessageInputBar(
                                 }
                             }
                             
-                            // Botón de enviar o micrófono con gesto de arrastre
-                            if (isTextEmpty) {
-                                // Botón de micrófono con animación de vuelo
-                                val currentTx = if (deleteTriggered) micTranslationX.value else dragOffsetX
-                                val currentTy = if (deleteTriggered) micTranslationY.value else 0f
-                                val currentRot = if (deleteTriggered) micRotation.value else 0f
-                                val currentScale = if (deleteTriggered) micScale.value else if (isDraggingMic) 1.5f else 1f
-                                val currentAlpha = if (deleteTriggered) micAlpha.value else if (isDraggingMic && dragOffsetX < -50) 0.6f else 1f
-                                
-                                Box(
-                                    modifier = Modifier
-                                        .offset {
-                                            IntOffset(
-                                                currentTx.roundToInt(),
-                                                currentTy.roundToInt()
-                                            )
-                                        }
-                                        .rotate(currentRot)
-                                        .scale(currentScale)
-                                        .alpha(currentAlpha)
-                                        .size(40.dp)
-                                        .background(
-                                            color = Color(0xFFF97316),
-                                            shape = CircleShape
-                                        )
-                                        .pointerInput(Unit) {
-                                            detectDragGesturesAfterLongPress(
-                                                onDragStart = {
-                                                    if (!deleteTriggered) {
-                                                        isDraggingMic = true
-                                                        // Iniciar grabación real
-                                                        onMicClick()
-                                                    }
-                                                },
-                                                onDragEnd = {
-                                                    if (!deleteTriggered) {
-                                                        if (dragOffsetX < cancelThreshold) {
-                                                            // Cancelar con animación
-                                                            cancelRecordingAnimation()
-                                                        } else {
-                                                            // Enviar audio
-                                                            if (isRecording) {
-                                                                onMicClick() // Detiene y envía
-                                                            }
-                                                            stopRecording()
-                                                        }
-                                                        isDraggingMic = false
-                                                    }
-                                                },
-                                                onDrag = { change, dragAmount ->
-                                                    if (!deleteTriggered) {
-                                                        change.consume()
-                                                        val newOffset = dragOffsetX + dragAmount.x
-                                                        if (newOffset <= 0) {
-                                                            dragOffsetX = newOffset
-                                                            isDeleting =
-                                                                dragOffsetX < (cancelThreshold + 40)
-                                                        }
-                                                    }
-                                                }
-                                            )
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Mic,
-                                        contentDescription = "Grabar audio",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            } else {
-                                // Botón de enviar (cuando hay texto)
+                            // Botón de enviar (solo cuando hay texto; el mic está fuera del Crossfade)
+                            if (!isTextEmpty) {
                                 Box(
                                     modifier = Modifier
                                         .size(40.dp)
@@ -402,7 +334,7 @@ fun MessageInputBar(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 72.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -478,71 +410,47 @@ fun MessageInputBar(
                         }
                         
                         Spacer(modifier = Modifier.weight(1f))
-                        
-                        // Botón de micrófono con animación de vuelo
-                        val currentTx = if (deleteTriggered) micTranslationX.value else dragOffsetX
-                        val currentTy = if (deleteTriggered) micTranslationY.value else 0f
-                        val currentRot = if (deleteTriggered) micRotation.value else 0f
-                        val currentScale = if (deleteTriggered) micScale.value else 1.5f
-                        val currentAlpha = if (deleteTriggered) micAlpha.value else if (dragOffsetX < -50) 0.6f else 1f
-                        
-                        Box(
-                            modifier = Modifier
-                                .offset {
-                                    IntOffset(
-                                        currentTx.roundToInt(),
-                                        currentTy.roundToInt()
-                                    )
-                                }
-                                .rotate(currentRot)
-                                .scale(currentScale)
-                                .alpha(currentAlpha)
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFF97316))
-                                .pointerInput(Unit) {
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            // Ya está grabando, solo preparar para cancelar
-                                        },
-                                        onDragEnd = {
-                                            if (!deleteTriggered) {
-                                                if (dragOffsetX < cancelThreshold) {
-                                                    // Cancelar con animación
-                                                    cancelRecordingAnimation()
-                                                } else {
-                                                    // Enviar audio
-                                                    if (isRecording) {
-                                                        onMicClick() // Detiene y envía
-                                                    }
-                                                    dragOffsetX = 0f
-                                                    isDeleting = false
-                                                }
-                                            }
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            if (!deleteTriggered) {
-                                                change.consume()
-                                                val newOffset = dragOffsetX + dragAmount.x
-                                                if (newOffset <= 0) {
-                                                    dragOffsetX = newOffset
-                                                    isDeleting =
-                                                        dragOffsetX < (cancelThreshold + 40)
-                                                }
-                                            }
-                                        }
-                                    )
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Mic,
-                                contentDescription = "Grabando",
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
                     }
+                }
+            }
+
+            // ── Botón mic PERSISTENTE fuera del Crossfade ──────────────────────
+            // Un único pointer input que no se destruye al cambiar el estado de grabación
+            if (isTextEmpty || isRecording) {
+                val currentTx = if (deleteTriggered) micTranslationX.value else dragOffsetX
+                val currentTy = if (deleteTriggered) micTranslationY.value else 0f
+                val currentRot = if (deleteTriggered) micRotation.value else 0f
+                val currentScale = if (deleteTriggered) micScale.value
+                    else if (isRecording) 1.5f else 1f
+                val currentAlpha = if (deleteTriggered) micAlpha.value
+                    else if (isRecording && dragOffsetX < -50) 0.6f else 1f
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 8.dp, end = 8.dp)
+                        .offset { IntOffset(currentTx.roundToInt(), currentTy.roundToInt()) }
+                        .rotate(currentRot)
+                        .scale(currentScale)
+                        .alpha(currentAlpha)
+                        .size(if (isRecording) 56.dp else 40.dp)
+                        .background(Color(0xFFF97316), CircleShape)
+                        .clickable {
+                            if (!deleteTriggered) {
+                                if (!isRecording) {
+                                    startRecording()  // reset animation state
+                                }
+                                onMicClick() // toggle: inicia o detiene+envía
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = if (isRecording) "Grabando" else "Grabar audio",
+                        tint = Color.White,
+                        modifier = Modifier.size(if (isRecording) 28.dp else 22.dp)
+                    )
                 }
             }
         }

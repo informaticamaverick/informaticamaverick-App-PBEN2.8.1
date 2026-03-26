@@ -122,8 +122,12 @@ fun BudgetItemRow(item: BudgetItem, suggestionItems: List<BudgetItem> = emptyLis
     val total = withTax - discountAmount
 
     var showSuggestions by remember { mutableStateOf(false) }
-    val filtered = if (showSuggestions && item.description.length >= 2 && suggestionItems.isNotEmpty()) {
-        suggestionItems.filter { it.description.contains(item.description, ignoreCase = true) }.take(5)
+    val searchTerm = if (item.code.length >= 2) item.code else item.description
+    val filtered = if (showSuggestions && searchTerm.length >= 2 && suggestionItems.isNotEmpty()) {
+        suggestionItems.filter {
+            it.description.contains(searchTerm, ignoreCase = true) ||
+            it.code.contains(searchTerm, ignoreCase = true)
+        }.take(5)
     } else emptyList()
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -134,7 +138,10 @@ fun BudgetItemRow(item: BudgetItem, suggestionItems: List<BudgetItem> = emptyLis
                     modifier = Modifier.padding(bottom = 4.dp))
                 OutlinedTextField(
                     value = item.code,
-                    onValueChange = { onUpdate(item.copy(code = it)) },
+                    onValueChange = {
+                        onUpdate(item.copy(code = it))
+                        showSuggestions = it.isNotBlank()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     placeholder = { Text("...", style = MaterialTheme.typography.bodySmall) },
@@ -197,12 +204,23 @@ fun BudgetItemRow(item: BudgetItem, suggestionItems: List<BudgetItem> = emptyLis
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    suggestion.description,
-                                    fontWeight = FontWeight.Medium,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.textPrimary
-                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (suggestion.code.isNotBlank()) {
+                                        Text(
+                                            suggestion.code,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colors.primaryOrange
+                                        )
+                                        Text("•", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                                    }
+                                    Text(
+                                        suggestion.description,
+                                        fontWeight = FontWeight.Medium,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.textPrimary
+                                    )
+                                }
                                 Text(
                                     "Cant: ${suggestion.quantity}  •  \$${"%.2f".format(suggestion.unitPrice)}",
                                     style = MaterialTheme.typography.bodySmall,
@@ -280,8 +298,17 @@ fun BudgetItemRow(item: BudgetItem, suggestionItems: List<BudgetItem> = emptyLis
 }
 
 @Composable
-fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) {
+fun BudgetServiceRow(service: BudgetService, suggestionItems: List<BudgetService> = emptyList(), onUpdate: (BudgetService) -> Unit) {
     val colors = getPrestadorColors()
+    var showSuggestions by remember { mutableStateOf(false) }
+    val searchTerm = if (service.code.length >= 2) service.code else service.description
+    val filtered = if (showSuggestions && searchTerm.length >= 2 && suggestionItems.isNotEmpty()) {
+        suggestionItems.filter {
+            it.description.contains(searchTerm, ignoreCase = true) ||
+            it.code.contains(searchTerm, ignoreCase = true)
+        }.take(5)
+    } else emptyList()
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Column(modifier = Modifier.weight(0.25f)) {
@@ -290,7 +317,10 @@ fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) 
                     modifier = Modifier.padding(bottom = 4.dp))
                 OutlinedTextField(
                     value = service.code,
-                    onValueChange = { onUpdate(service.copy(code = it)) },
+                    onValueChange = {
+                        onUpdate(service.copy(code = it))
+                        showSuggestions = it.isNotBlank()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     placeholder = { Text("...", style = MaterialTheme.typography.bodySmall) },
@@ -311,10 +341,13 @@ fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) 
                     modifier = Modifier.padding(bottom = 4.dp))
                 OutlinedTextField(
                     value = service.description,
-                    onValueChange = { onUpdate(service.copy(description = it)) },
+                    onValueChange = {
+                        onUpdate(service.copy(description = it))
+                        showSuggestions = it.isNotBlank()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("Descripción", style = MaterialTheme.typography.bodySmall) },
+                    placeholder = { Text(if (suggestionItems.isNotEmpty()) "Descripción (${suggestionItems.size} sugerencias)" else "Descripción", style = MaterialTheme.typography.bodySmall) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -327,6 +360,46 @@ fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) 
                 )
             }
         }
+
+        // Sugerencias inline
+        if (showSuggestions && filtered.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F7FF)),
+                elevation = CardDefaults.cardElevation(4.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column {
+                    filtered.forEachIndexed { index, suggestion ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onUpdate(suggestion.copy(id = service.id))
+                                    showSuggestions = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (suggestion.code.isNotBlank()) {
+                                        Text(suggestion.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, color = colors.primaryOrange)
+                                        Text("•", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                                    }
+                                    Text(suggestion.description, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
+                                }
+                                Text("\$${"%.2f".format(suggestion.total)}", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+                            }
+                            Icon(Icons.Default.NorthWest, contentDescription = "Usar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                        }
+                        if (index < filtered.size - 1) HorizontalDivider(color = colors.border)
+                    }
+                }
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("TOTAL ($)", style = MaterialTheme.typography.labelSmall,
@@ -354,8 +427,17 @@ fun BudgetServiceRow(service: BudgetService, onUpdate: (BudgetService) -> Unit) 
 }
 
 @Composable
-fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, onUpdate: (BudgetProfessionalFee) -> Unit) {
+fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, suggestionItems: List<BudgetProfessionalFee> = emptyList(), onUpdate: (BudgetProfessionalFee) -> Unit) {
     val colors = getPrestadorColors()
+    var showSuggestions by remember { mutableStateOf(false) }
+    val searchTerm = if (fee.code.length >= 2) fee.code else fee.description
+    val filtered = if (showSuggestions && searchTerm.length >= 2 && suggestionItems.isNotEmpty()) {
+        suggestionItems.filter {
+            it.description.contains(searchTerm, ignoreCase = true) ||
+            it.code.contains(searchTerm, ignoreCase = true)
+        }.take(5)
+    } else emptyList()
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(modifier = Modifier.weight(0.35f)) {
@@ -364,7 +446,10 @@ fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, onUpdate: (BudgetProfes
                     modifier = Modifier.padding(bottom = 4.dp))
                 OutlinedTextField(
                     value = fee.code,
-                    onValueChange = { onUpdate(fee.copy(code = it)) },
+                    onValueChange = {
+                        onUpdate(fee.copy(code = it))
+                        showSuggestions = it.isNotBlank()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     placeholder = { Text("011", style = MaterialTheme.typography.bodySmall) },
@@ -407,10 +492,13 @@ fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, onUpdate: (BudgetProfes
                 modifier = Modifier.padding(bottom = 4.dp))
             OutlinedTextField(
                 value = fee.description,
-                onValueChange = { onUpdate(fee.copy(description = it)) },
+                onValueChange = {
+                    onUpdate(fee.copy(description = it))
+                    showSuggestions = it.isNotBlank()
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("Ej. Consulta Especialista", style = MaterialTheme.typography.bodySmall) },
+                placeholder = { Text(if (suggestionItems.isNotEmpty()) "Descripción (${suggestionItems.size} sugerencias)" else "Ej. Consulta Especialista", style = MaterialTheme.typography.bodySmall) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 shape = RoundedCornerShape(8.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -421,6 +509,45 @@ fun BudgetProfessionalFeeRow(fee: BudgetProfessionalFee, onUpdate: (BudgetProfes
                     cursorColor = colors.primaryOrange
                 )
             )
+        }
+
+        // Sugerencias inline
+        if (showSuggestions && filtered.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F0FF)),
+                elevation = CardDefaults.cardElevation(4.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column {
+                    filtered.forEachIndexed { index, suggestion ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onUpdate(suggestion.copy(id = fee.id))
+                                    showSuggestions = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (suggestion.code.isNotBlank()) {
+                                        Text(suggestion.code, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, color = colors.primaryOrange)
+                                        Text("•", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+                                    }
+                                    Text(suggestion.description, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
+                                }
+                                Text("\$${"%.2f".format(suggestion.total)}", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+                            }
+                            Icon(Icons.Default.NorthWest, contentDescription = "Usar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                        }
+                        if (index < filtered.size - 1) HorizontalDivider(color = colors.border)
+                    }
+                }
+            }
         }
     }
 }
@@ -1042,7 +1169,6 @@ fun ArticleAutoCompleteFields(
     suggestions: List<BudgetItem>,
     onAdd: (BudgetItem) -> Unit
 ) {
-    if (suggestions.isEmpty()) return
     val colors = getPrestadorColors()
     var codeText by remember { mutableStateOf("") }
     var nameText by remember { mutableStateOf("") }
@@ -1150,7 +1276,6 @@ fun ServiceAutoCompleteFields(
     suggestions: List<BudgetService>,
     onAdd: (BudgetService) -> Unit
 ) {
-    if (suggestions.isEmpty()) return
     val colors = getPrestadorColors()
     var codeText by remember { mutableStateOf("") }
     var nameText by remember { mutableStateOf("") }
@@ -1260,7 +1385,6 @@ fun FeeAutoCompleteFields(
     suggestions: List<BudgetProfessionalFee>,
     onAdd: (BudgetProfessionalFee) -> Unit
 ) {
-    if (suggestions.isEmpty()) return
     val colors = getPrestadorColors()
     var codeText by remember { mutableStateOf("") }
     var nameText by remember { mutableStateOf("") }
@@ -1323,7 +1447,6 @@ fun DescriptionAutoCompleteField(
     suggestions: List<String>,
     onSelect: (String) -> Unit
 ) {
-    if (suggestions.isEmpty()) return
     val colors = getPrestadorColors()
     var text by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }

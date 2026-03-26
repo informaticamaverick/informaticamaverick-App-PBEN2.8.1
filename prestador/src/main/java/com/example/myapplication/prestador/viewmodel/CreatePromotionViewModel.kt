@@ -132,6 +132,85 @@ class CreatePromotionViewModel @Inject constructor(
      * OBTENER todas las promociones del prestador (para pruebas)
      */
     fun getPromotions(providerId: String) = promotionRepository.getPromotionsAsModel(providerId)
+
+    /**
+     * OBTENER promoción por ID como modelo de UI
+     */
+    fun getPromotionByIdAsModel(promotionId: String) =
+        promotionRepository.getPromotionByIdAsModel(promotionId)
+
+    /**
+     * ARCHIVAR promoción (cambia estado a ARCHIVED)
+     */
+    fun archivePromotion(promotionId: String) {
+        viewModelScope.launch {
+            try {
+                promotionRepository.updatePromotionStatus(promotionId, "ARCHIVED")
+                _successMessage.value = "Promoción archivada"
+            } catch (e: Exception) {
+                _errorMessage.value = "Error al archivar: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * ACTUALIZAR promoción existente
+     */
+    fun updatePromotion(
+        existing: com.example.myapplication.prestador.data.model.ProviderPromotion,
+        type: com.example.myapplication.prestador.data.model.PromotionType,
+        title: String,
+        description: String,
+        imageUrls: List<String>,
+        discount: String,
+        categories: Set<String>,
+        onSuccess: () -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _errorMessage.value = null
+
+                if (title.isBlank()) {
+                    _errorMessage.value = "El título es obligatorio"
+                    _isLoading.value = false
+                    return@launch
+                }
+                if (description.isBlank()) {
+                    _errorMessage.value = "La descripción es obligatoria"
+                    _isLoading.value = false
+                    return@launch
+                }
+                if (imageUrls.isEmpty()) {
+                    _errorMessage.value = "Agrega al menos una imagen"
+                    _isLoading.value = false
+                    return@launch
+                }
+                if (categories.isEmpty()) {
+                    _errorMessage.value = "Selecciona al menos una categoría"
+                    _isLoading.value = false
+                    return@launch
+                }
+
+                val updated = existing.copy(
+                    type = type,
+                    title = title,
+                    description = description,
+                    imageUrls = imageUrls,
+                    discount = discount.toIntOrNull(),
+                    categories = categories.toList()
+                )
+                promotionRepository.updatePromotionFromModel(updated)
+
+                _isLoading.value = false
+                _successMessage.value = "¡Promoción actualizada!"
+                onSuccess()
+            } catch (e: Exception) {
+                _isLoading.value = false
+                _errorMessage.value = "Error al actualizar: ${e.message}"
+            }
+        }
+    }
     
     /**
      * OBTENER solo promociones activas

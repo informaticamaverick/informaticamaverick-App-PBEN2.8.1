@@ -456,7 +456,7 @@ fun AddServiceSheetContent(
                 modifier = Modifier.weight(1f)
             )
         }
-        BudgetServiceRow(service = currentItem, onUpdate = { currentItem = it })
+        BudgetServiceRow(service = currentItem, suggestionItems = suggestionItems, onUpdate = { currentItem = it })
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = {
@@ -626,7 +626,7 @@ fun AddProfessionalFeeSheetContent(
                 modifier = Modifier.weight(1f)
             )
         }
-        BudgetProfessionalFeeRow(fee = currentItem, onUpdate = { updatedItem -> currentItem = updatedItem })
+        BudgetProfessionalFeeRow(fee = currentItem, suggestionItems = suggestionItems, onUpdate = { updatedItem -> currentItem = updatedItem })
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -776,8 +776,12 @@ fun AddMiscExpenseSheetContent(
 
     var description by remember { mutableStateOf(itemToEdit?.description ?: "") }
     var amountStr by remember { mutableStateOf(if ((itemToEdit?.amount ?: 0.0) > 0) itemToEdit!!.amount.toString() else "") }
+    var showSuggestions by remember { mutableStateOf(false) }
 
     val enteredAmount = amountStr.toDoubleOrNull() ?: 0.0
+    val filteredSuggestions = if (showSuggestions && description.length >= 2 && savedGastos.isNotEmpty()) {
+        savedGastos.filter { it.first.contains(description, ignoreCase = true) }.take(5)
+    } else emptyList()
 
     Column(
         modifier = Modifier
@@ -826,10 +830,13 @@ fun AddMiscExpenseSheetContent(
                 modifier = Modifier.padding(bottom = 4.dp))
             OutlinedTextField(
                 value = description,
-                onValueChange = { description = it },
+                onValueChange = {
+                    description = it
+                    showSuggestions = it.isNotBlank()
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("...", style = MaterialTheme.typography.bodySmall) },
+                placeholder = { Text(if (savedGastos.isNotEmpty()) "Descripción (${savedGastos.size} sugerencias)" else "...", style = MaterialTheme.typography.bodySmall) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(8.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -840,6 +847,39 @@ fun AddMiscExpenseSheetContent(
                     cursorColor = colors.primaryOrange
                 )
             )
+            // Sugerencias inline
+            if (showSuggestions && filteredSuggestions.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8F5)),
+                    elevation = CardDefaults.cardElevation(4.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column {
+                        filteredSuggestions.forEachIndexed { index, (desc, amt) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        description = desc
+                                        amountStr = if (amt > 0) amt.toString() else ""
+                                        showSuggestions = false
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(desc, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary)
+                                    Text("\$${"%.2f".format(amt)}", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+                                }
+                                Icon(Icons.Default.NorthWest, contentDescription = "Usar", tint = colors.primaryOrange, modifier = Modifier.size(16.dp))
+                            }
+                            if (index < filteredSuggestions.size - 1) HorizontalDivider(color = Color(0xFFE2E8F0))
+                        }
+                    }
+                }
+            }
         }
 
         Column(modifier = Modifier.padding(bottom = 20.dp)) {

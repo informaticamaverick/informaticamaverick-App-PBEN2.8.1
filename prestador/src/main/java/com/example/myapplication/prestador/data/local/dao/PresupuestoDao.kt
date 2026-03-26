@@ -15,6 +15,9 @@ interface PresupuestoDao {
     
     @Query("SELECT * FROM presupuestos WHERE id = :presupuestoId")
     suspend fun getPresupuestoById(presupuestoId: String): PresupuestoEntity?
+
+    @Query("SELECT * FROM presupuestos WHERE id = :presupuestoId")
+    fun getPresupuestoByIdAsFlow(presupuestoId: String): Flow<PresupuestoEntity?>
     
     @Query("SELECT * FROM presupuestos WHERE clienteId = :clienteId ORDER BY fecha DESC")
     fun getPresupuestosByCliente(clienteId: String): Flow<List<PresupuestoEntity>>

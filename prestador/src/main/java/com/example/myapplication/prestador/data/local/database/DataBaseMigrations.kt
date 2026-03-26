@@ -588,6 +588,24 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_29_30 = object : Migration(29,30) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL(
+                """
+                    CREATE TABLE IF NOT EXISTS notificaciones (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    tipo TEXT NOT NULL,
+                    titulo TEXT NOT NULL,
+                    mensaje TEXT NOT NULL,
+                    fechaMs INTEGER NOT NULL,
+                    leida INTEGER NOT NULL,
+                    accionRoute TEXT
+                    )
+                """.trimIndent()
+            )
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_6_7,
         MIGRATION_7_8,
@@ -608,7 +626,8 @@ object DatabaseMigrations {
         MIGRATION_25_26,
         MIGRATION_26_27,
         MIGRATION_27_28,
-        MIGRATION_28_29
+        MIGRATION_28_29,
+        MIGRATION_29_30
     )
 }
 

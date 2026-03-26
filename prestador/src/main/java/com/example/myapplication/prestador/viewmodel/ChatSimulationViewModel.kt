@@ -13,7 +13,9 @@ import com.example.myapplication.prestador.data.repository.AppointmentRepository
 import com.example.myapplication.prestador.data.repository.PresupuestoRepository
 import com.example.myapplication.prestador.data.repository.ProviderRepository
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.example.myapplication.prestador.utils.NotificationHelper
+import kotlinx.coroutines.tasks.await
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,9 +40,14 @@ class ChatSimulationViewModel @Inject constructor(
     private val _serviceType = MutableStateFlow("TECHNICAL")
     val serviceType: StateFlow<String> = _serviceType.asStateFlow()
 
+    private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
+        println("🔐 ChatSimulation - Auth state changed: uid=${auth.currentUser?.uid}")
+        cargarServiceType()
+    }
+
     init {
         println("🚀 ChatSimulationViewModel CREADO")
-        cargarServiceType()
+        FirebaseAuth.getInstance().addAuthStateListener(authStateListener)
     }
 
     private fun cargarServiceType() {
@@ -49,11 +56,22 @@ class ChatSimulationViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            providerRepository.getProviderById(uid).collect { provider ->
-                val tipo = provider?.serviceType ?: "TECHNICAL"
+            try {
+                // Leer desde Firestore primero para tener el dato correcto del usuario
+                val doc = FirebaseFirestore.getInstance()
+                    .collection("usuarios").document(uid).get().await()
+                val tipo = doc.getString("serviceType") ?: "TECHNICAL"
                 _serviceType.value = tipo
-                println("✅ ChatSimulation - serviceType cargado: $tipo")
+                println("✅ ChatSimulation - serviceType cargado desde Firestore: $tipo")
                 iniciarSimulacion(tipo)
+            } catch (e: Exception) {
+                // Fallback a Room si Firestore falla
+                providerRepository.getProviderById(uid).collect { provider ->
+                    val tipo = provider?.serviceType ?: "TECHNICAL"
+                    _serviceType.value = tipo
+                    println("✅ ChatSimulation - serviceType cargado desde Room: $tipo")
+                    iniciarSimulacion(tipo)
+                }
             }
         }
     }
@@ -505,6 +523,7 @@ class ChatSimulationViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        FirebaseAuth.getInstance().removeAuthStateListener(authStateListener)
         println("🔴 ChatSimulationViewModel DESTRUIDO")
     }
 }

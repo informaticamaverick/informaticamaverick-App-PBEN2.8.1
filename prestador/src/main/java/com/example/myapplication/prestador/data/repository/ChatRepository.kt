@@ -1,368 +1,354 @@
 package com.example.myapplication.prestador.data.repository
 
+import android.util.Log
 import com.example.myapplication.prestador.data.local.dao.ConversationDao
 import com.example.myapplication.prestador.data.local.dao.MessageDao
 import com.example.myapplication.prestador.data.local.entity.ConversationEntity
 import com.example.myapplication.prestador.data.local.entity.MessageEntity
-import com.example.myapplication.prestador.data.model.Message
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import java.util.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.util.UUID
 import javax.inject.Inject
-
 import javax.inject.Singleton
 
-/**
- * Repositorio híbrido para manejar operaciones de chat y mensajes
- */
 @Singleton
 class ChatRepository @Inject constructor(
     private val messageDao: MessageDao,
-    private val conversationDao: ConversationDao
+    private val conversationDao:
+    ConversationDao,
+    private val firestore: FirebaseFirestore, @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
-    // ============ MÉTODOS PARA VIEWMODELS ============
-    
-    fun getConversationsByProvider(providerId: String): Flow<List<ConversationEntity>> {
-        return conversationDao.getAllConversations()
-    }
+    private var messageListener:
+            ListenerRegistration? = null
+    private val scope =
+        CoroutineScope(Dispatchers.IO)
 
-    suspend fun saveConversation(conversation: ConversationEntity) {
-        conversationDao.insertConversation(conversation)
-    }
-
-    suspend fun saveMessage(message: MessageEntity) {
-        messageDao.insertMessage(message)
-    }
-
-    suspend fun markMessagesAsRead(conversationId: String) {
-        conversationDao.resetUnreadCount(conversationId)
-        messageDao.markAllAsRead(conversationId)
-    }
-
-    suspend fun deleteMessage(messageId: String) {
-        messageDao.deleteMessageById(messageId)
-    }
-    
-    // ============ CONVERSACIONES ============
-    
-    fun getAllConversations(): Flow<List<ConversationEntity>> {
-        return conversationDao.getAllConversations()
-    }
-
-    fun getActiveConversations(): Flow<List<ConversationEntity>> {
-        return conversationDao.getActiveConversations()
-    }
-
-    fun getArchivedConversations(): Flow<List<ConversationEntity>> {
-        return conversationDao.getArchivedConversations()
-    }
-
-    suspend fun getConversationById(conversationId: String): ConversationEntity? {
-        return conversationDao.getConversationById(conversationId)
-    }
-
-    suspend fun getConversationByUserId(userId: String): ConversationEntity? {
-        return conversationDao.getConversationByUserId(userId)
-    }
-
-    suspend fun createConversation(
-        userId: String,
-        userName: String,
-        serviceType: String? = null,
-        userAvatarUrl: String? = null
-    ): ConversationEntity {
-        val conversation = ConversationEntity(
-            conversationId = UUID.randomUUID().toString(),
-            userId = userId,
-            userName = userName,
-            userAvatarUrl = userAvatarUrl,
-            serviceType = serviceType,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
-        )
-        conversationDao.insertConversation(conversation)
-        return conversation
-    }
-
-    suspend fun updateConversation(conversation: ConversationEntity) {
-        conversationDao.updateConversation(conversation)
-    }
-
-    suspend fun deleteConversation(conversationId: String) {
-        conversationDao.deleteConversationById(conversationId)
-    }
-
-    suspend fun archiveConversation(conversationId: String, archive: Boolean) {
-        conversationDao.setArchived(conversationId, archive)
-    }
-
-    suspend fun pinConversation(conversationId: String, pin: Boolean) {
-        conversationDao.setPinned(conversationId, pin)
-    }
-
-    suspend fun muteConversation(conversationId: String, mute: Boolean) {
-        conversationDao.setMuted(conversationId, mute)
-    }
-
-    suspend fun blockConversation(conversationId: String, block: Boolean) {
-        conversationDao.setBlocked(conversationId, block)
-    }
-
-    suspend fun lockConversation(conversationId: String, lock: Boolean, password: String? = null) {
-        conversationDao.setLocked(conversationId, lock, password)
-    }
-
-    suspend fun markConversationAsRead(conversationId: String) {
-        conversationDao.resetUnreadCount(conversationId)
-        messageDao.markAllAsRead(conversationId)
-    }
-
-    fun getTotalUnreadCount(): Flow<Int> {
-        return conversationDao.getTotalUnreadCountFlow()
-    }
-
-    suspend fun searchConversations(query: String): List<ConversationEntity> {
-        return conversationDao.searchConversations(query)
-    }
-
-    // ============ MENSAJES ============
-    
-    fun getMessagesByConversation(conversationId: String): Flow<List<MessageEntity>> {
-        return messageDao.getMessagesByConversation(conversationId)
-    }
-
-    suspend fun getMessageById(messageId: String): MessageEntity? {
-        return messageDao.getMessageById(messageId)
-    }
-
-    suspend fun sendTextMessage(conversationId: String, text: String): MessageEntity {
+    suspend fun sendMessage(conversationId:
+                            String, text: String, myUserId: String):
+            MessageEntity {
         val message = MessageEntity(
-            messageId = UUID.randomUUID().toString(),
+            messageId =
+                UUID.randomUUID().toString(),
             conversationId = conversationId,
             text = text,
-            timestamp = System.currentTimeMillis(),
+            timestamp =
+                System.currentTimeMillis(),
             isFromCurrentUser = true,
             messageType = "TEXT"
         )
-
         messageDao.insertMessage(message)
-        updateConversationLastMessage(conversationId, text, message.timestamp, "TEXT")
-        
+        conversationDao.updateLastMessage(conversationId, text, message.timestamp, "TEXT")
+        try {
+            val data = hashMapOf(
+                "messageId" to
+                        message.messageId,
+                "chatId" to conversationId,
+                "senderId" to myUserId,
+                "text" to text,
+                "type" to "TEXT",
+                "timestamp" to
+                        message.timestamp,
+                "isRead" to false
+            )
+            firestore.collection("chats")
+                .document(conversationId)
+                .collection("messages")
+                .document(message.messageId)
+                .set(data)
+                .await()
+        } catch (e: Exception) {
+            Log.e("ChatRepo", "Error Firestore: ${e.message}")
+        }
         return message
     }
 
-    suspend fun sendImageMessage(
-        conversationId: String,
-        imageUrl: String,
-        imageLocalPath: String? = null,
-        caption: String? = null
-    ): MessageEntity {
-        val message = MessageEntity(
-            messageId = UUID.randomUUID().toString(),
-            conversationId = conversationId,
-            text = caption,
-            imageUrl = imageUrl,
-            imageLocalPath = imageLocalPath,
-            timestamp = System.currentTimeMillis(),
-            isFromCurrentUser = true,
-            messageType = "IMAGE"
+    suspend fun sendImageMessage(conversationId: String, imageBase64: String, senderId: String) {
+        val messageId = java.util.UUID.randomUUID().toString()
+        val data = hashMapOf(
+            "messageId" to messageId,
+            "chatId" to conversationId,
+            "senderId" to senderId,
+            "text" to imageBase64,
+            "type" to "IMAGE",
+            "timestamp" to System.currentTimeMillis(),
+            "isRead" to false
         )
-
-        messageDao.insertMessage(message)
-        updateConversationLastMessage(conversationId, "📷 Imagen", message.timestamp, "IMAGE")
-        
-        return message
-    }
-
-    suspend fun sendAudioMessage(
-        conversationId: String,
-        audioUrl: String,
-        audioLocalPath: String? = null,
-        duration: Int
-    ): MessageEntity {
-        val message = MessageEntity(
-            messageId = UUID.randomUUID().toString(),
-            conversationId = conversationId,
-            audioUrl = audioUrl,
-            audioLocalPath = audioLocalPath,
-            audioDuration = duration,
-            timestamp = System.currentTimeMillis(),
-            isFromCurrentUser = true,
-            messageType = "AUDIO"
-        )
-
-        messageDao.insertMessage(message)
-        updateConversationLastMessage(conversationId, "🎤 Audio", message.timestamp, "AUDIO")
-        
-        return message
+        firestore.collection("chats")
+            .document(conversationId)
+            .collection("messages")
+            .document(messageId)
+            .set(data)
+            .await()
     }
 
     suspend fun sendLocationMessage(
         conversationId: String,
         latitude: Double,
         longitude: Double,
-        address: String? = null
-    ): MessageEntity {
-        val message = MessageEntity(
-            messageId = UUID.randomUUID().toString(),
-            conversationId = conversationId,
-            latitude = latitude,
-            longitude = longitude,
-            locationAddress = address,
-            timestamp = System.currentTimeMillis(),
-            isFromCurrentUser = true,
-            messageType = "LOCATION"
-        )
-
-        messageDao.insertMessage(message)
-        updateConversationLastMessage(conversationId, "📍 Ubicación", message.timestamp, "LOCATION")
-        
-        return message
-    }
-    
-    suspend fun sendDocumentMessage(
-        conversationId: String,
-        documentUrl: String,
-        documentLocalPath: String? = null,
-        fileName: String,
-        fileSize: Long,
-        mimeType: String
-    ): MessageEntity {
-        val message = MessageEntity(
-            messageId = UUID.randomUUID().toString(),
-            conversationId = conversationId,
-            documentUrl = documentUrl,
-            documentLocalPath = documentLocalPath,
-            fileName = fileName,
-            fileSize = fileSize,
-            fileMimeType = mimeType,
-            timestamp = System.currentTimeMillis(),
-            isFromCurrentUser = true,
-            messageType = "DOCUMENT"
-        )
-
-        messageDao.insertMessage(message)
-        updateConversationLastMessage(conversationId, "📄 $fileName", message.timestamp, "DOCUMENT")
-        
-        return message
-    }
-
-    suspend fun sendAppointmentMessage(
-        conversationId: String,
-        appointmentId: String,
-        title: String,
-        date: String,
-        time: String
-    ): MessageEntity {
-        val message = MessageEntity(
-            messageId = UUID.randomUUID().toString(),
-            conversationId = conversationId,
-            appointmentId = appointmentId,
-            appointmentTitle = title,
-            appointmentDate = date,
-            appointmentTime = time,
-            appointmentStatus = "PENDING",
-            timestamp = System.currentTimeMillis(),
-            isFromCurrentUser = true,
-            messageType = "APPOINTMENT"
-        )
-
-        messageDao.insertMessage(message)
-        updateConversationLastMessage(conversationId, "📅 Cita programada", message.timestamp, "APPOINTMENT")
-        
-        return message
-    }
-
-    suspend fun receiveMessage(message: MessageEntity) {
-        messageDao.insertMessage(message)
-
-        // Incrementar contador de no leídos si no es del usuario actual
-        if (!message.isFromCurrentUser) {
-            conversationDao.incrementUnreadCount(message.conversationId)
-        }
-
-        // Actualizar último mensaje de la conversación
-        val lastMessageText = when (message.messageType) {
-            "TEXT" -> message.text ?: ""
-            "IMAGE" -> "📷 Imagen"
-            "AUDIO" -> "🎤 Audio"
-            "LOCATION" -> "📍 Ubicación"
-            "DOCUMENT" -> "📄 ${message.fileName ?: "Documento"}"
-            "APPOINTMENT" -> "📅 Cita"
-            else -> "Mensaje"
-        }
-
-        updateConversationLastMessage(
-            message.conversationId,
-            lastMessageText,
-            message.timestamp,
-            message.messageType
-        )
-    }
-
-    suspend fun markMessageAsRead(messageId: String) {
-        messageDao.markAsRead(messageId)
-    }
-
-    suspend fun searchMessagesInConversation(conversationId: String, query: String): List<MessageEntity> {
-        return messageDao.searchMessages(conversationId, query)
-    }
-
-    fun getUnreadCount(conversationId: String): Flow<Int> {
-        return messageDao.getUnreadCount(conversationId)
-    }
-    
-    suspend fun updateAppointmentStatus(messageId: String, status: String, reason: String?) {
-        messageDao.updateAppointmentStatus(messageId, status, reason)
-    }
-
-    // ============ HELPERS PRIVADOS ============
-    
-    private suspend fun updateConversationLastMessage(
-        conversationId: String,
-        lastMessage: String,
-        timestamp: Long,
-        messageType: String
+        senderId: String
     ) {
-        conversationDao.updateLastMessage(conversationId, lastMessage, timestamp, messageType)
+        val messageId = UUID.randomUUID().toString()
+        val timestamp = System.currentTimeMillis()
+        val message = MessageEntity(
+            messageId = messageId,
+            conversationId = conversationId,
+            text = "Ubicación compartida",
+            timestamp = timestamp,
+            isFromCurrentUser = true,
+            messageType = "LOCATION",
+            latitude = latitude,
+            longitude = longitude
+        )
+        messageDao.insertMessage(message)
+        conversationDao.updateLastMessage(conversationId, "\uD83D\uDCCD Ubicación compartida", timestamp, "LOCATION")
+        try {
+            val data = hashMapOf(
+                "messageId" to messageId,
+                "chatId" to conversationId,
+                "senderId" to senderId,
+                "text" to "Ubicación compartida",
+                "type" to "LOCATION",
+                "latitude" to latitude,
+                "longitude" to longitude,
+                "timestamp" to timestamp,
+                "isRead" to false
+            )
+            firestore.collection("chats")
+                .document(conversationId)
+                .collection("messages")
+                .document(messageId)
+                .set(data)
+                .await()
+        } catch (e: Exception) {
+            Log.e("ChatRepo", "Error Firestore location: ${e.message}")
+        }
     }
 
-    // ============ CONVERSIÓN DE MODELOS ============
-    
-    fun MessageEntity.toMessage(): Message {
-        return Message(
-            id = messageId,
-            text = text,
+    suspend fun sendAudioMessage(
+        conversationId: String,
+        audioPath: String,
+        durationSeconds: Int,
+        senderId: String
+    ) {
+        val messageId = UUID.randomUUID().toString()
+        val timestamp = System.currentTimeMillis()
+        val audioBase64 = try {
+            val file = java.io.File(audioPath)
+            if (file.exists() && file.length() > 0)
+                android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP)
+            else audioPath
+        } catch (e: Exception) { Log.e("ChatRepo", "Error enconding audio: ${e.message}"); audioPath }
+        val message = MessageEntity(
+            messageId = messageId,
+            conversationId = conversationId,
+            text = "[Audio]",
             timestamp = timestamp,
-            isFromCurrentUser = isFromCurrentUser,
-            type = when (messageType) {
-                "TEXT" -> Message.MessageType.TEXT
-                "IMAGE" -> Message.MessageType.IMAGE
-                "AUDIO" -> Message.MessageType.AUDIO
-                "LOCATION" -> Message.MessageType.LOCATION
-                "DOCUMENT" -> Message.MessageType.DOCUMENT
-                "APPOINTMENT" -> Message.MessageType.APPOINTMENT
-                else -> Message.MessageType.TEXT
-            },
-            imageUrl = imageUrl,
-            audioUrl = audioUrl,
-            audioDuration = audioDuration,
-            latitude = latitude,
-            longitude = longitude,
-            fileName = fileName,
-            fileSize = fileSize,
-            appointmentTitle = appointmentTitle,
-            appointmentDate = appointmentDate,
-            appointmentTime = appointmentTime,
-            appointmentId = appointmentId,
-            appointmentStatus = appointmentStatus?.let { 
-                when(it) {
-                    "PENDING" -> Message.AppointmentProposalStatus.PENDING
-                    "ACCEPTED" -> Message.AppointmentProposalStatus.ACCEPTED
-                    "REJECTED" -> Message.AppointmentProposalStatus.REJECTED
-                    else -> Message.AppointmentProposalStatus.PENDING
-                }
-            },
-            rejectionReason = rejectionReason
+            isFromCurrentUser = true,
+            messageType = "AUDIO",
+            audioUrl = audioPath,
+            audioLocalPath = audioPath,
+            audioDuration = durationSeconds
         )
+        messageDao.insertMessage(message)
+        conversationDao.updateLastMessage(conversationId, "[Audio]", timestamp, "AUDIO")
+        if (true) {
+            try {
+                val data = hashMapOf(
+                    "messageId" to messageId,
+                    "chatId" to conversationId,
+                    "senderId" to senderId,
+                    "text" to "[AUDIO]",
+                    "audioUrl" to audioBase64,
+                    "audioDuration" to durationSeconds,
+                    "type" to "AUDIO",
+                    "timestamp" to timestamp,
+                    "isRead" to false
+                )
+                firestore.collection("chats")
+                    .document(conversationId)
+                    .collection("messages")
+                    .document(messageId)
+                    .set(data).await()
+            } catch (e: Exception) {
+                Log.e("ChatRepo", "Error Firestore audio: ${e.message}")
+            }
+        }
+
+    }
+
+    fun startListening(conversationId: String,
+                       myUserId: String) {
+        messageListener?.remove()
+        messageListener =
+            firestore.collection("chats")
+                .document(conversationId)
+                .collection("messages")
+                .orderBy("timestamp")
+                .addSnapshotListener { snapshot,
+                                       error ->
+                    if (error != null || snapshot
+                        == null) return@addSnapshotListener
+                    for (change in
+                    snapshot.documentChanges) {
+                        val doc = change.document
+                        val senderId =
+                            doc.getString("senderId") ?: continue
+                        val isOwn = senderId == myUserId
+                        val msgType = doc.getString("type") ?: "TEXT"
+                        val resolvedAudioUrl: String? = if (msgType == "AUDIO") {
+                            val base64 = doc.getString("audioUrl")
+                            if (base64 != null) try {
+                                val bytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP)
+                                val tmp = java.io.File(context.cacheDir, "audio_recv_${doc.id}.m4a")
+                                tmp.writeBytes(bytes)
+                                tmp.absolutePath
+                            } catch (e: Exception) { null }
+                            else null
+                        } else null
+                        val msg = MessageEntity(
+                            messageId = doc.getString("messageId") ?: doc.id,
+                            conversationId = conversationId,
+                            text = doc.getString("text") ?: "",
+                            timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis(),
+                            isFromCurrentUser = isOwn,
+                            messageType = if (msgType == "VISIT") "APPOINTMENT" else msgType,
+                            audioUrl = resolvedAudioUrl,
+                            audioDuration = doc.getLong("audioDuration")?.toInt(),
+                            latitude = doc.getDouble("latitude"),
+                            longitude = doc.getDouble("longitude"),
+                            appointmentId = doc.getString("appointmentId"),
+                            appointmentTitle = doc.getString("appointmentTitle"),
+                            appointmentDate = doc.getString("appointmentDate"),
+                            appointmentTime = doc.getString("appointmentTime"),
+                            appointmentStatus = doc.getString("appointmentStatus"),
+                            rejectionReason = doc.getString("rejectionReason")
+                        )
+                        scope.launch {
+                            messageDao.insertMessage(msg)
+                            if (!isOwn) {
+                                conversationDao.incrementUnreadCount(conversationId)
+                            }
+                            conversationDao.updateLastMessage(conversationId, msg.text ?: "",
+                                msg.timestamp, "TEXT")
+                        }
+                    }
+                }
+    }
+
+    fun stopListening() {
+        messageListener?.remove()
+        messageListener = null
+    }
+
+    // Escuchar en Firestore los chats donde el prestador es participante
+    // y guardarlos en Room para mostrarlos en la lista de conversaciones
+    fun syncConversationsFromFirestore(myUserId: String) {
+        firestore.collection("chats")
+            .whereArrayContains("participants", myUserId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) {
+                    Log.e("ChatRepo", "Error sync conversaciones: ${error?.message}")
+                    return@addSnapshotListener
+                }
+                scope.launch {
+                    for (doc in snapshot.documents) {
+                        @Suppress("UNCHECKED_CAST")
+                        val participants = doc.get("participants") as? List<String> ?: continue
+                        val otherUserId = participants.firstOrNull { it != myUserId } ?: continue
+                        val existing = conversationDao.getConversationById(doc.id)
+                        // Si ya tenemos el nombre real, lo usamos; si no, lo buscamos en Firestore
+                        val displayName = if (existing?.userName != null && existing.userName != otherUserId) {
+                            existing.userName
+                        } else {
+                            try {
+                                val userDoc = firestore.collection("usuarios")
+                                    .document(otherUserId).get().await()
+                                userDoc.getString("displayName") ?: otherUserId
+                            } catch (e: Exception) {
+                                Log.e("ChatRepo", "Error fetching user name: ${e.message}")
+                                otherUserId
+                            }
+                        }
+                        val conversation = ConversationEntity(
+                            conversationId = doc.id,
+                            userId = otherUserId,
+                            userName = displayName,
+                            userAvatarUrl = existing?.userAvatarUrl,
+                            lastMessage = doc.getString("lastMessage") ?: "",
+                            lastMessageTimestamp = doc.getLong("lastMessageTimestamp") ?: 0L,
+                            unreadCount = existing?.unreadCount ?: 0,
+                            notificationsEnabled = existing?.notificationsEnabled ?: true,
+                            isVisible = existing?.isVisible ?: true,
+                            isLocked = existing?.isLocked ?: false,
+                            isSynced = true
+                        )
+                        conversationDao.insertConversation(conversation)
+                    }
+                }
+            }
+    }
+
+    fun getConversationsByProvider(providerId:
+                                   String): Flow<List<ConversationEntity>> {
+        return conversationDao.getAllConversations()
+    }
+
+    fun
+            getMessagesByConversation(conversationId:
+                                      String): Flow<List<MessageEntity>> {
+        return messageDao.getMessagesByConversation(conversationId)
+    }
+
+    fun getAllConversations():
+            Flow<List<ConversationEntity>> {
+        return conversationDao.getAllConversations()
+    }
+
+    fun getActiveConversations():
+            Flow<List<ConversationEntity>> {
+        return conversationDao.getActiveConversations()
+    }
+
+    fun getTotalUnreadCount(): Flow<Int> {
+        return conversationDao.getTotalUnreadCountFlow()
+    }
+
+    suspend fun saveMessage(message:
+                            MessageEntity) {
+        messageDao.insertMessage(message)
+    }
+
+    suspend fun saveConversation(conversation:
+                                 ConversationEntity) {
+        conversationDao.insertConversation(conversation)
+    }
+
+    suspend fun
+            markMessagesAsRead(conversationId: String) {
+        conversationDao.resetUnreadCount(conversationId)
+
+        messageDao.markAllAsRead(conversationId)
+    }
+
+    suspend fun deleteMessage(messageId: String) { messageDao.deleteMessageById(messageId)
+    }
+
+    suspend fun
+            updateAppointmentStatus(messageId: String,
+                                    status: String, reason: String?) {
+
+        messageDao.updateAppointmentStatus(messageId,
+            status, reason)
+    }
+
+    suspend fun
+            getConversationById(conversationId: String):
+            ConversationEntity? {
+        return conversationDao.getConversationById(conversationId)
     }
 }

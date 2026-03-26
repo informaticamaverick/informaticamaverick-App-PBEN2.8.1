@@ -181,6 +181,62 @@ class PromotionRepository @Inject constructor(
         }
     }
     
+    /**
+     * OBTENER promoción por ID como modelo de UI
+     */
+    fun getPromotionByIdAsModel(promotionId: String): kotlinx.coroutines.flow.Flow<ProviderPromotion?> {
+        return getPromotionById(promotionId).map { entity ->
+            entity?.let { entityToModel(it) }
+        }
+    }
+
+    /**
+     * ACTUALIZAR promoción existente desde ProviderPromotion
+     */
+    suspend fun updatePromotionFromModel(promotion: ProviderPromotion) {
+        val entity = PromotionEntity(
+            id = promotion.id,
+            providerId = promotion.providerId,
+            providerName = promotion.providerName,
+            providerImageUrl = promotion.providerImageUrl,
+            type = promotion.type.name,
+            title = promotion.title,
+            description = promotion.description,
+            imageUrls = listToJson(promotion.imageUrls),
+            discount = promotion.discount,
+            categories = listToJson(promotion.categories),
+            createdAt = promotion.createdAt,
+            expiresAt = promotion.expiresAt,
+            status = promotion.status.name,
+            likes = promotion.likes,
+            views = promotion.views,
+            rating = promotion.rating
+        )
+        promotionDao.updatePromotion(entity)
+        try {
+            coleccion.document(promotion.id).set(
+                mapOf(
+                    "id" to promotion.id,
+                    "providerId" to promotion.providerId,
+                    "providerName" to promotion.providerName,
+                    "providerImageUrl" to (promotion.providerImageUrl ?: ""),
+                    "type" to promotion.type.name,
+                    "title" to promotion.title,
+                    "description" to promotion.description,
+                    "imageUrls" to promotion.imageUrls,
+                    "discount" to promotion.discount,
+                    "categories" to promotion.categories,
+                    "createdAt" to promotion.createdAt,
+                    "expiresAt" to promotion.expiresAt,
+                    "status" to promotion.status.name,
+                    "likes" to promotion.likes,
+                    "views" to promotion.views,
+                    "rating" to promotion.rating
+                )
+            ).await()
+        } catch (_: Exception) { }
+    }
+
     // ========== MÉTODOS AUXILIARES DE CONVERSIÓN ==========
     
     /**

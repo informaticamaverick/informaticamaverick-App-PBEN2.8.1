@@ -1,18 +1,14 @@
 package com.example.myapplication.prestador.ui.chat
 
-import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.myapplication.prestador.data.ChatData
-import com.example.myapplication.prestador.data.model.Message
 import com.example.myapplication.prestador.viewmodel.ChatSimulationViewModel
+import com.example.myapplication.prestador.viewmodel.ChatViewModel
 import com.google.firebase.auth.FirebaseAuth
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 
@@ -34,24 +30,43 @@ fun PrestadorChatScreen(
     onInConversationChange: (Boolean) -> Unit = {},
     onNavigateToPresupuesto: () -> Unit = {},
     chatSimulationViewModel: ChatSimulationViewModel,  // DEBE ser pasado - sin default
-    initialChatUserId: String? = null
+    initialChatUserId: String? = null,
+    chatViewModel: ChatViewModel = hiltViewModel()
 ) {
     // Obtener el providerId del usuario actual
     val currentUser = FirebaseAuth.getInstance().currentUser
     val providerId = currentUser?.uid ?: ""
-    val serviceTypeValue by chatSimulationViewModel.serviceType.collectAsState()
-    
-    println("📱 PrestadorChatScreen renderizado con ViewModel (${chatSimulationViewModel.hashCode()})")
+
+    // Sincronizar conversaciones reales desde Firestore al iniciar
+    LaunchedEffect(providerId) {
+        if (providerId.isNotEmpty()) {
+            chatViewModel.syncConversations()
+        }
+    }
+
+    // Conversaciones reales desde Room (actualizadas por el listener de Firestore)
+    val realConversations by chatViewModel.conversations.collectAsState()
+    val realConversationList = remember(realConversations) {
+        realConversations.map { entity ->
+            ChatData.Conversation(
+                userId = entity.userId,
+                userName = entity.userName,
+                lastMessage = entity.lastMessage ?: "",
+                timestamp = entity.lastMessageTimestamp,
+                unreadCount = entity.unreadCount,
+                notificationsEnabled = entity.notificationsEnabled,
+                isVisible = entity.isVisible,
+                isLocked = entity.isLocked
+            )
+        }
+    }
+
+    println("📱 PrestadorChatScreen - ${realConversationList.size} conversaciones reales")
     println("📱 Initial chat userId: $initialChatUserId")
-    
+
     // Estado: null = lista de chats
     var activeChatUserId by remember {
         mutableStateOf<String?>(initialChatUserId)
-    }
-
-    // Estado: mensajes de la conversación activa
-    var messages by remember {
-        mutableStateOf<List<Message>>(emptyList())
     }
 
     // Estado: texto del input
@@ -90,9 +105,6 @@ fun PrestadorChatScreen(
     // Notificar cuando cambia el estado de conversación
     LaunchedEffect(activeChatUserId) {
         onInConversationChange(activeChatUserId != null)
-        if (activeChatUserId != null) {
-            messages = ChatData.getMessagesForUser(activeChatUserId!!).toMutableList()
-        }
     }
 
     // Manejar botón atrás del sistema
@@ -120,9 +132,9 @@ fun PrestadorChatScreen(
         animationSpec = tween(300)
     ) { chatUserId ->
         if (chatUserId == null) {
-            // LISTA DE CHATS
+            // LISTA DE CHATS - usa conversaciones reales de Firebase/Room
             ChatListScreen(
-                serviceType = serviceTypeValue,
+                conversations = realConversationList,
                 isSearchActive = isSearchActive,
                 searchQuery = searchQuery,
                 currentFilter = currentFilter,
@@ -144,8 +156,8 @@ fun PrestadorChatScreen(
             )
         } else {
             // CONVERSACIÓN INDIVIDUAL
-            val userName = ChatData.getConversationById(chatUserId)?.name ?: "Usuario"
-            
+            val userName = realConversations.firstOrNull { it.userId == chatUserId }?.userName ?: "Usuario"
+
             ChatConversationScreen(
                 userId = chatUserId,
                 userName = userName,

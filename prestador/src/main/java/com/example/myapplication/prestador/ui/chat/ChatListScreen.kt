@@ -43,7 +43,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(
-    serviceType: String,
+    conversations: List<ChatData.Conversation>,
     isSearchActive: Boolean,
     searchQuery: String,
     currentFilter: ChatFilterState,
@@ -63,7 +63,6 @@ fun ChatListScreen(
     onShowDateRangeDialog: () -> Unit,
     onShowLockDialog: () -> Unit
 ) {
-    val conversations = ChatData.getConversationsByServiceType(serviceType)
     val colors = getPrestadorColors()
 
     

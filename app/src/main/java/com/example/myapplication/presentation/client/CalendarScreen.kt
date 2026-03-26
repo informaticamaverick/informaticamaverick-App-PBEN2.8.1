@@ -1,22 +1,12 @@
 package com.example.myapplication.presentation.client
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,1351 +14,680 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.draw.rotate
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.ui.zIndex
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication.presentation.components.geminiGradientEffect
-import com.example.myapplication.ui.theme.AppColors
-import com.example.myapplication.ui.theme.getAppColors
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.example.myapplication.data.local.CalendarEventEntity
+import com.example.myapplication.data.local.EventType
+import com.example.myapplication.data.local.VisitStatus
+import com.example.myapplication.presentation.components.*
+import com.example.myapplication.ui.theme.MyApplicationTheme
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Modelo de datos para las visitas técnicas
-data class TechnicalVisit(
-    val id: String,
-    val date: String, // Formato "yyyy-MM-dd"
-    val time: String, // Ej: "10:30"
-    val service: String,
-    val provider: String,
-    val status: VisitStatus,
-    val avatarColor: Color
-)
+// ==========================================================================================
+// --- CONSTANTES VISUALES MAVERICK PRO ---
+// ==========================================================================================
+private val DarkBg = Color(0xFF05070A)
+private val CardSurface = Color(0xFF161C24)
+private val MaverickBlue = Color(0xFF2197F5)
+private val NeonCyber = Color(0xFF00FFC2)
+private val StatusConfirmed = Color(0xFF10B981)
+private val StatusPending = Color(0xFFF59E0B)
+private val ErrorRed = Color(0xFFF43F5E)
 
-enum class VisitStatus {
-    CONFIRMED,
-    PENDING,
-    CANCELLED
-}
+// ==========================================================================================
+// --- PANTALLA PRINCIPAL DEL CALENDARIO (STATEFUL / MVVM) ---
+// ==========================================================================================
 
-// Datos simulados (luego los conectaremos con Firebase)
-val SAMPLE_VISITS = listOf(
-    TechnicalVisit("1", "2026-01-15", "10:30", "Instalación Eléctrica", "Juan Pérez", VisitStatus.CONFIRMED, Color(0xFF6366F1)),
-    TechnicalVisit("2", "2026-01-15", "14:00", "Reparación Plomería", "María García", VisitStatus.PENDING, Color(0xFFEC4899)),
-    TechnicalVisit("3", "2026-01-20", "09:00", "Pintura de Fachada", "Carlos López", VisitStatus.CONFIRMED, Color(0xFF10B981)),
-    TechnicalVisit("4", "2026-01-20", "16:30", "Revisión HVAC", "Ana Martínez", VisitStatus.PENDING, Color(0xFFF59E0B))
-)
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CalendarScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onChatClick: (String) -> Unit = {},
+    viewModel: CalendarViewModel = hiltViewModel(),
+    profileViewModel: ProfileSharedViewModel = hiltViewModel() // AGREGAMOS EL VIEWMODEL DEL PERFIL
 ) {
-    // Obtener colores adaptables al tema
-    val colors = getAppColors()
-    val materialColors = MaterialTheme.colorScheme
-    val isSystemInDarkMode = isSystemInDarkTheme()
+    // 1. OBTENER EVENTOS DESDE ROOM EN TIEMPO REAL
+    val dbEvents by viewModel.allEvents.collectAsStateWithLifecycle()
 
-    // Estados para manejar fechas
-    var currentDate by remember { mutableStateOf(Calendar.getInstance()) }
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
+    // Obtenemos el usuario real logueado en la app
+    val userState by profileViewModel.userState.collectAsStateWithLifecycle()
+    // Si por algún motivo no cargó, usamos el de fallback para no crashear
+    val currentUserId = userState?.email ?: "user_demo_66"
 
-    // Estados para el modal de cancelación
-    var showCancelModal by remember { mutableStateOf(false) }
-    var visitToCancel by remember { mutableStateOf<String?>(null) }
+    // 2. PASAR LOS DATOS Y CALLBACKS A LA UI STATELESS
+    CalendarScreenContent(
+        events = dbEvents,
+        onBack = onBack,
+        onChatClick = onChatClick,
+        onCancelEvent = { event ->
+            viewModel.cancelEvent(event, currentUserId)
+        },
+        onRescheduleEvent = { event ->
+            viewModel.requestReschedule(event, currentUserId)
+        }
+    )
+}
 
-    // Lista mutable de visitas (para poder modificar el estado)
-    var visits by remember { mutableStateOf(SAMPLE_VISITS) }
+// ==========================================================================================
+// --- CONTENIDO STATELESS ---
+// ==========================================================================================
 
-    // Estados para FABs y búsqueda
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CalendarScreenContent(
+    events: List<CalendarEventEntity>,
+    onBack: () -> Unit,
+    onChatClick: (String) -> Unit,
+    onCancelEvent: (CalendarEventEntity) -> Unit,
+    onRescheduleEvent: (CalendarEventEntity) -> Unit
+) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // --- ESTADOS NAVEGACIÓN Y BÚSQUEDA ---
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Estado cíclico del menú: 0 = Filtros, 1 = Menú config, 2 = Todo oculto
-    var menuState by remember { mutableIntStateOf(0) }
-    val showSettingsMenu = menuState == 0
-    val showVerticalMenu = menuState == 1
+    // --- ESTADOS PANEL TÁCTICO FAB ---
+    var isFabExpanded by remember { mutableStateOf(false) }
+    var activeFilters by remember { mutableStateOf(setOf<String>()) }
 
-    // Estados para filtros
-    var filterStatus by remember { mutableStateOf<VisitStatus?>(null) }
-    var sortByTime by remember { mutableStateOf(true) } // true = Horario, false = Servicio
+    // --- ESTADOS DEL CALENDARIO ---
+    var currentDate by remember { mutableStateOf(Calendar.getInstance()) }
+    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
+    var isExpandedList by remember { mutableStateOf(true) } // Controla la lista de eventos
+    var isCalendarExpanded by remember { mutableStateOf(false) } // Por defecto arranca oculto
 
-    // Estados del menú de configuración
-    var showNotificationsDialog by remember { mutableStateOf(false) }
-    var showDataVisibilityDialog by remember { mutableStateOf(false) }
-    var showTimePeriodDialog by remember { mutableStateOf(false) }
+    // --- ESTADOS DE MODALES ---
+    var selectedEvent by remember { mutableStateOf<CalendarEventEntity?>(null) } // Abre el Modal de Detalles
+    var eventToCancel by remember { mutableStateOf<CalendarEventEntity?>(null) } // Abre el Modal de Confirmación
 
-    // Preferencias de usuario
-    var viewMode by remember { mutableStateOf("Detallada") } // "Compacta", "Detallada", "Tarjetas"
-    var timePeriod by remember { mutableStateOf("Todo") } // "Semana", "Mes", "3 Meses", "Todo"
-    var showDates by remember { mutableStateOf(true) }
-    var showProviderInfo by remember { mutableStateOf(true) }
-    var showStatus by remember { mutableStateOf(true) }
-    var notifyUpcoming by remember { mutableStateOf(true) }
-    var notifyChanges by remember { mutableStateOf(true) }
-    var notifyCancellations by remember { mutableStateOf(true) }
-
-    // Formato de fecha para comparación
     val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-    // Filtrar eventos del día seleccionado con búsqueda y filtros
     val selectedDateStr = dateFormat.format(selectedDate.time)
+/**
+    // --- DEFINICIÓN DE CATEGORÍAS TÁCTICAS ---
+    val dynamicCategoriesForPanel = listOf(
+        ControlItem("Visitas", Icons.Default.Build, "🛠️", Color(0xFF2197F5), "cat_visita"),
+        ControlItem("Turnos", Icons.Default.Event, "📅", Color(0xFF9B51E0), "cat_turno"),
+        ControlItem("Envíos", Icons.Default.LocalShipping, "🚛", Color(0xFF10B981), "cat_envio")
+    )
+**/
+    // --- LÓGICA DE FILTRADO Y ORDENAMIENTO (APLICADO A DATOS DE ROOM) ---
+    val filteredEvents = remember(events, activeFilters, searchQuery, selectedDateStr) {
+        var result = events.filter { it.date == selectedDateStr }
 
-    // Filtrar visitas por período de tiempo
-    val filteredVisitsByPeriod = remember(visits, timePeriod) {
-        val currentCalendar = Calendar.getInstance()
-        val cutoffDate = Calendar.getInstance().apply {
-            when(timePeriod) {
-                "Semana" -> add(Calendar.DAY_OF_YEAR, -7)
-                "Mes" -> add(Calendar.MONTH, -1)
-                "3 Meses" -> add(Calendar.MONTH, -3)
-                else -> add(Calendar.YEAR, -100) // "Todo" - mostrar todo
-            }
-        }
-        
-        visits.filter { visit ->
-            try {
-                val visitDate = dateFormat.parse(visit.date)
-                visitDate != null && !visitDate.before(cutoffDate.time)
-            } catch (e: Exception) {
-                false
-            }
-        }
-    }
-    
-    val eventsForSelectedDay = remember(selectedDateStr, filteredVisitsByPeriod, searchQuery, filterStatus, sortByTime) {
-        var filtered = filteredVisitsByPeriod.filter { it.date == selectedDateStr }
-        
-        // Filtro por búsqueda
+        // Búsqueda por texto
         if (searchQuery.isNotEmpty()) {
-            filtered = filtered.filter {
-                it.service.contains(searchQuery, ignoreCase = true) ||
-                it.provider.contains(searchQuery, ignoreCase = true)
+            result = result.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                        it.provider.contains(searchQuery, ignoreCase = true) ||
+                        it.address.contains(searchQuery, ignoreCase = true)
             }
         }
-        
-        // Filtro por estado
-        if (filterStatus != null) {
-            filtered = filtered.filter { it.status == filterStatus }
+
+        // Filtros de Estado
+        val showConfirmed = activeFilters.contains("filter_verif")
+        val showPending = activeFilters.contains("filter_fast")
+        if (showConfirmed && !showPending) result = result.filter { it.status == VisitStatus.CONFIRMED }
+        else if (showPending && !showConfirmed) result = result.filter { it.status == VisitStatus.PENDING }
+
+        // Filtros de Tipo
+        val showVisitas = activeFilters.contains("cat_visita")
+        val showTurnos = activeFilters.contains("cat_turno")
+        val showEnvios = activeFilters.contains("cat_envio")
+        if (showVisitas || showTurnos || showEnvios) {
+            result = result.filter {
+                (showVisitas && it.type == EventType.VISIT) ||
+                        (showTurnos && it.type == EventType.APPOINTMENT) ||
+                        (showEnvios && it.type == EventType.SHIPPING)
+            }
         }
-        
-        // Ordenar
-        if (sortByTime) {
-            filtered = filtered.sortedBy { it.time }
-        } else {
-            filtered = filtered.sortedBy { it.service }
+
+        // Ordenamiento (Prioriza hora)
+        result = when {
+            activeFilters.contains("sort_precio_desc") -> result.sortedByDescending { it.time }
+            activeFilters.contains("sort_nombre_asc") -> result.sortedBy { it.provider }
+            else -> result.sortedBy { it.time }
         }
-        
-        filtered
+        result
     }
 
-    // Días que tienen eventos (para mostrar indicador) - usar visitas filtradas
-    val daysWithEvents = filteredVisitsByPeriod.filter { it.status != VisitStatus.CANCELLED }.map { it.date }.toSet()
+    val daysWithEvents = events.filter { it.status != VisitStatus.CANCELLED }.map { it.date }.toSet()
 
-    // Estado para controlar si la lista de eventos está expandida
-    var isExpanded by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.fillMaxSize()
-        .background(colors.backgroundColor)) {
+    Box(modifier = Modifier.fillMaxSize().background(DarkBg)) {
         Scaffold(
-            containerColor = colors.backgroundColor,
+            containerColor = Color.Transparent,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Eventos / Turnos",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowBack,
-                                contentDescription = "Volver",
-                                tint = colors.textPrimaryColor
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = colors.surfaceColor,
-                        titleContentColor = colors.textPrimaryColor,
+                if (!isSearchActive) {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text("Agenda Técnica", fontWeight = FontWeight.Black, color = Color.White, fontSize = 20.sp)
+                                Text("CONTROL DE VISITAS Y TURNOS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 1.sp)
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = Color.White) }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBg.copy(alpha = 0.95f))
                     )
-                )
-            },
-            floatingActionButton = {
-                val rainbowBrush = geminiGradientEffect()
-                
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(bottom = 70.dp)
-                ) {
-                    // Menú vertical de configuración (aparece arriba del engranaje)
-                    AnimatedVisibility(
-                        visible = showVerticalMenu && !isSearchActive,
-                        enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
-                        exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Opción: Alertas
-                            Surface(
-                                modifier = Modifier.size(64.dp),
-                                onClick = { 
-                                    showNotificationsDialog = true
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = materialColors.surface,
-                                shadowElevation = 6.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Notifications,
-                                        "Alertas",
-                                        tint = materialColors.onSurface,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        "Alertas",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = materialColors.onSurface,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                            
-                            // Opción: Mostrar Datos
-                            Surface(
-                                modifier = Modifier.size(64.dp),
-                                onClick = { 
-                                    showDataVisibilityDialog = true
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = materialColors.surface,
-                                shadowElevation = 6.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Visibility,
-                                        "Mostrar Datos",
-                                        tint = materialColors.onSurface,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        "Datos",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = materialColors.onSurface,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                            
-                            // Opción: Período
-                            Surface(
-                                modifier = Modifier.size(64.dp),
-                                onClick = { 
-                                    showTimePeriodDialog = true
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = materialColors.surface,
-                                shadowElevation = 6.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.DateRange,
-                                        "Período",
-                                        tint = materialColors.onSurface,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        "Período",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = materialColors.onSurface,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                    }
-                
-                    // Botones de búsqueda y engranaje
-                    AnimatedVisibility(
-                        visible = !isSearchActive,
-                        enter = fadeIn() + scaleIn(),
-                        exit = fadeOut() + scaleOut()
-                    ) {
-                        val gearRotation by animateFloatAsState(
-                            targetValue = if (menuState == 2) 0f else 45f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
-                            )
-                        )
-                        
-                        Row(
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                        // Botones de filtros expandibles (aparecen a la izquierda)
-                        AnimatedVisibility(
-                            visible = showSettingsMenu && !isSearchActive,
-                            enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
-                            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it })
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(start = 32.dp, end = 8.dp)
-                            ) {
-                                // Botón: Filtrar Estado
-                                Surface(
-                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
-                                    onClick = { 
-                                        filterStatus = when(filterStatus) {
-                                            null -> VisitStatus.CONFIRMED
-                                            VisitStatus.CONFIRMED -> VisitStatus.PENDING
-                                            VisitStatus.PENDING -> null
-                                            else -> null
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (filterStatus != null) materialColors.primaryContainer else materialColors.surface,
-                                    shadowElevation = 6.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.FilterList,
-                                            "Estado",
-                                            tint = if (filterStatus != null) materialColors.onPrimaryContainer else materialColors.onSurface,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = when(filterStatus) {
-                                                VisitStatus.CONFIRMED -> "Confirm."
-                                                VisitStatus.PENDING -> "Pend."
-                                                else -> "Todos"
-                                            },
-                                            color = if (filterStatus != null) materialColors.onPrimaryContainer else materialColors.onSurface,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                                
-                                // Botón: Ordenar
-                                Surface(
-                                    modifier = Modifier.size(width = 64.dp, height = 56.dp),
-                                    onClick = { 
-                                        sortByTime = !sortByTime
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (sortByTime) materialColors.primaryContainer else materialColors.surface,
-                                    shadowElevation = 6.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            if (sortByTime) Icons.Default.AccessTime else Icons.Default.SortByAlpha,
-                                            "Ordenar",
-                                            tint = if (sortByTime) materialColors.onPrimaryContainer else materialColors.onSurface,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = if (sortByTime) "Horario" else "Servicio",
-                                            color = if (sortByTime) materialColors.onPrimaryContainer else materialColors.onSurface,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.weight(1f))
-                        
-                        // Botón Dividido (Buscar + Engranaje)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            // Parte Izquierda: Buscar
-                            Surface(
-                                onClick = { isSearchActive = true },
-                                modifier = Modifier.size(56.dp),
-                                shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
-                                color = materialColors.surface,
-                                border = BorderStroke(2.5.dp, rainbowBrush),
-                                shadowElevation = 12.dp
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Search, null, tint = materialColors.onSurface, modifier = Modifier.size(26.dp))
-                                }
-                            }
-                            
-                            // Parte Derecha: Ajustes / Cerrar
-                            Surface(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .combinedClickable(
-                                        onClick = { 
-                                            menuState = (menuState + 1) % 3
-                                        },
-                                        onLongClick = { }
-                                    ),
-                                shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp, topEnd = 28.dp, bottomEnd = 28.dp),
-                                color = materialColors.surface,
-                                border = BorderStroke(2.5.dp, rainbowBrush),
-                                shadowElevation = 12.dp
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Settings,
-                                        "Ajustes",
-                                        tint = materialColors.onSurface,
-                                        modifier = Modifier.size(26.dp).rotate(gearRotation)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    }
                 }
-            },
-floatingActionButtonPosition = FabPosition.End,
-            //containerColor = colors.backgroundColor
+            }
         ) { paddingValues ->
-        
-        // Diálogo: Alertas de Notificaciones
-        if (showNotificationsDialog) {
-            AlertDialog(
-                onDismissRequest = { showNotificationsDialog = false },
-                title = { Text("Alertas", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column {
-                        Text("Configurar notificaciones:", fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Notificar visitas próximas")
-                            Switch(
-                                checked = notifyUpcoming,
-                                onCheckedChange = { notifyUpcoming = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Notificar cambios de horario")
-                            Switch(
-                                checked = notifyChanges,
-                                onCheckedChange = { notifyChanges = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Notificar cancelaciones")
-                            Switch(
-                                checked = notifyCancellations,
-                                onCheckedChange = { notifyCancellations = it }
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { 
-                        showNotificationsDialog = false
-                    }) {
-                        Text("Aceptar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showNotificationsDialog = false }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-        
-        // Diálogo: Mostrar Datos
-        if (showDataVisibilityDialog) {
-            AlertDialog(
-                onDismissRequest = { showDataVisibilityDialog = false },
-                title = { Text("Mostrar Datos", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column {
-                        Text("Configurar visibilidad de datos:", fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Mostrar fechas")
-                            Switch(
-                                checked = showDates,
-                                onCheckedChange = { showDates = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Mostrar info del prestador")
-                            Switch(
-                                checked = showProviderInfo,
-                                onCheckedChange = { showProviderInfo = it }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Mostrar estado de visita")
-                            Switch(
-                                checked = showStatus,
-                                onCheckedChange = { showStatus = it }
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { 
-                        showDataVisibilityDialog = false
-                    }) {
-                        Text("Aceptar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDataVisibilityDialog = false }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-        
-        // Diálogo: Período de Tiempo
-        if (showTimePeriodDialog) {
-            AlertDialog(
-                onDismissRequest = { showTimePeriodDialog = false },
-                title = { Text("Período de Tiempo", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column {
-                        Text("Filtrar visitas por período:", fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        val periods = listOf("Semana", "Mes", "3 Meses", "Todo")
-                        periods.forEach { period ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { timePeriod = period }
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(period)
-                                RadioButton(
-                                    selected = timePeriod == period,
-                                    onClick = { timePeriod = period }
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { 
-                        showTimePeriodDialog = false
-                    }) {
-                        Text("Aceptar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showTimePeriodDialog = false }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-        
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .verticalScroll(rememberScrollState()) // HACE LA PANTALLA DESPLAZABLE
+                    .verticalScroll(rememberScrollState())
             ) {
-                // Widget del Calendario
+                // --- 1. WIDGET DEL CALENDARIO GLASS ---
                 Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    color = colors.surfaceColor,
-                    shadowElevation = 4.dp,
-                    border = BorderStroke(1.dp, colors.dividerColor) // Borde añadido
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = CardSurface,
+                    shadowElevation = 12.dp,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        // Header con navegación de mes
-                        CalendarHeader(
+                    Column(modifier = Modifier.padding(16.dp)) {
+
+                        // Header con botón de Minimizar integrado
+                        CalendarHeaderPro(
                             currentDate = currentDate,
-                            onPreviousMonth = {
-                                currentDate = Calendar.getInstance().apply {
-                                    time = currentDate.time
-                                    add(Calendar.MONTH, -1)
-                                }
-                            },
-                            onNextMonth = {
-                                currentDate = Calendar.getInstance().apply {
-                                    time = currentDate.time
-                                    add(Calendar.MONTH, 1)
-                                }
-                            },
-                            colors = colors
+                            isExpanded = isCalendarExpanded,
+                            onToggleExpand = { isCalendarExpanded = !isCalendarExpanded },
+                            onPreviousMonth = { currentDate = Calendar.getInstance().apply { time = currentDate.time; add(Calendar.MONTH, -1) } },
+                            onNextMonth = { currentDate = Calendar.getInstance().apply { time = currentDate.time; add(Calendar.MONTH, 1) } }
                         )
 
-                        // Contenido del calendario que se puede minimizar
-                        AnimatedVisibility(visible = !isExpanded) {
+                        // Grilla del calendario Animada (Ocultable)
+                        AnimatedVisibility(
+                            visible = isCalendarExpanded,
+                            enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) + fadeIn(),
+                            exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) + fadeOut()
+                        ) {
                             Column {
                                 Spacer(modifier = Modifier.height(16.dp))
-                                // Días de la semana
-                                WeekDaysHeader(colors = colors)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                // Grilla de días del mes
-                                CalendarGrid(
+                                WeekDaysHeaderPro()
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                CalendarGridPro(
                                     currentDate = currentDate,
                                     selectedDate = selectedDate,
                                     daysWithEvents = daysWithEvents,
+                                    events = events,
                                     dateFormat = dateFormat,
                                     onDayClick = { day ->
-                                        selectedDate = Calendar.getInstance().apply {
-                                            time = currentDate.time
-                                            set(Calendar.DAY_OF_MONTH, day)
-                                        }
-                                    },
-                                    colors = colors
+                                        selectedDate = Calendar.getInstance().apply { time = currentDate.time; set(Calendar.DAY_OF_MONTH, day) }
+                                    }
                                 )
                             }
                         }
                     }
                 }
 
-                // Lista de eventos del día
-                EventsList(
+                // --- 2. LISTA DE EVENTOS ---
+                EventsListPro(
                     selectedDate = selectedDate,
-                    events = eventsForSelectedDay,
-                    colors = colors,
-                    onCancelClick = { visitId ->
-                        visitToCancel = visitId
-                        showCancelModal = true
-                    },
-                    onRescheduleClick = { /* TODO: Implementar reprogramación */ },
-                    isExpanded = isExpanded,
-                    onExpandClick = { isExpanded = !isExpanded }
+                    events = filteredEvents,
+                    onEventClick = { event -> selectedEvent = event } // Abre el Modal de Detalles
                 )
+
+                Spacer(modifier = Modifier.height(120.dp)) // Espacio para el FAB
             }
+
         }
 
-        // Modal de cancelación
-        if (showCancelModal) {
-            CancelVisitModal(
-                colors = colors,
-                onConfirm = {
-                    visitToCancel?.let { id ->
-                        visits = visits.map { visit ->
-                            if (visit.id == id) {
-                                visit.copy(status = VisitStatus.CANCELLED)
-                            } else {
-                                visit
-                            }
-                        }
-                    }
-                    showCancelModal = false
-                    visitToCancel = null
+        // =========================================================================
+        // --- MODALES Y POPUPS ---
+        // =========================================================================
+
+        // 1. MODAL DE DETALLES DEL EVENTO
+        if (selectedEvent != null) {
+            EventDetailsModal(
+                event = selectedEvent!!,
+                onDismiss = { selectedEvent = null },
+                onChatClick = {
+                    selectedEvent = null
+                    onChatClick(it)
                 },
-                onDismiss = {
-                    showCancelModal = false
-                    visitToCancel = null
+                onRescheduleClick = { event ->
+                    // Llama a la función que actualiza Room y envía el mensaje de chat
+                    onRescheduleEvent(event)
+                    selectedEvent = null
+                    onChatClick(event.providerId)
+                },
+                onCancelClick = { event ->
+                    // Cierra detalles y abre confirmación de cancelación
+                    eventToCancel = event
+                    selectedEvent = null
                 }
             )
         }
-        
-        // Barra de búsqueda flotante
-        if (isSearchActive) {
-            val rainbowBrush = geminiGradientEffect()
-            val focusRequester = remember { FocusRequester() }
-            val keyboardController = LocalSoftwareKeyboardController.current
 
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-                keyboardController?.show()
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp)
-                    .zIndex(10f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = materialColors.surface,
-                        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 10.dp, bottomEnd = 10.dp),
-                        shadowElevation = 12.dp,
-                        border = BorderStroke(2.5.dp, rainbowBrush)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Search,
-                                null,
-                                tint = materialColors.onSurface.copy(0.8f),
-                                modifier = Modifier.padding(start = 24.dp).size(20.dp)
-                            )
-                            BasicTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(start = 12.dp)
-                                    .focusRequester(focusRequester),
-                                textStyle = TextStyle(color = materialColors.onSurface, fontSize = 17.sp),
-                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                decorationBox = { inner ->
-                                    Box(contentAlignment = Alignment.CenterStart) {
-                                        if (searchQuery.isEmpty()) {
-                                            Text("Buscar eventos...", color = materialColors.onSurfaceVariant, fontSize = 16.sp)
-                                        }
-                                        inner()
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier.size(56.dp),
-                    onClick = {
-                        isSearchActive = false
-                        searchQuery = ""
-                        keyboardController?.hide()
-                    },
-                    shape = CircleShape,
-                    color = materialColors.surface,
-                    border = BorderStroke(2.5.dp, rainbowBrush),
-                    shadowElevation = 12.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Close, "Cerrar", tint = materialColors.onSurface, modifier = Modifier.size(26.dp))
-                    }
-                }
-            }
+        // 2. MODAL DE CONFIRMACIÓN DE CANCELACIÓN
+        if (eventToCancel != null) {
+            CancelVisitConfirmModal(
+                event = eventToCancel!!,
+                onConfirm = { event ->
+                    // Ejecuta la cancelación real a través de Room y Chat
+                    onCancelEvent(event)
+                    eventToCancel = null
+                },
+                onDismiss = { eventToCancel = null }
+            )
         }
+
     }
 }
 
-// Composable para el header del calendario con navegación
+// ==========================================================================================
+// --- COMPONENTES DEL CALENDARIO PRO ---
+// ==========================================================================================
+
 @Composable
-fun CalendarHeader(
+fun CalendarHeaderPro(
     currentDate: Calendar,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
     onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit,
-    colors: AppColors
+    onNextMonth: () -> Unit
 ) {
-    val monthNames = listOf(
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-    )
+    val monthNames = listOf("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")
+    val rotation by animateFloatAsState(if (isExpanded) 180f else 0f, label = "chevronRotate")
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.accentBlue, shape = RoundedCornerShape(12.dp)) // Fondo azul con bordes redondeados
-            .padding(vertical = 4.dp), // Padding vertical
+        modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp)).padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onPreviousMonth) {
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowLeft,
-                contentDescription = "Mes anterior",
-                tint = Color.White // Ícono en blanco
-            )
-        }
+        IconButton(onClick = onPreviousMonth) { Icon(Icons.Default.KeyboardArrowLeft, null, tint = MaverickBlue) }
 
-        Text(
-            text = "${monthNames[currentDate.get(Calendar.MONTH)]} ${currentDate.get(Calendar.YEAR)}",
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            color = Color.White // Texto en blanco
-        )
-
-        IconButton(onClick = onNextMonth) {
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowRight,
-                contentDescription = "Mes siguiente",
-                tint = Color.White // Ícono en blanco
-            )
-        }
-    }
-}
-
-// Composable para los días de la semana
-@Composable
-fun WeekDaysHeader(colors: AppColors) {
-    val weekDays = listOf("Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa")
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        weekDays.forEach { day ->
+        // Área central clickeable para colapsar/expandir el calendario
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null, // Sin onda de ripple para que sea sutil
+                    onClick = onToggleExpand
+                )
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
             Text(
-                text = day,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textSecondaryColor
+                text = "HOY ${currentDate.get(Calendar.DAY_OF_MONTH)} de ${monthNames[currentDate.get(Calendar.MONTH)]} / ${currentDate.get(Calendar.YEAR)}".uppercase(),
+                fontWeight = FontWeight.Black,
+                fontSize = 14.sp,
+                color = Color.White,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = if (isExpanded) "Ocultar" else "Mostrar",
+                tint = MaverickBlue,
+                modifier = Modifier.size(20.dp).rotate(rotation)
             )
         }
+
+        IconButton(onClick = onNextMonth) { Icon(Icons.Default.KeyboardArrowRight, null, tint = MaverickBlue) }
     }
 }
 
-// Composable para la grilla del calendario
 @Composable
-fun CalendarGrid(
+fun WeekDaysHeaderPro() {
+    val weekDays = listOf("Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sa")
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        weekDays.forEach { day -> Text(text = day, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.Gray) }
+    }
+}
+
+@Composable
+fun CalendarGridPro(
     currentDate: Calendar,
     selectedDate: Calendar,
     daysWithEvents: Set<String>,
+    events: List<CalendarEventEntity>,
     dateFormat: SimpleDateFormat,
-    onDayClick: (Int) -> Unit,
-    colors: AppColors
+    onDayClick: (Int) -> Unit
 ) {
     val daysInMonth = currentDate.getActualMaximum(Calendar.DAY_OF_MONTH)
-    val firstDayOfMonth = Calendar.getInstance().apply {
-        time = currentDate.time
-        set(Calendar.DAY_OF_MONTH, 1)
-    }.get(Calendar.DAY_OF_WEEK) - 1
-
+    val firstDayOfMonth = Calendar.getInstance().apply { time = currentDate.time; set(Calendar.DAY_OF_MONTH, 1) }.get(Calendar.DAY_OF_WEEK) - 1
     val today = Calendar.getInstance()
 
     Column {
         var dayCounter = 1
-
-        // Calcular número de filas necesarias
-        val totalCells = firstDayOfMonth + daysInMonth
-        val rows = (totalCells + 6) / 7
+        val rows = (firstDayOfMonth + daysInMonth + 6) / 7
 
         repeat(rows) { week ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 repeat(7) { dayOfWeek ->
                     val cellIndex = week * 7 + dayOfWeek
-
                     if (cellIndex < firstDayOfMonth || dayCounter > daysInMonth) {
-                        // Celda vacía
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .aspectRatio(1f)
-                        )
+                        Box(modifier = Modifier.weight(1f).aspectRatio(1f))
                     } else {
                         val day = dayCounter
-                        val dateToCheck = Calendar.getInstance().apply {
-                            time = currentDate.time
-                            set(Calendar.DAY_OF_MONTH, day)
-                        }
+                        val dateToCheck = Calendar.getInstance().apply { time = currentDate.time; set(Calendar.DAY_OF_MONTH, day) }
                         val dateStr = dateFormat.format(dateToCheck.time)
 
                         val isSelected = isSameDay(dateToCheck, selectedDate)
                         val isToday = isSameDay(dateToCheck, today)
                         val hasEvent = daysWithEvents.contains(dateStr)
 
-                        DayCell(
-                            day = day,
-                            isSelected = isSelected,
-                            isToday = isToday,
-                            hasEvent = hasEvent,
-                            onClick = { onDayClick(day) },
-                            colors = colors
-                        )
+                        // Mapea el color del primer evento desde la entidad Room
+                        val dotColor = if (hasEvent) {
+                            events.firstOrNull { it.date == dateStr && it.status != VisitStatus.CANCELLED }?.let { Color(it.type.colorLong) } ?: NeonCyber
+                        } else Color.Transparent
 
+                        DayCellPro(day, isSelected, isToday, hasEvent, dotColor) { onDayClick(day) }
                         dayCounter++
                     }
                 }
             }
-
-            if (week < rows - 1) {
-                Spacer(modifier = Modifier.height(4.dp))
-            }
+            if (week < rows - 1) Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }
 
-// Composable para cada celda del día
 @Composable
-fun RowScope.DayCell(
-    day: Int,
-    isSelected: Boolean,
-    isToday: Boolean,
-    hasEvent: Boolean,
-    onClick: () -> Unit,
-    colors: AppColors
-) {
+fun RowScope.DayCellPro(day: Int, isSelected: Boolean, isToday: Boolean, hasEvent: Boolean, dotColor: Color, onClick: () -> Unit) {
+    val bgColor = if (isSelected) MaverickBlue else if (isToday) Color.White.copy(alpha = 0.05f) else Color.Transparent
+    val textColor = if (isSelected || isToday) Color.White else Color.Gray
+    val fontWeight = if (isSelected || isToday) FontWeight.Black else FontWeight.Medium
+
     Box(
-        modifier = Modifier
-            .weight(1f)
-            .aspectRatio(1f)
-            .padding(2.dp)
-            .clip(CircleShape)
-            .background(
-                when {
-                    isSelected -> colors.accentBlue
-                    isToday -> colors.accentBlue.copy(alpha = 0.1f)
-                    else -> Color.Transparent
-                }
-            )
-            .border(
-                width = if (isToday && !isSelected) 1.dp else 0.dp,
-                color = if (isToday && !isSelected) colors.accentBlue else Color.Transparent,
-                shape = CircleShape
-            )
+        modifier = Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clip(CircleShape)
+            .background(bgColor).border(if (isToday && !isSelected) 1.dp else 0.dp, if (isToday && !isSelected) MaverickBlue else Color.Transparent, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = day.toString(),
-                fontSize = 14.sp,
-                fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
-                color = when {
-                    isSelected -> Color.White
-                    else -> colors.textPrimaryColor
-                }
-            )
-
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text(text = day.toString(), fontSize = 14.sp, fontWeight = fontWeight, color = textColor)
             if (hasEvent) {
                 Spacer(modifier = Modifier.height(2.dp))
-                Box(
-                    modifier = Modifier
-                        .size(4.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) Color.White else Color(0xFFEF4444))
-                )
+                // Indicador de evento coloreado según el tipo
+                Box(modifier = Modifier.size(4.dp).clip(CircleShape).background(if (isSelected) DarkBg else dotColor))
             }
         }
     }
 }
 
-// Composable para la lista de eventos
-@Composable
-fun EventsList(
-    selectedDate: Calendar,
-    events: List<TechnicalVisit>,
-    colors: AppColors,
-    onCancelClick: (String) -> Unit,
-    onRescheduleClick: (String) -> Unit,
-    isExpanded: Boolean,
-    onExpandClick: () -> Unit
-) {
-    val monthNames = listOf(
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-    )
+// ==========================================================================================
+// --- LISTA Y TARJETAS DE EVENTOS ---
+// ==========================================================================================
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        // --- ENCABEZADO DE LA LISTA DE EVENTOS ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Eventos del ${selectedDate.get(Calendar.DAY_OF_MONTH)} de ${monthNames[selectedDate.get(Calendar.MONTH)]}",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textSecondaryColor
-            )
-            Text(
-                text = if (isExpanded) "Minimizar" else "Expandir",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.accentBlue,
-                modifier = Modifier.clickable { onExpandClick() }
-            )
+@Composable
+fun EventsListPro(
+    selectedDate: Calendar,
+    events: List<CalendarEventEntity>,
+    onEventClick: (CalendarEventEntity) -> Unit
+) {
+    val monthNames = listOf("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic")
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Eventos del ${selectedDate.get(Calendar.DAY_OF_MONTH)} de ${monthNames[selectedDate.get(Calendar.MONTH)]}", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
+            Text("${events.size} Registros", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
         }
 
         if (events.isNotEmpty()) {
-            // --- LISTA DE EVENTOS (NO-LAZY) ---
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 events.forEach { event ->
-                    EventCard(
-                        event = event,
-                        colors = colors,
-                        onCancelClick = onCancelClick,
-                        onRescheduleClick = onRescheduleClick
-                    )
+                    EventCardPro(event = event, onClick = { onEventClick(event) })
                 }
             }
         } else {
-            // Estado vacío
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DateRange,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    tint = colors.textSecondaryColor.copy(alpha = 0.3f)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "No hay visitas programadas",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.textSecondaryColor
-                )
-                Text(
-                    text = "Acuerda una visita desde el chat",
-                    fontSize = 12.sp,
-                    color = colors.textSecondaryColor.copy(alpha = 0.7f)
-                )
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Coffee, null, modifier = Modifier.size(48.dp), tint = Color.White.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Agenda Libre", fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color.White.copy(alpha = 0.5f))
+                    Text("No hay eventos ni turnos este día.", fontSize = 12.sp, color = Color.Gray)
+                }
             }
         }
     }
 }
 
-
-// Composable para cada tarjeta de evento
 @Composable
-fun EventCard(
-    event: TechnicalVisit,
-    colors: AppColors,
-    onCancelClick: (String) -> Unit,
-    onRescheduleClick: (String) -> Unit
+fun EventCardPro(
+    event: CalendarEventEntity,
+    onClick: () -> Unit
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
-    
+    val isCancelled = event.status == VisitStatus.CANCELLED
+    val cardAlpha = if (isCancelled) 0.4f else 1f
+    val eventColor = Color(event.type.colorLong)
+
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { isExpanded = !isExpanded },
-        shape = RoundedCornerShape(16.dp),
-        color = colors.surfaceColor,
-        shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, colors.dividerColor)
+        modifier = Modifier.fillMaxWidth().alpha(cardAlpha).clickable { onClick() },
+        shape = RoundedCornerShape(24.dp),
+        color = CardSurface,
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Columna de hora
-                Column(
-                    modifier = Modifier
-                        .width(70.dp)
-                        .padding(end = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = event.time,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (event.status == VisitStatus.CANCELLED) {
-                            colors.textSecondaryColor
-                        } else {
-                            colors.textPrimaryColor
-                        }
-                    )
-                    Text(
-                        text = "HRS",
-                        fontSize = 10.sp,
-                        color = colors.textSecondaryColor
-                    )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(eventColor).align(Alignment.CenterStart).zIndex(10f))
+
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+
+                // HORARIO
+                Column(modifier = Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = event.time, fontSize = 20.sp, fontWeight = FontWeight.Black, color = if (isCancelled) Color.Gray else eventColor)
+                    Text("HRS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 1.sp)
                 }
 
-                // Divisor vertical
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(50.dp)
-                        .background(colors.dividerColor)
-                )
-
+                Box(modifier = Modifier.width(1.dp).height(40.dp).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 12.dp))
                 Spacer(modifier = Modifier.width(16.dp))
 
-                // Información del evento
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = event.service,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (event.status == VisitStatus.CANCELLED) {
-                                colors.textSecondaryColor
-                            } else {
-                                colors.textPrimaryColor
-                            }
-                        )
-
-                        // Badge de estado
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = when (event.status) {
-                                VisitStatus.CONFIRMED -> Color(0xFF10B981).copy(alpha = 0.1f)
-                                VisitStatus.PENDING -> Color(0xFFF59E0B).copy(alpha = 0.1f)
-                                VisitStatus.CANCELLED -> Color(0xFFEF4444).copy(alpha = 0.1f)
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = when (event.status) {
-                                        VisitStatus.CONFIRMED -> Icons.Default.Check
-                                        VisitStatus.PENDING -> Icons.Default.DateRange
-                                        VisitStatus.CANCELLED -> Icons.Default.Close
-                                    },
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = when (event.status) {
-                                        VisitStatus.CONFIRMED -> Color(0xFF10B981)
-                                        VisitStatus.PENDING -> Color(0xFFF59E0B)
-                                        VisitStatus.CANCELLED -> Color(0xFFEF4444)
-                                    }
-                                )
-                                Text(
-                                    text = when (event.status) {
-                                        VisitStatus.CONFIRMED -> "Confirmado"
-                                        VisitStatus.PENDING -> "Pendiente"
-                                        VisitStatus.CANCELLED -> "Cancelado"
-                                    },
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = when (event.status) {
-                                        VisitStatus.CONFIRMED -> Color(0xFF10B981)
-                                        VisitStatus.PENDING -> Color(0xFFF59E0B)
-                                        VisitStatus.CANCELLED -> Color(0xFFEF4444)
-                                    }
-                                )
+                // INFO DEL SERVICIO
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                        Surface(color = eventColor.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp), border = BorderStroke(1.dp, eventColor.copy(alpha=0.3f))) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                Text(event.type.emoji, fontSize = 8.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(event.type.label.uppercase(), color = eventColor, fontSize = 8.sp, fontWeight = FontWeight.Black)
                             }
                         }
+
+                        val (statusText, statusColor) = when (event.status) {
+                            VisitStatus.CONFIRMED -> "CONFIRMADO" to StatusConfirmed
+                            VisitStatus.PENDING -> "PENDIENTE" to StatusPending
+                            VisitStatus.CANCELLED -> "CANCELADO" to ErrorRed
+                        }
+                        Text(statusText, fontSize = 8.sp, fontWeight = FontWeight.Black, color = statusColor, letterSpacing = 1.sp, modifier = Modifier.background(statusColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = event.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White, textDecoration = if(isCancelled) TextDecoration.LineThrough else TextDecoration.None, maxLines = 1, overflow = TextOverflow.Ellipsis)
 
-                    // Avatar y nombre del proveedor
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(event.avatarColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = event.provider.first().toString(),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                    // Dirección
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.LocationOn, null, tint = Color.Gray, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(event.address, fontSize = 11.sp, color = Color.LightGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+
+                    // Provider Avatar
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (event.providerPhotoUrl != null) {
+                            AsyncImage(
+                                model = event.providerPhotoUrl,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp).clip(CircleShape).border(1.dp, Color.White.copy(0.2f), CircleShape),
+                                contentScale = ContentScale.Crop
                             )
+                        } else {
+                            Box(modifier = Modifier.size(20.dp).background(Color(event.avatarColorLong), CircleShape).border(1.dp, Color.White.copy(0.2f), CircleShape), contentAlignment = Alignment.Center) {
+                                Text(event.provider.first().toString(), fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White)
+                            }
                         }
-                        Text(
-                            text = event.provider,
-                            fontSize = 12.sp,
-                            color = colors.textSecondaryColor
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(event.provider, fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     }
                 }
-                
-                // Icono indicador de expandir/colapsar
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Colapsar" else "Expandir",
-                    tint = colors.textSecondaryColor,
-                    modifier = Modifier.size(24.dp)
-                )
             }
+        }
+    }
+}
 
-            // Botones de acción con animación expandible
-            AnimatedVisibility(
-                visible = isExpanded && event.status != VisitStatus.CANCELLED,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+// ==========================================================================================
+// --- MODALES FLOTANTES ---
+// ==========================================================================================
+
+@Composable
+fun EventDetailsModal(
+    event: CalendarEventEntity,
+    onDismiss: () -> Unit,
+    onChatClick: (String) -> Unit,
+    onRescheduleClick: (CalendarEventEntity) -> Unit,
+    onCancelClick: (CalendarEventEntity) -> Unit
+) {
+    val eventColor = Color(event.type.colorLong)
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(onClick = onDismiss, indication = null, interactionSource = remember { MutableInteractionSource() }), contentAlignment = Alignment.Center) {
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.9f).clickable(onClick = {}, indication = null, interactionSource = remember { MutableInteractionSource() }),
+                shape = RoundedCornerShape(32.dp),
+                color = CardSurface,
+                border = BorderStroke(1.dp, eventColor.copy(alpha = 0.4f)),
+                shadowElevation = 24.dp
             ) {
-                Column {
-                    HorizontalDivider(
-                        color = colors.dividerColor,
-                        thickness = 0.5.dp,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
+                Column(modifier = Modifier.padding(24.dp)) {
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Botón Reprogramar
-                        Button(
-                            onClick = { onRescheduleClick(event.id) },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = colors.backgroundColor,
-                                contentColor = colors.accentBlue
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Reprogramar",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = eventColor.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, eventColor.copy(alpha=0.3f))) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                Text(event.type.emoji, fontSize = 12.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(event.type.label.uppercase(), color = eventColor, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            }
                         }
 
-                        // Botón Cancelar
-                        Button(
-                            onClick = { onCancelClick(event.id) },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = colors.backgroundColor,
-                                contentColor = Color(0xFFEF4444)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Cancelar",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        val (statusText, statusColor) = when (event.status) {
+                            VisitStatus.CONFIRMED -> "CONFIRMADO" to StatusConfirmed
+                            VisitStatus.PENDING -> "PENDIENTE" to StatusPending
+                            VisitStatus.CANCELLED -> "CANCELADO" to ErrorRed
+                        }
+                        Text(statusText, fontSize = 10.sp, fontWeight = FontWeight.Black, color = statusColor, letterSpacing = 1.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(text = event.title, fontSize = 24.sp, fontWeight = FontWeight.Black, color = Color.White, lineHeight = 28.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Surface(modifier = Modifier.weight(1f), color = Color.White.copy(0.05f), shape = RoundedCornerShape(16.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("DÍA", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                                Text(event.date, fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+                            }
+                        }
+                        Surface(modifier = Modifier.weight(1f), color = Color.White.copy(0.05f), shape = RoundedCornerShape(16.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("HORARIO", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                                Text("${event.time} HS", fontSize = 14.sp, color = eventColor, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 2.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(36.dp).background(Color.White.copy(0.05f), CircleShape), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.LocationOn, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Dirección", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                Text(event.address, fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Medium)
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (event.providerPhotoUrl != null) {
+                                AsyncImage(
+                                    model = event.providerPhotoUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(36.dp).clip(CircleShape).border(1.dp, Color.White.copy(0.2f), CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Box(modifier = Modifier.size(36.dp).background(Color(event.avatarColorLong), CircleShape).border(1.dp, Color.White.copy(0.2f), CircleShape), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Handyman, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Prestador / Profesional", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                Text(event.provider, fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Medium)
+                            }
+                            IconButton(onClick = { onChatClick(event.providerId) }, modifier = Modifier.background(MaverickBlue.copy(0.15f), CircleShape)) {
+                                Icon(Icons.AutoMirrored.Filled.Message, null, tint = MaverickBlue, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    if (event.status != VisitStatus.CANCELLED) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = { onCancelClick(event) },
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ErrorRed.copy(alpha = 0.1f), contentColor = ErrorRed)
+                            ) {
+                                Text("CANCELAR", fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            }
+
+                            Button(
+                                onClick = { onRescheduleClick(event) },
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = eventColor, contentColor = Color.White)
+                            ) {
+                                Text("REPROGRAMAR", fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            }
+                        }
+                    } else {
+                        Surface(modifier = Modifier.fillMaxWidth(), color = ErrorRed.copy(0.1f), shape = RoundedCornerShape(12.dp)) {
+                            Text("Este evento ha sido cancelado", color = ErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp))
                         }
                     }
                 }
@@ -1377,126 +696,37 @@ fun EventCard(
     }
 }
 
-// Función auxiliar para comparar días
-fun isSameDay(date1: Calendar, date2: Calendar): Boolean {
-    return date1.get(Calendar.YEAR) == date2.get(Calendar.YEAR) &&
-            date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) &&
-            date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
-}
-
-// Modal de confirmación de cancelación
 @Composable
-fun CancelVisitModal(
-    colors: AppColors,
-    onConfirm: () -> Unit,
+fun CancelVisitConfirmModal(
+    event: CalendarEventEntity,
+    onConfirm: (CalendarEventEntity) -> Unit,
     onDismiss: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
-            .clickable(
-                onClick = onDismiss,
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp)
-                .clickable(
-                    onClick = {},
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ),
-            shape = RoundedCornerShape(24.dp),
-            color = colors.surfaceColor,
-            shadowElevation = 8.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).zIndex(300f), contentAlignment = Alignment.Center) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.85f),
+                shape = RoundedCornerShape(32.dp),
+                color = CardSurface,
+                border = BorderStroke(1.dp, ErrorRed.copy(alpha = 0.3f)),
+                shadowElevation = 20.dp
             ) {
-                // Icono de alerta
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFEF4444).copy(alpha = 0.1f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                        tint = Color(0xFFEF4444)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Título
-                Text(
-                    text = "¿Cancelar Visita?",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.textPrimaryColor,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Descripción
-                Text(
-                    text = "Esta acción eliminará la visita programada. ¿Estás seguro de que quieres continuar?",
-                    fontSize = 14.sp,
-                    color = colors.textSecondaryColor,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 20.sp
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Botones
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // Botón Confirmar
-                    Button(
-                        onClick = onConfirm,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFEF4444)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "Sí, cancelar visita",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(modifier = Modifier.size(64.dp).background(ErrorRed.copy(alpha = 0.1f), CircleShape).border(2.dp, ErrorRed.copy(alpha = 0.3f), CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.WarningAmber, null, modifier = Modifier.size(32.dp), tint = ErrorRed)
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("¿Anular ${event.type.label}?", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Se cancelará el evento y se enviará un mensaje automático a ${event.provider} informándole. ¿Deseas continuar?", fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, lineHeight = 18.sp)
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    // Botón Volver
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.backgroundColor,
-                            contentColor = colors.textSecondaryColor
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "Volver atrás",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
+                    Button(onClick = { onConfirm(event) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)) {
+                        Text("SÍ, ANULAR Y AVISAR", fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("MANTENER CITA", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             }
@@ -1504,8 +734,72 @@ fun CancelVisitModal(
     }
 }
 
-@Preview(showBackground = true)
+fun isSameDay(date1: Calendar, date2: Calendar): Boolean {
+    return date1.get(Calendar.YEAR) == date2.get(Calendar.YEAR) && date1.get(Calendar.MONTH) == date2.get(Calendar.MONTH) && date1.get(Calendar.DAY_OF_MONTH) == date2.get(Calendar.DAY_OF_MONTH)
+}
+
+// ==========================================================================================
+// --- PREVIEW ---
+// ==========================================================================================
+
+@Preview(showBackground = true, backgroundColor = 0xFF05070A)
 @Composable
 fun CalendarScreenPreview() {
-    CalendarScreen(onBack = {})
+    MyApplicationTheme {
+        // Fix for Preview issue: Cannot create an instance of class CalendarViewModel.
+        // Instead of calling CalendarScreen (which uses hiltViewModel),
+        // directly call CalendarScreenContent and provide dummy data.
+        val dummyEvents = listOf(
+            CalendarEventEntity(
+                id = "1",
+                title = "Revisión de Sistema",
+                // Removed 'description' as it's not a parameter in CalendarEventEntity
+                date = "2023-11-15",
+                time = "10:00",
+                type = EventType.VISIT,
+                status = VisitStatus.CONFIRMED,
+                provider = "Tech Solutions Inc.",
+                providerId = "tech_solutions_1",
+                address = "Calle Falsa 123",
+                providerPhotoUrl = null,
+                avatarColorLong = 0xFF42A5F5 // Blue
+            ),
+            CalendarEventEntity(
+                id = "2",
+                title = "Consulta Médica",
+                // Removed 'description' as it's not a parameter in CalendarEventEntity
+                date = "2023-11-15",
+                time = "14:30",
+                type = EventType.APPOINTMENT,
+                status = VisitStatus.PENDING,
+                provider = "Dr. John Smith",
+                providerId = "dr_smith_2",
+                address = "Av. Siempre Viva 742",
+                providerPhotoUrl = null,
+                avatarColorLong = 0xFF66BB6A // Green
+            ),
+            CalendarEventEntity(
+                id = "3",
+                title = "Entrega de Paquete",
+                // Removed 'description' as it's not a parameter in CalendarEventEntity
+                date = "2023-11-16",
+                time = "09:00",
+                type = EventType.SHIPPING,
+                status = VisitStatus.CONFIRMED,
+                provider = "Envios Express",
+                providerId = "envios_express_3",
+                address = "Ruta 40 Km 10",
+                providerPhotoUrl = null,
+                avatarColorLong = 0xFFFFA726 // Orange
+            )
+        )
+
+        CalendarScreenContent(
+            events = dummyEvents,
+            onBack = {},
+            onChatClick = {},
+            onCancelEvent = {},
+            onRescheduleEvent = {}
+        )
+    }
 }

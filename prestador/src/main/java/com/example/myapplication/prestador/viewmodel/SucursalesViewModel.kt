@@ -27,25 +27,16 @@ class SucursalesViewModel @Inject constructor(
 
     private val providerId: String
         get() = auth.currentUser?.uid ?: ""
-    
-    // Obtener el businessId real del provider
-    private val _businessId = MutableStateFlow<String?>(null)
-    val businessId: StateFlow<String?> = _businessId.asStateFlow()
 
-    init {
-        loadBusinessId()
-    }
-
-    private fun loadBusinessId() {
-        viewModelScope.launch {
-            try {
-                val businesses = businessRepository.getBusinessesByProvider(providerId).first()
-                _businessId.value = businesses.firstOrNull()?.id
-            } catch (e: Exception) {
-                _businessId.value = null
-            }
-        }
-    }
+    // businessId reactivo: se actualiza automáticamente cuando se crea/elimina un BusinessEntity
+    val businessId: StateFlow<String?> = businessRepository
+        .getBusinessesByProvider(auth.currentUser?.uid ?: "")
+        .map { businesses -> businesses.firstOrNull()?.id }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
 
     val sucursales: StateFlow<List<SucursalEntity>> = businessId
         .flatMapLatest { id ->
@@ -118,7 +109,7 @@ class SucursalesViewModel @Inject constructor(
             _uiState.value = UiState.Loading
             
             try {
-                val currentBusinessId = _businessId.value
+                val currentBusinessId = businessId.value
                 if (currentBusinessId == null) {
                     _uiState.value = UiState.Error("Debe completar los datos de empresa primero")
                     return@launch
@@ -202,9 +193,8 @@ class SucursalesViewModel @Inject constructor(
         _uiState.value = UiState.Idle
     }
     
-    fun refreshBusinessId() {
-        loadBusinessId()
-    }
+    /** No-op: businessId ahora es reactivo y se actualiza automáticamente. */
+    fun refreshBusinessId() = Unit
 
     fun agregarMiembroEquipo(sucursalId: String, nombre: String, apellido: String?, cargo: String?, imageUrl: String? = null) {
         viewModelScope.launch {

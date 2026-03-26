@@ -11,6 +11,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import com.example.myapplication.prestador.data.local.dao.NotificacionDao
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -119,6 +120,13 @@ object DatabaseModule {
     @Singleton
     fun provideReferenteDao(database: PrestadorDatabase): ReferenteDao {
         return database.referenteDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideNotificacionDao(database:
+    PrestadorDatabase): NotificacionDao {
+        return database.noticacionDao()
     }
 
 }

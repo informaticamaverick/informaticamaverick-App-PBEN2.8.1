@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.layout.*
@@ -115,6 +116,7 @@ fun InicioContent(
         restriccionSolicitudActiva = restriccionSolicitudActiva,
         restriccionCitaEnCurso = restriccionCitaEnCurso,
         onToggleConexionFast = { oportunidadesVM.toggleConexionFast() },
+        onNavigateToPromotionList = onNavigateToPromotionList,
         onCompletarTrabajoFast = { appointmentId, clientId ->
             oportunidadesVM.completarTrabajoFast(appointmentId)
             AppointmentRescheduleManager.addMessage(
@@ -159,6 +161,7 @@ private fun InicioScreen(
     restriccionCitaEnCurso: String? = null,
     conectadoFast: Boolean = true,
     onToggleConexionFast: () -> Unit = {},
+    onNavigateToPromotionList: () -> Unit = {},
 ) {
     val colors = getPrestadorColors()
     val mostarFast = state.serviceType.equals("TECHNICAL", ignoreCase = true)
@@ -432,66 +435,6 @@ private fun InicioScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // GANANCIAS + CALIFICACION
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surfaceColor),
-                elevation = CardDefaults.cardElevation(4.dp)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("GANANCIAS (SEM)", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary)
-                        Icon(Icons.Default.AttachMoney, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "$ ${"%,.0f".format(state.gananciasSemanales)}",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
-                }
-            }
-
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surfaceColor),
-                elevation = CardDefaults.cardElevation(4.dp)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("CALIFICACION", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = colors.textSecondary)
-                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFC107), modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "4.9 \u2605",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
         // CARRUSEL
         val isProfessional = state.serviceType.equals("PROFESSIONAL", ignoreCase = true)
 
@@ -653,6 +596,40 @@ private fun InicioScreen(
                                 if (pagerState.currentPage == index) colors.primaryOrange
                                 else colors.primaryOrange.copy(alpha = 0.3f)
                             )
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // BOTÓN MIS PROMOCIONES (solo para no-profesionales)
+        if (!isProfessional) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onNavigateToPromotionList,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, colors.primaryOrange),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primaryOrange)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocalOffer,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Mis Promociones",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
                     )
                 }
             }

@@ -1,6 +1,7 @@
 package com.example.myapplication.prestador.ui.profile
 
 import android.net.Uri
+import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -59,6 +60,10 @@ import com.example.myapplication.prestador.viewmodel.ProfileState
 import com.example.myapplication.prestador.viewmodel.UpdateState
 import com.example.myapplication.prestador.viewmodel.ReferenteViewModel
 import com.example.myapplication.prestador.viewmodel.ReferentesUiState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.myapplication.prestador.viewmodel.PhotoUploadState
+import com.example.myapplication.prestador.viewmodel.BusinessViewModel
+import okhttp3.internal.http2.Header
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,18 +71,22 @@ fun EditProfileScreenUnified(
     onBack: () -> Unit,
     viewModel: EditProfileViewModel = hiltViewModel(),
     direccionViewModel: DireccionViewModel = hiltViewModel(),
-    referenteViewModel: ReferenteViewModel = hiltViewModel()
+    referenteViewModel: ReferenteViewModel = hiltViewModel(),
+    businessViewModel: BusinessViewModel = hiltViewModel()
 ) {
     val colors = getPrestadorColors()
     val scope = rememberCoroutineScope()
     val profileState by viewModel.profileState.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
+    val photoUploadState by viewModel.photoUploadState.collectAsState()
+    var isUploadingPhoto by remember { mutableStateOf(false)}
     val direccionUiState by direccionViewModel.uiState.collectAsState()
     val consultorioUiState by direccionViewModel.consultorioState.collectAsState()
     val referentesUiState by referenteViewModel.uiState.collectAsState()
     val direccionActual = (direccionUiState as? DireccionUiState.Success)?.direccion
     val referentesActuales = (referentesUiState as? ReferentesUiState.Success)?.referentes ?: emptyList()
     val businessEntity by viewModel.businessEntity.collectAsState()
+    val allBusinesses by businessViewModel.businesses.collectAsState()
     var verificado by remember { mutableStateOf(false)}
     var imagenesProductos by remember { mutableStateOf("[]") }
     var categorias by remember { mutableStateOf("[]") }
@@ -106,6 +115,7 @@ fun EditProfileScreenUnified(
     var provinciaLocal by remember { mutableStateOf("") }
     var codigoPostalLocal by remember { mutableStateOf("") }
     var tieneEmpresa by remember { mutableStateOf(false) }
+    var tieneSucursales by remember { mutableStateOf(false) }
     var atiendeVirtual by remember { mutableStateOf(false) }
     var trabajaConOtros by remember { mutableStateOf(false) }
     var nombreEmpresa by remember { mutableStateOf("") }
@@ -131,7 +141,10 @@ fun EditProfileScreenUnified(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { selectedImageUri = it }
+        uri?.let {
+            selectedImageUri = it
+            viewModel.uploadProfilePhoto(it)
+        }
     }
     
     // Estado de scroll para TopBar animada
@@ -190,6 +203,24 @@ fun EditProfileScreenUnified(
             direccionViewModel.loadConsultorioDireccion(provider.id)
             referenteViewModel.loadReferentesByProvider()
             verificado = provider.verificado
+        }
+    }
+
+    LaunchedEffect(photoUploadState) {
+        when (val state = photoUploadState) {
+            is PhotoUploadState.Loading -> {
+                isUploadingPhoto = true
+            }
+            is PhotoUploadState.Success -> {
+                isUploadingPhoto = false
+                imageUrl = state.url
+                snackbarHostState.showSnackbar("\u0005' Foto actualizada correctamente")
+            }
+            is PhotoUploadState.Error -> {
+                isUploadingPhoto = false
+                snackbarHostState.showSnackbar("L' Error: ${state.message}")
+            }
+            else -> isUploadingPhoto = false
         }
     }
 
@@ -302,20 +333,32 @@ fun EditProfileScreenUnified(
                     ) {
                         // HERO HEADER
                         item {
-                            HeaderSection(
-                                name = name,
-                                apellido = apellido,
-                                profesion = profesion,
-                                imageUrl = imageUrl,
-                                selectedImageUri = selectedImageUri,
-                                tieneEmpresa = tieneEmpresa,
-                                colors = colors,
-                                paddingValues = paddingValues,
-                                onBack = onBack,
-                                onImageClick = { galleryLauncher.launch("image/*") }
-                            )
+                            Box {
+                                HeaderSection(
+                                    name = name,
+                                    apellido = apellido,
+                                    profesion = profesion,
+                                    imageUrl = imageUrl,
+                                    selectedImageUri = selectedImageUri,
+                                    tieneEmpresa = tieneEmpresa,
+                                    colors = colors,
+                                    paddingValues = paddingValues,
+                                    onBack = onBack,
+                                    onImageClick = {
+                                        if (!isUploadingPhoto) galleryLauncher.launch("image/*")
+                                    }
+                                )
+                                if (isUploadingPhoto) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(start = 90.dp, bottom = 16.dp)
+                                            .size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            }
                         }
-                        
                         item {
                             if (verificado) {
                                 VerificadoBadge(modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
